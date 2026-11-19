@@ -30,28 +30,79 @@ export const PASSWORD_MIN_LENGTH = 6;
 
 // ---------- Characters ----------
 
+import type { Ability, Skill } from './rules.ts';
+
+export interface Item {
+  id: string;
+  name: string;
+  qty: number;
+  notes: string;
+}
+
+export interface Spell {
+  id: string;
+  name: string;
+  /** 0 = cantrip */
+  level: number;
+  prepared: boolean;
+}
+
+export const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'] as const;
+export type Coin = (typeof COINS)[number];
+
 /**
- * Raw inputs of a character sheet. Derived values (modifiers, PB, ...) are
- * computed with shared/rules.ts, never stored. Grows as the sheet grows.
+ * Raw inputs of a 2024 character sheet. Derived values (modifiers, PB, saves,
+ * skills, spell DC, ...) are computed with deriveStats() in rules.ts, never stored.
  */
 export interface CharacterData {
   name: string;
   className: string;
+  subclass: string;
   species: string;
+  background: string;
   level: number;
   hpCurrent: number;
   hpMax: number;
   hpTemp: number;
+  armorClass: number;
+  speed: number;
+  /** Extra initiative on top of DEX (e.g. Alert feat). */
+  initiativeBonus: number;
+  abilities: Record<Ability, number>;
+  saveProficiencies: Ability[];
+  skillProficiencies: Skill[];
+  skillExpertise: Skill[];
+  spellcastingAbility: Ability | null;
+  spells: Spell[];
+  /** Changed through the item:* events, so DM and player edits never clash. */
+  inventory: Item[];
+  coins: Record<Coin, number>;
+  /** Feats, features, proficiencies, languages, anything else. */
+  notes: string;
 }
 
 export const DEFAULT_CHARACTER: CharacterData = {
   name: '',
   className: '',
+  subclass: '',
   species: '',
+  background: '',
   level: 1,
   hpCurrent: 10,
   hpMax: 10,
   hpTemp: 0,
+  armorClass: 10,
+  speed: 30,
+  initiativeBonus: 0,
+  abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+  saveProficiencies: [],
+  skillProficiencies: [],
+  skillExpertise: [],
+  spellcastingAbility: null,
+  spells: [],
+  inventory: [],
+  coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
+  notes: '',
 };
 
 // ---------- Campaigns & live sessions (socket) ----------
@@ -96,9 +147,35 @@ export interface ClientToServerEvents {
   'session:leave': (ack: (res: Ack<object>) => void) => void;
   /** Host ends the session for everyone (all characters stay saved). */
   'session:end': (ack: (res: Ack<object>) => void) => void;
-  /** Update your own character in the current session. Saved immediately. */
+  /**
+   * Update a character in the current session. Saved immediately.
+   * Players edit their own; the DM may pass `userId` to edit any player's.
+   */
   'character:update': (
-    input: { patch: Partial<CharacterData> },
+    input: { patch: Partial<CharacterData>; userId?: string },
+    ack: (res: Ack<{ character: CharacterData }>) => void,
+  ) => void;
+  /**
+   * Damage (negative) or heal (positive) a character. Sent as a change, not a
+   * new value, so a hit from the DM and a potion from the player never overwrite
+   * each other. Same permissions as 'character:update'.
+   */
+  /** Give an item (DM to a player, or a player to themself). */
+  'item:add': (
+    input: { item: { name: string; qty?: number; notes?: string }; userId?: string },
+    ack: (res: Ack<{ character: CharacterData }>) => void,
+  ) => void;
+  /** Change an item's quantity/name/notes. qty 0 removes it. */
+  'item:update': (
+    input: { itemId: string; patch: Partial<Omit<Item, 'id'>>; userId?: string },
+    ack: (res: Ack<{ character: CharacterData }>) => void,
+  ) => void;
+  'item:remove': (
+    input: { itemId: string; userId?: string },
+    ack: (res: Ack<{ character: CharacterData }>) => void,
+  ) => void;
+  'character:adjustHp': (
+    input: { delta: number; userId?: string },
     ack: (res: Ack<{ character: CharacterData }>) => void,
   ) => void;
 }
@@ -113,4 +190,6 @@ export const LIMITS = {
   nameMaxLength: 40,
   campaignNameMaxLength: 60,
   textFieldMaxLength: 40,
+  notesMaxLength: 5000,
+  listMaxLength: 200,
 } as const;

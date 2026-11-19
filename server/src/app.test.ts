@@ -200,6 +200,58 @@ describe('campaign sessions', () => {
     expect(store.getOrCreateCharacter(campaign.id, miraUser).className).toBe('Rogue');
   });
 
+  it('lets the DM change a player\'s character, but not players each other\'s', async () => {
+    const { dm, session } = await hostCampaign();
+    const mira = await client(await login('Mira'));
+    const jonas = await client(await login('Jonas'));
+    const miraId = ok(await mira.emitWithAck('session:join', { code: session.code })).session.players[0]!.user.id;
+    ok(await jonas.emitWithAck('session:join', { code: session.code }));
+
+    const miraSeesHit = nextState(mira, (s) => s.players.find((p) => p.user.id === miraId)?.character.hpCurrent === 3);
+    const res = ok(await dm.emitWithAck('character:update', { userId: miraId, patch: { hpCurrent: 3 } }));
+    expect(res.character.hpCurrent).toBe(3);
+    await miraSeesHit;
+
+    // A hit from the DM and a heal from the player both count.
+    ok(await dm.emitWithAck('character:adjustHp', { userId: miraId, delta: -2 }));
+    const healed = ok(await mira.emitWithAck('character:adjustHp', { delta: 5 }));
+    expect(healed.character.hpCurrent).toBe(6);
+
+    expect(await jonas.emitWithAck('character:update', { userId: miraId, patch: { hpCurrent: 0 } })).toMatchObject({ ok: false });
+    expect(await jonas.emitWithAck('character:adjustHp', { userId: miraId, delta: -1 })).toMatchObject({ ok: false });
+    expect(await dm.emitWithAck('character:adjustHp', { userId: miraId, delta: 1.5 })).toMatchObject({ ok: false });
+    expect(await dm.emitWithAck('character:update', { patch: { hpCurrent: 0 } })).toMatchObject({ ok: false });
+    expect(await dm.emitWithAck('character:update', { userId: 'nobody', patch: { hpCurrent: 0 } })).toMatchObject({ ok: false });
+  });
+
+  it('lets the DM give and take items, and players manage their own', async () => {
+    const { dm, session } = await hostCampaign();
+    const mira = await client(await login('Mira'));
+    const jonas = await client(await login('Jonas'));
+    const miraId = ok(await mira.emitWithAck('session:join', { code: session.code })).session.players[0]!.user.id;
+    ok(await jonas.emitWithAck('session:join', { code: session.code }));
+
+    const miraSeesItem = nextState(mira, (s) => s.players[0]?.character.inventory.length === 1);
+    const given = ok(await dm.emitWithAck('item:add', { userId: miraId, item: { name: 'Potion of Healing', qty: 2 } }));
+    const potion = given.character.inventory[0]!;
+    expect(potion).toMatchObject({ name: 'Potion of Healing', qty: 2, notes: '' });
+    await miraSeesItem;
+
+    // Mira drinks one, then adds her own rope.
+    expect(ok(await mira.emitWithAck('item:update', { itemId: potion.id, patch: { qty: 1 } })).character.inventory[0]?.qty).toBe(1);
+    ok(await mira.emitWithAck('item:add', { item: { name: 'Rope' } }));
+    // Jonas can't touch Mira's stuff.
+    expect(await jonas.emitWithAck('item:remove', { userId: miraId, itemId: potion.id })).toMatchObject({ ok: false });
+    // The DM takes the potion away.
+    const after = ok(await dm.emitWithAck('item:remove', { userId: miraId, itemId: potion.id }));
+    expect(after.character.inventory.map((i) => i.name)).toEqual(['Rope']);
+    // qty 0 removes; nameless items and inventory via character:update are rejected.
+    const rope = after.character.inventory[0]!;
+    expect(ok(await mira.emitWithAck('item:update', { itemId: rope.id, patch: { qty: 0 } })).character.inventory).toEqual([]);
+    expect(await mira.emitWithAck('item:add', { item: { name: '  ' } })).toMatchObject({ ok: false });
+    expect(await mira.emitWithAck('character:update', { patch: { inventory: [] } as never })).toMatchObject({ ok: false });
+  });
+
   it('rejects unknown codes', async () => {
     const mira = await client(await login('Mira'));
     expect(await mira.emitWithAck('session:join', { code: 'ZZZZZ' })).toMatchObject({ ok: false });

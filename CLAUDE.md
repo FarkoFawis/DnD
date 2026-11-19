@@ -9,12 +9,15 @@ Part 1 of this file describes **the codebase** (how it is built and how to work 
 ## What we are building
 A mobile-first web app that replaces our paper character sheets. We play **in person** at a friend's house for a whole evening, with **phones only** (Android + iOS, no PCs).
 
+**Design principle:** the app *adds to* the table, it doesn't replace it. Dice, the DM's narration and the social game stay physical; the app only replaces the paper sheets and makes character information easier to find and understand. Don't build features that pull attention away from the table.
+
 ## User flow (agreed with Faris)
 1. **Login.** Accounts are **pre-made** by the admin (`npm run users -- add <names>`); there is no public sign-up. On first login each friend **chooses their own password**.
 2. **Home:** *Join a session* (type the code shown on the DM's phone) or *Host*.
 3. **Host** picks one of **their campaigns** (or creates one) and gets a 5-letter code. The DM is the campaign's owner.
 4. **Characters are saved per campaign and per player.** Joining a campaign's session loads that player's character for that campaign, exactly as it was at the end of the last session. The same friend has a separate character in each campaign.
-5. Ending a session only closes the live room; all characters stay saved.
+5. **The DM can edit any player's sheet live** during a session: damage/heal, give or take items, change anything. Players edit only their own. Everyone sees the party's HP update instantly.
+6. Ending a session only closes the live room; all characters stay saved.
 
 ## Architecture
 - **Monorepo** with npm workspaces:
@@ -24,6 +27,7 @@ A mobile-first web app that replaces our paper character sheets. We play **in pe
 - **Auth:** `POST /api/auth/status|login|logout`, `GET /api/auth/me`. Passwords hashed with scrypt; login returns a random token (stored SHA-256 hashed). 5 wrong passwords lock that username for 5 minutes. The socket connects with `auth: { token }` and is refused without a valid one.
 - **Data model:** `users`, `auth_tokens`, `campaigns` (owner = DM), `characters` (PK campaign + user, JSON `data` validated by `shared/character.ts`), `live_sessions` (code ↔ campaign, at most one per campaign), `session_players`.
 - **The server is the source of truth, not the DM's phone.** If the DM's phone dies, the live session, its code and every character are in the database. Each phone stores its login token and current session code in `localStorage` and re-sends `session:join` on every reconnect, so reloads, locked screens and crashes put people straight back in. A server restart loses nothing either.
+- **Edits that the DM and a player could make at the same time are sent as operations, not new values:** `character:adjustHp { delta }` and `item:add|update|remove`. Plain fields go through `character:update { patch }`. Every character event takes an optional `userId`, which only the DM may set (to target a player in their session).
 - Socket handlers validate input and answer through an **ack** `{ ok: true, ... } | { ok: false, error }`. Session state is broadcast as `session:state`.
 
 ## Commands (repo root)
@@ -43,7 +47,10 @@ A mobile-first web app that replaces our paper character sheets. We play **in pe
 - Only bundle SRD (CC-BY-4.0) content; anything else is user-entered homebrew.
 
 ## Status
-Done: accounts, campaigns, hosting/joining sessions with a code, per-campaign characters with name, class, species, level and HP (current, max, temp), live party view for everyone. Not yet: ability scores, skills, spells, equipment, dice, deployment. **The group plays the 2024 rules** (confirmed by Faris, 2026-11-19). Build 2024 logic; 2014 support is not needed for now.
+Rough working prototype (Faris will add feature ideas over time). Done: accounts, campaigns, hosting/joining sessions with a code, per-campaign characters, live party view, DM live edits. The sheet has tabs: **Main** (HP box, AC, initiative, speed, PB, passive Perception, identity), **Abilities** (six scores, saves, skills with proficiency/expertise), **Items** (coins + inventory), **Spells** (spellcasting ability, save DC, attack, spell list with prepared flag), **Notes** (free text for feats, features, languages). Derived numbers come from `deriveStats()` in `shared/src/rules.ts`.
+Not yet: spell slots and other limited-use resources, rests, conditions/exhaustion, death saves, attacks list, AC calculation from armor, SRD data (class/species pickers), deployment.
+
+**The group plays the 2024 rules** (confirmed by Faris, 2026-11-19). Build 2024 logic; 2014 support is not needed for now.
 
 ---
 

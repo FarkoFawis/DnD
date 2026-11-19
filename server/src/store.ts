@@ -233,7 +233,7 @@ export class Store {
       .prepare('SELECT data FROM characters WHERE campaign_id = ? AND user_id = ?')
       .get(campaignId, user.id) as { data: string } | undefined;
     if (row) return normalizeCharacter(JSON.parse(row.data));
-    const fresh: CharacterData = { ...DEFAULT_CHARACTER, name: user.username };
+    const fresh: CharacterData = { ...structuredClone(DEFAULT_CHARACTER), name: user.username };
     this.db
       .prepare('INSERT INTO characters (campaign_id, user_id, data) VALUES (?, ?, ?)')
       .run(campaignId, user.id, JSON.stringify(fresh));

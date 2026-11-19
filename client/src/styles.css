@@ -90,3 +90,58 @@ button:disabled { opacity: 0.5; cursor: default; }
 .inline-form button { flex: none; }
 .mb { margin-bottom: 12px; }
 form .ghost { margin-top: 0; }
+
+.members li.party-row { display: block; padding: 0; }
+.row-button, .row-static { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 4px; background: none; border: 0; color: inherit; text-align: left; font: inherit; }
+.row-button[aria-expanded='true'] { background: #1f1c1a; border-radius: 10px 10px 0 0; }
+.dm-controls { background: #1f1c1a; border-radius: 0 0 10px 10px; padding: 10px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.amount-row { display: flex; gap: 8px; }
+.amount-row input { flex: 1; min-width: 0; width: 100%; }
+.amount-row button { flex: none; border: 0; border-radius: 10px; padding: 0 14px; font-weight: 600; color: white; }
+.amount-row .damage { background: var(--accent); }
+.amount-row .heal { background: #15803d; }
+
+/* ---- full sheet ---- */
+h3 { font-size: 0.95rem; margin: 18px 0 6px; color: var(--gold); }
+select, textarea { font: inherit; font-size: 1.05rem; padding: 12px; border-radius: 10px; border: 1px solid #57534e; background: var(--bg); color: var(--text); width: 100%; }
+textarea { resize: vertical; }
+.sheet-tabs { display: flex; gap: 6px; overflow-x: auto; margin: 0 -4px 14px; padding: 0 4px; scrollbar-width: none; }
+.sheet-tabs button { flex: none; padding: 8px 14px; border-radius: 999px; border: 1px solid #44403c; background: none; color: var(--muted); min-height: 40px; }
+.sheet-tabs button[aria-selected='true'] { background: var(--gold); color: #1c1917; border-color: var(--gold); font-weight: 700; }
+.stat-row { display: flex; gap: 6px; margin: 12px 0; }
+.stat { flex: 1; min-width: 0; background: var(--bg); border-radius: 12px; padding: 8px 4px; text-align: center; }
+.stat-value { font-size: 1.3rem; font-weight: 800; }
+.stat-value input { width: 100%; text-align: center; font-size: 1.2rem; font-weight: 800; padding: 2px; border: 0; background: transparent; }
+.stat-label { font-size: 0.7rem; color: var(--muted); }
+.temp-badge { font-size: 0.9rem; color: #93c5fd; margin-left: 6px; }
+.hp-box .amount-row { margin-top: 10px; }
+.abilities { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ability { background: var(--bg); border-radius: 12px; padding: 8px; text-align: center; }
+.ability-name { font-size: 0.75rem; color: var(--muted); font-weight: 700; letter-spacing: 0.05em; }
+.ability-mod { font-size: 1.6rem; font-weight: 800; }
+.ability input { width: 100%; text-align: center; padding: 4px; font-size: 1rem; }
+.checks { list-style: none; margin: 0; padding: 0; }
+.check-row { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; border-bottom: 1px solid #3a3532; color: var(--text); padding: 6px 2px; text-align: left; min-height: 40px; }
+.mark { width: 18px; text-align: center; color: var(--muted); }
+.mark.lvl1 { color: var(--gold); }
+.mark.lvl2 { color: #f97316; }
+.bonus { width: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.coins { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
+.coins label { font-size: 0.75rem; text-align: center; }
+.coins input { width: 100%; min-width: 0; padding: 8px 4px; text-align: center; font-size: 1rem; }
+.items { list-style: none; padding: 0; margin: 0; }
+.items li { display: flex; align-items: center; gap: 6px; padding: 8px 0; border-bottom: 1px solid #3a3532; }
+.items button { flex: none; width: 40px; min-height: 40px; border-radius: 10px; border: 1px solid #57534e; background: #292524; color: var(--text); }
+.items .remove { color: #fca5a5; border-color: #7f1d1d; }
+.items .prep { border: 0; background: none; color: var(--muted); width: 28px; }
+.items .prep.on { color: var(--gold); }
+.qty { width: 28px; text-align: center; font-weight: 700; }
+.qty-input { flex: 0 0 64px !important; }
+.qty-input input, .qty-input select { padding: 12px 6px; }
+.dm-sheet { padding: 0 0 12px; }
+.dm-sheet .sheet { background: #1f1c1a; border: 1px solid #44403c; padding: 12px; }
+.dm-sheet .hp-box, .dm-sheet .stat, .dm-sheet .ability { background: var(--card); }
+.hp-now { white-space: nowrap; min-width: 0; }
+.hp-row button { width: 44px; }
+.dm-sheet .hp-now { font-size: 1.6rem; }
+.dm-sheet .hp-row button { width: 40px; }

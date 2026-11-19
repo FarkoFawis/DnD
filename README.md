@@ -6,7 +6,7 @@ Digital D&D character sheets for our in-person sessions. Everyone uses their pho
 2. The DM taps **Host**, picks tonight's campaign and gets a 5-letter code.
 3. Players tap **Join** and type the code. Their character for that campaign loads exactly as it was last session.
 
-> Status: early. Accounts, campaigns, sessions and a basic character card (name, class, species, level, HP) work. The full sheet (abilities, skills, spells, equipment) comes next.
+> Status: rough prototype (2024 rules). Accounts, campaigns, live sessions and a basic character sheet work: HP, AC, abilities, saves, skills, items, coins, spells, notes. The DM can change any player's sheet during a session, e.g. damage, healing, giving or taking items.
 
 ## How it works
 

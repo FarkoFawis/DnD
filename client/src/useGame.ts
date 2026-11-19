@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Ack, CampaignSummary, CharacterData, SessionState } from '@dnd/shared';
+import type { Ack, CampaignSummary, CharacterData, Item, SessionState } from '@dnd/shared';
 import { saveCode, savedCode } from './api.ts';
 import { createSocket, type AppSocket } from './socket.ts';
 
@@ -74,6 +74,13 @@ export function useGame(token: string, onUnauthorized: () => void) {
     return res.ok;
   };
 
+  type CharAck = Ack<{ character: CharacterData }>;
+  const charCall = async (fn: (s: AppSocket, done: (res: CharAck) => void) => void) => {
+    const res = await call<{ character: CharacterData }>(fn);
+    if (!res.ok) setError(res.error);
+    return res.ok;
+  };
+
   return {
     status,
     session,
@@ -105,11 +112,28 @@ export function useGame(token: string, onUnauthorized: () => void) {
       setSession(null);
       void refreshCampaigns();
     },
-    updateCharacter: async (patch: Partial<CharacterData>) => {
-      const res = await call<{ character: CharacterData }>((s, done) => s.emit('character:update', { patch }, done));
+    /** Own character, or (as DM) the player with `userId`. */
+    updateCharacter: async (patch: Partial<CharacterData>, userId?: string) => {
+      const res = await call<{ character: CharacterData }>((s, done) =>
+        s.emit('character:update', { patch, userId }, done),
+      );
       if (!res.ok) setError(res.error);
       return res.ok;
     },
+    /** Damage (negative) or heal (positive). Own character, or (as DM) the player with `userId`. */
+    adjustHp: async (delta: number, userId?: string) => {
+      const res = await call<{ character: CharacterData }>((s, done) =>
+        s.emit('character:adjustHp', { delta, userId }, done),
+      );
+      if (!res.ok) setError(res.error);
+      return res.ok;
+    },
+    addItem: (item: { name: string; qty?: number; notes?: string }, userId?: string) =>
+      charCall((s, done) => s.emit('item:add', { item, userId }, done)),
+    updateItem: (itemId: string, patch: Partial<Omit<Item, 'id'>>, userId?: string) =>
+      charCall((s, done) => s.emit('item:update', { itemId, patch, userId }, done)),
+    removeItem: (itemId: string, userId?: string) =>
+      charCall((s, done) => s.emit('item:remove', { itemId, userId }, done)),
   };
 }
 
