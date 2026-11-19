@@ -300,15 +300,21 @@ describe('campaign sessions', () => {
     }));
     expect(res.character.data).toMatchObject({ level: 3, subclass: 'Champion', hpMax: 29 });
 
-    // In a session only the DM levels characters up.
+    // In a session the DM says when; the player still does it, on their own phone.
     const { dm, session } = await hostCampaign();
     ok(await mira.emitWithAck('session:join', { code: session.code, characterId: character.id }));
     const choices = { featId: 'ability-score-improvement', asi: { str: 2 } };
     expect(await mira.emitWithAck('character:levelUp', { characterId: character.id, choices })).toMatchObject({ ok: false });
-    expect(ok(await dm.emitWithAck('character:levelUp', { characterId: character.id, choices })).character.data).toMatchObject({
+    expect(await dm.emitWithAck('character:levelUp', { characterId: character.id, choices })).toMatchObject({ ok: false });
+    expect(await mira.emitWithAck('character:update', { characterId: character.id, patch: { levelUpReady: true } })).toMatchObject({ ok: false });
+    ok(await dm.emitWithAck('character:update', { characterId: character.id, patch: { levelUpReady: true } }));
+    expect(ok(await mira.emitWithAck('character:levelUp', { characterId: character.id, choices })).character.data).toMatchObject({
       level: 4,
       abilities: { str: 12 },
+      levelUpReady: false,
     });
+    // One grant, one level.
+    expect(await mira.emitWithAck('character:levelUp', { characterId: character.id, choices: {} })).toMatchObject({ ok: false });
   });
 
   it('stores a portrait for a character, only for its owner', async () => {

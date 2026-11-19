@@ -198,7 +198,19 @@ export function Sheet({
             <label>Max HP<NumInput value={draft.hpMax} onChange={(v) => { const n = num(v, 1, 9999); if (n !== null) set('hpMax', n); }} /></label>
             <label>Extra initiative<NumInput value={draft.initiativeBonus} onChange={(v) => { const n = num(v, -20, 20); if (n !== null) set('initiativeBonus', n); }} /></label>
           </div>
-          {!readOnly && character.level < 20 && (
+          {/* Levelling up is done by the player on their own phone; in a session the DM only says when. */}
+          {dmUnlock && character.level < 20 && (
+            <button
+              type="button"
+              className={`secondary levelup-button ${character.levelUpReady ? 'waiting' : ''}`}
+              onClick={() => void actions.update({ levelUpReady: !character.levelUpReady })}
+            >
+              {character.levelUpReady
+                ? `Waiting for ${character.name || 'the player'} to level up on their phone · Cancel`
+                : `⬆ Let ${character.name || 'them'} level up to ${character.level + 1}`}
+            </button>
+          )}
+          {!dmUnlock && !readOnly && character.level < 20 && (
             <button type="button" className="secondary levelup-button" onClick={() => setLevelling(true)}>
               ⬆ Level up to {character.level + 1}
             </button>

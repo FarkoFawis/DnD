@@ -664,14 +664,28 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       }
     });
 
+    /**
+     * Levelling up happens on the player's own phone. Outside sessions the owner
+     * may always; in a session only once the DM has said so (levelUpReady).
+     */
+    const canLevelUp = (characterId: unknown) => {
+      const ch = typeof characterId === 'string' ? store.getCharacter(characterId) : undefined;
+      if (!ch) return { ok: false as const, error: 'That character no longer exists.' };
+      if (ch.userId !== user.id) return { ok: false as const, error: 'Players level up their own characters, on their own phone.' };
+      if (ch.inSession && !ch.data.levelUpReady) {
+        return { ok: false as const, error: 'Your DM decides when you level up during a session.' };
+      }
+      return { ok: true as const, ch };
+    };
+
     socket.on('character:levelUp', (input, ack) => {
-      const t = editable(input?.characterId, ['level']);
+      const t = canLevelUp(input?.characterId);
       if (!t.ok) return ack(t);
       try {
-        const character = store.updateCharacter(
-          t.ch.id,
-          applyLevelUp(t.ch.data, cleanLevelUp(input?.choices), gameContent(), randomUUID),
-        );
+        const character = store.updateCharacter(t.ch.id, {
+          ...applyLevelUp(t.ch.data, cleanLevelUp(input?.choices), gameContent(), randomUUID),
+          levelUpReady: false,
+        });
         ack({ ok: true, character });
         logChanges(t.ch.data, character);
         afterChange(character);

@@ -70,8 +70,8 @@ type Screen = 'home' | 'play' | 'characters' | 'settings';
 function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
   const game = useGame(auth.token, onSignOut);
   const [screen, setScreen] = useState<Screen>('home');
-  // Once the DM starts the session, their screen is only the party; the rest moves into a sidebar.
-  const dmInSession = !!game.session?.started && game.session.host.id === auth.user.id;
+  // Once the session starts, the screen is only the game (party for the DM, sheet for players); the rest moves into a sidebar.
+  const dmInSession = !!game.session?.started;
   return (
     <Shell status={game.status} user={auth.user.username} onSignOut={game.session ? undefined : onSignOut} hideHeader={dmInSession}>
       {game.error && (

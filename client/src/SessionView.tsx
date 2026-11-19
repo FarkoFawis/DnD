@@ -1,16 +1,13 @@
-import { useEffect, useState } from 'react';
-import { StatusPill } from './StatusPill.tsx';
+import { useState } from 'react';
 import type { SessionPlayer, SessionState } from '@dnd/shared';
-import { ClassicSheet } from './ClassicSheet.tsx';
-import { sheetActions } from './Sheet.tsx';
 import { CampaignConfig } from './prep/CampaignConfig.tsx';
 import { Recap } from './prep/SessionLog.tsx';
 import { DmTools } from './session/DmTools.tsx';
 import { FightAlert } from './session/FightAlert.tsx';
-import { PlayerExtras } from './session/PlayerExtras.tsx';
+import { PlayerSession } from './session/PlayerSession.tsx';
+import { SessionDrawer } from './session/SessionDrawer.tsx';
 import type { Game } from './useGame.ts';
-import { DmParty, PartyPanel } from './PartyGrid.tsx';
-import { Portrait } from './Portrait.tsx';
+import { DmParty } from './PartyGrid.tsx';
 
 export function SessionView({ game, session, myId }: { game: Game; session: SessionState; myId: string }) {
   const isHost = session.host.id === myId;
@@ -21,7 +18,16 @@ export function SessionView({ game, session, myId }: { game: Game; session: Sess
       <>
         <FightAlert count={game.fightAlerts} />
         <DmSidebar game={game} session={session} />
-        <InSession game={game} session={session} isHost me={undefined} myId={myId} />
+        <DmTools game={game} session={session} />
+        <DmParty game={game} session={session} myId={myId} />
+      </>
+    );
+  }
+  if (session.started && me) {
+    return (
+      <>
+        <FightAlert count={game.fightAlerts} />
+        <PlayerSession game={game} session={session} me={me} />
       </>
     );
   }
@@ -47,11 +53,7 @@ export function SessionView({ game, session, myId }: { game: Game; session: Sess
         )}
       </section>
 
-      {session.started ? (
-        <InSession game={game} session={session} isHost={isHost} me={me} myId={myId} />
-      ) : (
-        <Lobby game={game} session={session} isHost={isHost} me={me} myId={myId} />
-      )}
+      <Lobby game={game} session={session} isHost={isHost} me={me} myId={myId} />
     </>
   );
 }
@@ -136,65 +138,22 @@ function Lobby({ game, session, isHost, me, myId }: ViewProps) {
   );
 }
 
-function InSession({ game, session, isHost, me, myId }: ViewProps) {
-  return (
-    <>
-      {isHost ? <DmTools game={game} session={session} /> : <PlayerExtras session={session} myCharacterId={me?.characterId} />}
-      {me && (
-        <ClassicSheet
-          key={me.characterId}
-          character={me.character}
-          actions={sheetActions(game, me.characterId)}
-          playerName={me.user.username}
-          portrait={<Portrait characterId={me.characterId} character={me.character} />}
-        />
-      )}
-
-      {isHost ? (
-        <DmParty game={game} session={session} myId={myId} />
-      ) : (
-        <PartyPanel session={session} myId={myId} footer={<LeaveOrEnd game={game} isHost={false} />} />
-      )}
-    </>
-  );
-}
-
-/**
- * DM during a running session: everything except the party lives in a drawer
- * that slides in from the left (about a third of the screen, wider on phones).
- */
+/** DM during a running session: campaign, session code and "End session" live in the drawer. */
 function DmSidebar({ game, session }: { game: Game; session: SessionState }) {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
   return (
-    <>
-      <div className="dm-topbar">
-        <button className="menu-toggle" aria-label="Open menu" aria-expanded={open} onClick={() => setOpen(true)}>
-          <span /><span /><span />
-        </button>
-        <span className="dm-topbar-title">{session.campaign.name}</span>
-      </div>
-      <div className={`drawer-backdrop ${open ? 'open' : ''}`} onClick={() => setOpen(false)} aria-hidden />
-      <aside className={`drawer ${open ? 'open' : ''}`} aria-hidden={!open} inert={!open}>
-        <div className="drawer-head">
-          <h1>DnD Table</h1>
-          <button className="drawer-close" aria-label="Close menu" onClick={() => setOpen(false)}>✕</button>
-        </div>
-        <StatusPill status={game.status} />
-        <p className="muted small drawer-label">Campaign</p>
-        <p className="drawer-campaign">{session.campaign.name}</p>
-        <p className="muted small drawer-label">Session code</p>
-        <p className="drawer-code" aria-label="Session code">{session.code}</p>
-        <p className="muted small">Late players can still join with this code.</p>
-        <div className="drawer-spacer" />
-        <LeaveOrEnd game={game} isHost />
-      </aside>
-    </>
+    <SessionDrawer game={game} title={session.campaign.name}>
+      {() => (
+        <>
+          <p className="muted small drawer-label">Campaign</p>
+          <p className="drawer-campaign">{session.campaign.name}</p>
+          <p className="muted small drawer-label">Session code</p>
+          <p className="drawer-code" aria-label="Session code">{session.code}</p>
+          <p className="muted small">Late players can still join with this code.</p>
+          <div className="drawer-spacer" />
+          <LeaveOrEnd game={game} isHost />
+        </>
+      )}
+    </SessionDrawer>
   );
 }
 

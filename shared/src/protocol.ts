@@ -141,6 +141,11 @@ export interface CharacterData {
    */
   hpItemsUnlocked: boolean;
   /**
+   * The DM said this character has earned its next level. During a session the
+   * player then levels up on their own phone; the flag clears when they have.
+   */
+  levelUpReady: boolean;
+  /**
    * How many of each limited thing are spent: spell slots ("slot1".."slot9",
    * "pact") and features (ids from limitedUses() in resources.ts). Missing = 0.
    * Changed through character:use and rests, never sent as a whole.
@@ -194,6 +199,7 @@ export const DEFAULT_CHARACTER: CharacterData = {
   inventory: [],
   coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
   hpItemsUnlocked: false,
+  levelUpReady: false,
   used: {},
   customResources: [],
   lastAction: null,
@@ -219,7 +225,7 @@ export interface CharacterSummary {
 /** Fields a player may only change while the DM has unlocked them (hpItemsUnlocked). */
 export const DM_LOCKED_FIELDS = ['hpCurrent', 'hpTemp', 'coins', 'inventory'] as const satisfies readonly (keyof CharacterData)[];
 /** Fields only the DM may ever change. */
-export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves', 'portrait'] as const satisfies readonly (keyof CharacterData)[];
+export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'levelUpReady', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves', 'portrait'] as const satisfies readonly (keyof CharacterData)[];
 
 // ---------- Campaigns & live sessions (socket) ----------
 
