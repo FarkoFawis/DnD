@@ -169,3 +169,24 @@ fieldset.sheet-body:disabled .stat-value input, fieldset.sheet-body:disabled .ab
 fieldset.sheet-body:disabled button:disabled { opacity: 1; cursor: default; }
 fieldset.sheet-body:disabled select { appearance: none; }
 .hp-now.big { font-size: 2.4rem; text-align: center; }
+
+/* ---- DM in a running session: party only + left drawer ---- */
+.dm-topbar { display: flex; align-items: center; gap: 12px; margin: 4px 0 12px; }
+.dm-topbar-title { color: var(--muted); font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu-toggle { width: 44px; height: 44px; flex: none; border-radius: 12px; border: 1px solid #44403c; background: var(--card); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 5px; padding: 0; }
+.menu-toggle span { display: block; width: 20px; height: 2px; border-radius: 1px; background: var(--text); }
+.drawer-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 40; }
+.drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+/* About a third of the screen, but never so narrow that the text stops fitting. */
+.drawer { position: fixed; top: 0; bottom: 0; left: 0; width: max(33vw, 280px); max-width: 100vw; background: #1f1c1a; border-right: 1px solid #44403c; padding: max(16px, env(safe-area-inset-top)) 18px max(16px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; transform: translateX(-100%); transition: transform 0.22s ease-out; z-index: 50; overflow-y: auto; }
+.drawer.open { transform: translateX(0); box-shadow: 8px 0 24px rgba(0, 0, 0, 0.4); }
+@media (max-width: 420px) { .drawer { width: 82vw; } }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; }
+.drawer-head h1 { margin: 0; }
+.drawer-close { background: none; border: 0; color: var(--muted); font-size: 1.3rem; width: 44px; }
+.drawer .status { align-self: flex-start; }
+.drawer-label { margin-top: 12px; }
+.drawer-campaign { margin: 0; font-weight: 600; }
+.drawer-code { margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: 0.15em; color: var(--gold); }
+.drawer-spacer { flex: 1; }
+@media (prefers-reduced-motion: reduce) { .drawer, .drawer-backdrop { transition: none; } }

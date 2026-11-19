@@ -17,7 +17,7 @@ A mobile-first web app that replaces our paper character sheets. We play **in pe
 3. **Characters:** players create and edit their own characters here, outside sessions. Like Terraria characters and worlds, **any character can join any campaign** and carries its progress (HP, items, level…) with it, but it can only be in **one session at a time**.
 4. **Play → Host:** the DM picks one of **their campaigns** (or creates one) and opens a **lobby** with a 5-letter code. The DM is the campaign's owner.
 5. **Play → Join:** type the code, then **pick one of your free characters**. You land in the lobby and tap **Ready**. When everyone is ready the DM is prompted to start; the DM can also **force start**, after a warning that not everyone is ready.
-6. **During the session players see their full sheet read-only. Only the DM edits** (damage/heal, give or take items, change anything) by tapping a player in the party list. Everyone sees the party's HP update instantly.
+6. **During the session players see their full sheet read-only. Only the DM edits** (damage/heal, give or take items, change anything) by tapping a player in the party list. Everyone sees the party's HP update instantly. Once started, the DM's screen shows **only the party**; title, connection status, session code and End session move into a **drawer** opened from a button at the top left (about 1/3 of the screen, 82% on narrow phones).
 7. Ending the session (DM) or leaving it (player) frees the characters; they can be edited in Characters again.
 
 ## Architecture

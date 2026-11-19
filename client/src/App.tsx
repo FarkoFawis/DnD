@@ -5,6 +5,7 @@ import { Characters } from './Characters.tsx';
 import { Play } from './Play.tsx';
 import { Login } from './Login.tsx';
 import { SessionView } from './SessionView.tsx';
+import { StatusPill } from './StatusPill.tsx';
 import { useGame, type Status } from './useGame.ts';
 
 type Auth = { token: string; user: PublicUser };
@@ -69,8 +70,10 @@ type Screen = 'home' | 'play' | 'characters' | 'settings';
 function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
   const game = useGame(auth.token, onSignOut);
   const [screen, setScreen] = useState<Screen>('home');
+  // Once the DM starts the session, their screen is only the party; the rest moves into a sidebar.
+  const dmInSession = !!game.session?.started && game.session.host.id === auth.user.id;
   return (
-    <Shell status={game.status} user={auth.user.username} onSignOut={game.session ? undefined : onSignOut}>
+    <Shell status={game.status} user={auth.user.username} onSignOut={game.session ? undefined : onSignOut} hideHeader={dmInSession}>
       {game.error && (
         <p className="error" role="alert" onClick={() => game.setError(null)}>
           {game.error}
@@ -123,10 +126,11 @@ function Shell(props: {
   status?: Status;
   user?: string;
   onSignOut?: () => void;
+  hideHeader?: boolean;
 }) {
   return (
     <main className="app">
-      <header className="top">
+      {!props.hideHeader && <header className="top">
         <h1>DnD Table</h1>
         <div className="top-right">
           {props.status && <StatusPill status={props.status} />}
@@ -136,17 +140,8 @@ function Shell(props: {
             </button>
           )}
         </div>
-      </header>
+      </header>}
       {props.children}
     </main>
-  );
-}
-
-function StatusPill({ status }: { status: Status }) {
-  const label = { connecting: 'Connecting', online: 'Online', offline: 'Offline' }[status];
-  return (
-    <span className={`status status-${status}`} aria-live="polite">
-      {label}
-    </span>
   );
 }
