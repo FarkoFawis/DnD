@@ -174,7 +174,7 @@ interface StepProps {
   content: Content;
 }
 
-function Row({ k, children }: { k: string; children: ReactNode }) {
+function Row({ k, children }: { k: ReactNode; children: ReactNode }) {
   return (
     <div className="review-row">
       <span className="muted small">{k}</span>
@@ -212,7 +212,7 @@ function Overview({ c, plan }: StepProps) {
       {plan.pbTo !== plan.pbFrom && (
         <Row k="Proficiency bonus">{formatModifier(plan.pbFrom)} → <strong>{formatModifier(plan.pbTo)}</strong></Row>
       )}
-      <Row k="New features (tap to read)"><FeatureChips plan={plan} /></Row>
+      <Row k={<>New features <span className="hint">(tap to read)</span></>}><FeatureChips plan={plan} /></Row>
       {plan.needsSubclass && <Row k="Subclass">You choose your subclass.</Row>}
       {plan.feat && (
         <Row k="Feat">{plan.feat === 'epic-boon' ? 'You choose an Epic Boon.' : 'You choose a feat, such as Ability Score Improvement.'}</Row>
@@ -289,12 +289,12 @@ function SubclassStep({ plan, choices, set, content }: StepProps) {
       {choices.subclassId === CUSTOM_VALUE && (
         <>
           <label>Subclass name<input value={choices.customSubclass} maxLength={40} onChange={(e) => set({ customSubclass: e.target.value })} /></label>
-          <p className="muted small">Add its features on the sheet's Features tab afterwards.</p>
+          <p className="muted small hint">Add its features on the sheet's Features tab afterwards.</p>
         </>
       )}
       {sub && (
         <div className="review">
-          <Row k="You get (tap to read)">
+          <Row k={<>You get <span className="hint">(tap to read)</span></>}>
             {sub.features.filter((f) => f.level <= plan.newLevel).map((f) => (
               <Info key={f.name} entry={{ title: f.name, subtitle: `${sub.name} ${f.level}`, body: f.description }} tapToOpen>
                 <span className="chip">{f.name}</span>
@@ -304,7 +304,7 @@ function SubclassStep({ plan, choices, set, content }: StepProps) {
         </div>
       )}
       {plan.subclassOptions.length <= 1 && content.packs.length <= 1 && (
-        <p className="muted small">The free SRD has one subclass per class. Others from your Player's Handbook can be added later, or use Homebrew.</p>
+        <p className="muted small hint">The free SRD has one subclass per class. Others from your Player's Handbook can be added later, or use Homebrew.</p>
       )}
     </>
   );

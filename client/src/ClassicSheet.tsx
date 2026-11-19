@@ -19,6 +19,7 @@ import {
   type CharacterData,
 } from '@dnd/shared';
 import { Info } from './Info.tsx';
+import { LevelUp } from './creator/LevelUp.tsx';
 import { HpBox, Items, type SheetActions } from './Sheet.tsx';
 import { featureEntry, itemEntry, spellEntry, spellGlance } from './SheetContent.tsx';
 import { useContent } from './content/useContent.ts';
@@ -45,6 +46,9 @@ export function ClassicSheet({
   const spellsByLevel = [...c.spells].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
   const levels = [...new Set(spellsByLevel.map((s) => s.level))];
   const hasUses = limitedUses(c).length > 0;
+  /** The DM said this character levels up: the player runs the wizard here, on their own phone. */
+  const [levelling, setLevelling] = useState(false);
+  const canLevelUp = c.levelUpReady && c.level < 20;
 
   // Short confirmation after something is used ("Magic Missile · 1st-level slot").
   const [flash, setFlash] = useState<string | null>(null);
@@ -61,6 +65,26 @@ export function ClassicSheet({
   return (
     <article className="classic" aria-label={`${c.name}'s character sheet`}>
       {flash && <p className="use-flash" role="status">Used: {flash}</p>}
+      {canLevelUp && (
+        <button type="button" className="levelup-banner" onClick={() => setLevelling(true)}>
+          <span className="grow">
+            <strong>You reached level {c.level + 1}!</strong>
+            <span className="small block">Tap to level up {c.name || 'your character'}.</span>
+          </span>
+          <span aria-hidden>⬆</span>
+        </button>
+      )}
+      {levelling && canLevelUp && (
+        <LevelUp
+          character={c}
+          onCancel={() => setLevelling(false)}
+          onDone={async (choices) => {
+            const ok = await actions.levelUp(choices);
+            if (ok) setLevelling(false);
+            return ok;
+          }}
+        />
+      )}
       <header className={`cs-banner ${portrait ? 'with-portrait' : ''}`}>
         {portrait && <div className="cs-portrait">{portrait}</div>}
         <div className="cs-name">
@@ -194,7 +218,7 @@ export function ClassicSheet({
           </div>
         ))}
         {attacks.length === 0 && c.spells.length === 0 && <p className="muted small">No weapons or spells.</p>}
-        {(attacks.length > 0 || c.spells.length > 0) && <p className="cs-hint">Tap a name to read what it does.</p>}
+        {(attacks.length > 0 || c.spells.length > 0) && <p className="cs-hint hint">Tap a name to read what it does.</p>}
       </Box>
 
       <Box label="Equipment">

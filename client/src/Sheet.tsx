@@ -149,7 +149,7 @@ export function Sheet({
           />
           <span className="grow">
             Player may change their own HP &amp; items
-            <span className="muted small block">Off: only you (the DM) can.</span>
+            <span className="muted small block hint">Off: only you (the DM) can.</span>
           </span>
         </label>
       )}
@@ -198,7 +198,19 @@ export function Sheet({
             <label>Max HP<NumInput value={draft.hpMax} onChange={(v) => { const n = num(v, 1, 9999); if (n !== null) set('hpMax', n); }} /></label>
             <label>Extra initiative<NumInput value={draft.initiativeBonus} onChange={(v) => { const n = num(v, -20, 20); if (n !== null) set('initiativeBonus', n); }} /></label>
           </div>
-          {!readOnly && character.level < 20 && (
+          {/* Levelling up is done by the player on their own phone; in a session the DM only says when. */}
+          {dmUnlock && character.level < 20 && (
+            <button
+              type="button"
+              className={`secondary levelup-button ${character.levelUpReady ? 'waiting' : ''}`}
+              onClick={() => void actions.update({ levelUpReady: !character.levelUpReady })}
+            >
+              {character.levelUpReady
+                ? `Waiting for ${character.name || 'the player'} to level up on their phone · Cancel`
+                : `⬆ Let ${character.name || 'them'} level up to ${character.level + 1}`}
+            </button>
+          )}
+          {!dmUnlock && !readOnly && character.level < 20 && (
             <button type="button" className="secondary levelup-button" onClick={() => setLevelling(true)}>
               ⬆ Level up to {character.level + 1}
             </button>
@@ -249,7 +261,7 @@ export function Sheet({
             ))}
           </ul>
           <h3>Skills</h3>
-          {!readOnly && <p className="muted small">Tap to cycle: not proficient → proficient → expertise.</p>}
+          {!readOnly && <p className="muted small hint">Tap to cycle: not proficient → proficient → expertise.</p>}
           <ul className="checks">
             {SKILL_KEYS.map((s) => (
               <ProfRow
@@ -490,7 +502,7 @@ export function Items({
           ))}
         </ul>
       )}
-      {character.inventory.length > 0 && <p className="muted small">Tap an item to read it.</p>}
+      {character.inventory.length > 0 && <p className="muted small hint">Tap an item to read it.</p>}
       {!readOnly && <AddItem content={content} onAdd={actions.addItem} />}
     </>
   );
@@ -558,7 +570,7 @@ function Spells({
           ))}
         </ul>
       )}
-      {spells.length > 0 && <p className="muted small">Tap a spell to read what it does.</p>}
+      {spells.length > 0 && <p className="muted small hint">Tap a spell to read what it does.</p>}
       {!readOnly && <AddSpell content={content} character={character} onAdd={(sp) => set('spells', [...character.spells, sp])} />}
     </>
   );

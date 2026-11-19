@@ -115,7 +115,7 @@ export function PickerList({
         {searchable && (
           <input ref={search} className="picker-search" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
         )}
-        <p className="muted small picker-tip">Hold an option (or hover with the mouse) to read it.</p>
+        <p className="muted small picker-tip hint">Hold an option (or hover with the mouse) to read it.</p>
         <ul className="picker-options">
           {filtered.map((o) => {
             const head = o.group !== lastGroup ? o.group : undefined;

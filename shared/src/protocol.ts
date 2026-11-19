@@ -31,6 +31,9 @@ export const PASSWORD_MIN_LENGTH = 6;
 // ---------- Characters ----------
 
 import type { Ability, Skill } from './rules.ts';
+import type { Combat, CombatAction } from './combat.ts';
+import type { CampaignPrep, Handout, Npc } from './prep.ts';
+import type { LogEntry } from './log.ts';
 import type { UseRequest } from './resources.ts';
 import type { DeathSaveResult } from './status.ts';
 import type { LevelUpChoices } from './levelup.ts';
@@ -138,6 +141,11 @@ export interface CharacterData {
    */
   hpItemsUnlocked: boolean;
   /**
+   * The DM said this character has earned its next level. During a session the
+   * player then levels up on their own phone; the flag clears when they have.
+   */
+  levelUpReady: boolean;
+  /**
    * How many of each limited thing are spent: spell slots ("slot1".."slot9",
    * "pact") and features (ids from limitedUses() in resources.ts). Missing = 0.
    * Changed through character:use and rests, never sent as a whole.
@@ -191,6 +199,7 @@ export const DEFAULT_CHARACTER: CharacterData = {
   inventory: [],
   coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
   hpItemsUnlocked: false,
+  levelUpReady: false,
   used: {},
   customResources: [],
   lastAction: null,
@@ -216,7 +225,7 @@ export interface CharacterSummary {
 /** Fields a player may only change while the DM has unlocked them (hpItemsUnlocked). */
 export const DM_LOCKED_FIELDS = ['hpCurrent', 'hpTemp', 'coins', 'inventory'] as const satisfies readonly (keyof CharacterData)[];
 /** Fields only the DM may ever change. */
-export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves', 'portrait'] as const satisfies readonly (keyof CharacterData)[];
+export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'levelUpReady', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves', 'portrait'] as const satisfies readonly (keyof CharacterData)[];
 
 // ---------- Campaigns & live sessions (socket) ----------
 
@@ -243,6 +252,15 @@ export interface SessionState {
   /** false = lobby (players ready up), true = the DM started the session. */
   started: boolean;
   players: SessionPlayer[];
+  /** The handout the DM is showing on everyone's screen right now, if any. */
+  handout: (Handout & { /** Changes every time the DM shows one, so phones pop it up again. */ shownAt: number }) | null;
+  /** The running fight, if any. Players get it without opponents' HP and AC. */
+  combat: Combat | null;
+}
+
+/** Something that should grab everyone's attention for a moment. */
+export interface SessionAlert {
+  kind: 'fight';
 }
 
 export type Ack<T> = ({ ok: true } & T) | { ok: false; error: string };
@@ -290,6 +308,45 @@ export interface ClientToServerEvents {
     input: { name: string },
     ack: (res: Ack<{ campaign: CampaignSummary }>) => void,
   ) => void;
+  // --- campaign prep ("Configure"): only the campaign's DM, any time ---
+  'prep:get': (input: { campaignId: string }, ack: (res: Ack<{ prep: CampaignPrep }>) => void) => void;
+  /** Create (no id) or change (with id) a handout. Upload its picture first: POST /api/campaigns/:id/images. */
+  'handout:save': (
+    input: { campaignId: string; handout: Partial<Handout> },
+    ack: (res: Ack<{ handout: Handout }>) => void,
+  ) => void;
+  'handout:delete': (input: { campaignId: string; handoutId: string }, ack: (res: Ack<object>) => void) => void;
+  'npc:save': (input: { campaignId: string; npc: Partial<Npc> }, ack: (res: Ack<{ npc: Npc }>) => void) => void;
+  'npc:delete': (input: { campaignId: string; npcId: string }, ack: (res: Ack<object>) => void) => void;
+
+  /**
+   * The campaign's session log, for its DM: the session running now (if started)
+   * and the one before it, which the client turns into the "Last time on ..." recap.
+   */
+  'log:get': (
+    input: { campaignId: string },
+    ack: (res: Ack<{ current: LogEntry[]; previous: LogEntry[] }>) => void,
+  ) => void;
+
+  // --- DM, during a session ---
+  /** Put a handout on every player's screen (null takes it away again). */
+  'handout:show': (input: { handoutId: string | null }, ack: (res: Ack<object>) => void) => void;
+  /**
+   * "Initiate fight": alerts every phone and starts a fight with all players
+   * plus the chosen NPCs (`count` copies each). Initiative is not rolled yet.
+   */
+  'combat:start': (
+    input: { npcs: { npcId: string; count: number }[] },
+    ack: (res: Ack<object>) => void,
+  ) => void;
+  /** Add NPCs, or players who joined late, to the running fight. */
+  'combat:add': (
+    input: { npcs?: { npcId: string; count: number }[]; characterIds?: string[] },
+    ack: (res: Ack<object>) => void,
+  ) => void;
+  'combat:action': (input: CombatAction, ack: (res: Ack<object>) => void) => void;
+  'combat:end': (ack: (res: Ack<object>) => void) => void;
+
   /** Open (or resume) the lobby of a campaign you own. */
   'session:host': (
     input: { campaignId: string },
@@ -330,6 +387,7 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   'session:state': (session: SessionState) => void;
   'session:ended': () => void;
+  'session:alert': (alert: SessionAlert) => void;
 }
 
 export const LIMITS = {

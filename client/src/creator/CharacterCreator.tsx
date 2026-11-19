@@ -240,7 +240,7 @@ function ClassStep({ c, set, content }: StepProps) {
               {ABILITIES.map((a) => <option key={a} value={a}>Casts with {ABILITY_NAMES[a]}</option>)}
             </select>
           </label>
-          <p className="muted small">Add the class's features on the sheet's Features tab afterwards.</p>
+          <p className="muted small hint">Add the class's features on the sheet's Features tab afterwards.</p>
         </div>
       )}
       <label>Starting level
@@ -261,7 +261,7 @@ function ClassStep({ c, set, content }: StepProps) {
             <label>Subclass name<input value={c.customSubclass} maxLength={40} onChange={(e) => set({ customSubclass: e.target.value })} /></label>
           )}
           {c.classId !== CUSTOM && subclasses.length === 1 && (
-            <p className="muted small">The free SRD has one subclass per class. Others from your Player's Handbook can be added later, or use Homebrew.</p>
+            <p className="muted small hint">The free SRD has one subclass per class. Others from your Player's Handbook can be added later, or use Homebrew.</p>
           )}
         </>
       )}
@@ -278,7 +278,7 @@ function ClassStep({ c, set, content }: StepProps) {
         <Info entry={classInfo(cls)}>
           <p className="summary">
             <strong>{cls.name}</strong>: Hit Die d{cls.hitDie}, saves {cls.saves.map((a) => a.toUpperCase()).join(' & ')}.
-            {cls.spellcasting ? ` Casts spells with ${ABILITY_NAMES[cls.spellcasting.ability]}.` : ''} <span className="muted">Hold for details.</span>
+            {cls.spellcasting ? ` Casts spells with ${ABILITY_NAMES[cls.spellcasting.ability]}.` : ''} <span className="muted hint">Hold for details.</span>
           </p>
         </Info>
       )}
@@ -312,13 +312,13 @@ function BackgroundStep({ c, set, content }: StepProps) {
           <MultiPicker label="Skills" max={2} values={c.customBackground.skills} options={SKILL_KEYS.map(skillOption)} onChange={(v) => set({ customBackground: { ...c.customBackground, skills: v as Skill[] } })} />
           <label>Tool proficiency<input value={c.customBackground.tool} maxLength={40} onChange={(e) => set({ customBackground: { ...c.customBackground, tool: e.target.value } })} /></label>
           <Picker label="Origin feat" value={c.backgroundFeat} options={originOptions} onChange={(backgroundFeat) => set({ backgroundFeat })} />
-          <p className="muted small">Starting equipment for a homebrew background: add it on the sheet's Items tab.</p>
+          <p className="muted small hint">Starting equipment for a homebrew background: add it on the sheet's Items tab.</p>
         </div>
       )}
       {bg && c.backgroundId !== CUSTOM && (
         <Info entry={backgroundInfo(content.background(bg.id)!, content)}>
           <p className="summary">
-            Skills: {bg.skills.map((s) => SKILLS[s].name).join(', ')}. Tool: {bg.tool || 'none'}. <span className="muted">Hold for details.</span>
+            Skills: {bg.skills.map((s) => SKILLS[s].name).join(', ')}. Tool: {bg.tool || 'none'}. <span className="muted hint">Hold for details.</span>
           </p>
         </Info>
       )}
@@ -333,7 +333,7 @@ function FeatChoices({ c, set, content, feat, from }: StepProps & { feat: string
   if (!def) return null;
   const header = (
     <Info entry={featInfo(def)}>
-      <p className="summary"><strong>{from} feat: {def.name}</strong> <span className="muted">(hold to read)</span></p>
+      <p className="summary"><strong>{from} feat: {def.name}</strong> <span className="muted hint">(hold to read)</span></p>
     </Info>
   );
   if (feat === 'skilled') {
@@ -424,7 +424,7 @@ function SpeciesStep({ c, set, content }: StepProps) {
       )}
       {sp && sp.id !== CUSTOM && (
         <Info entry={speciesInfo(sp)}>
-          <p className="summary">Traits: {sp.traits.map((t) => t.name).join(', ')}. <span className="muted">Hold for details.</span></p>
+          <p className="summary">Traits: {sp.traits.map((t) => t.name).join(', ')}. <span className="muted hint">Hold for details.</span></p>
         </Info>
       )}
       <MultiPicker
@@ -462,7 +462,7 @@ function AbilityStep({ c, set, content }: StepProps) {
           <option value="manual">Rolled dice (type in your rolls)</option>
         </select>
       </label>
-      {cls?.primaryAbility && <p className="muted small">Tip: put your highest score in {cls.primaryAbility} ({cls.name}'s main ability).</p>}
+      {cls?.primaryAbility && <p className="muted small hint">Tip: put your highest score in {cls.primaryAbility} ({cls.name}'s main ability).</p>}
       {method === 'pointbuy' && (
         <p className={pointBuySpent(c.baseScores) > POINT_BUY_BUDGET ? 'error small' : 'muted small'}>
           Points spent: {pointBuySpent(c.baseScores)} / {POINT_BUY_BUDGET}
@@ -661,7 +661,7 @@ function ReviewStep({ c, set, content, portrait, setPortrait }: StepProps & { po
           <span className="chip">{preview.coins!.gp} GP</span>
         </Row>
       </div>
-      <p className="muted small">Everything can still be changed on the sheet afterwards.</p>
+      <p className="muted small hint">Everything can still be changed on the sheet afterwards.</p>
     </>
   );
 }

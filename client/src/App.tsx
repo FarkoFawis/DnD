@@ -5,6 +5,7 @@ import { Characters } from './Characters.tsx';
 import { Play } from './Play.tsx';
 import { Login } from './Login.tsx';
 import { SessionView } from './SessionView.tsx';
+import { SettingsScreen } from './SettingsScreen.tsx';
 import { StatusPill } from './StatusPill.tsx';
 import { useGame, type Status } from './useGame.ts';
 
@@ -70,8 +71,8 @@ type Screen = 'home' | 'play' | 'characters' | 'settings';
 function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
   const game = useGame(auth.token, onSignOut);
   const [screen, setScreen] = useState<Screen>('home');
-  // Once the DM starts the session, their screen is only the party; the rest moves into a sidebar.
-  const dmInSession = !!game.session?.started && game.session.host.id === auth.user.id;
+  // Once the session starts, the screen is only the game (party for the DM, sheet for players); the rest moves into a sidebar.
+  const dmInSession = !!game.session?.started;
   return (
     <Shell status={game.status} user={auth.user.username} onSignOut={game.session ? undefined : onSignOut} hideHeader={dmInSession}>
       {game.error && (
@@ -88,13 +89,7 @@ function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
       ) : screen === 'characters' ? (
         <Characters game={game} onBack={() => setScreen('home')} />
       ) : screen === 'settings' ? (
-        <>
-          <button className="back" onClick={() => setScreen('home')}>‹ Home</button>
-          <section className="card">
-            <h2 className="card-title">Settings</h2>
-            <p className="muted">Nothing here yet.</p>
-          </section>
-        </>
+        <SettingsScreen onBack={() => setScreen('home')} />
       ) : (
         <HomeMenu username={auth.user.username} onPick={setScreen} />
       )}
@@ -108,14 +103,15 @@ function HomeMenu({ username, onPick }: { username: string; onPick: (s: Screen) 
       {username && <p className="muted center">Welcome back, {username}.</p>}
       <button className="menu-button primary" onClick={() => onPick('play')}>
         Play
-        <span className="small">Join or host a session</span>
+        <span className="small hint">Join or host a session</span>
       </button>
       <button className="menu-button" onClick={() => onPick('characters')}>
         Characters
-        <span className="small">Create and edit your characters</span>
+        <span className="small hint">Create and edit your characters</span>
       </button>
       <button className="menu-button" onClick={() => onPick('settings')}>
         Settings
+        <span className="small hint">Helper texts on or off</span>
       </button>
     </section>
   );

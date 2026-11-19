@@ -135,6 +135,10 @@ const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
     if (typeof v !== 'boolean') throw new Invalid('Invalid unlock flag.');
     return v;
   },
+  levelUpReady: (v) => {
+    if (typeof v !== 'boolean') throw new Invalid('Invalid level-up flag.');
+    return v;
+  },
   used: (v) => {
     if (!isObj(v) || Object.keys(v).length > 100) throw new Invalid('Invalid uses.');
     const out: Record<string, number> = {};
