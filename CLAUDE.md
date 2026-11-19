@@ -43,7 +43,7 @@ A mobile-first web app that replaces our paper character sheets. We play **in pe
 - Only bundle SRD (CC-BY-4.0) content; anything else is user-entered homebrew.
 
 ## Status
-Done: accounts, campaigns, hosting/joining sessions with a code, per-campaign characters with name, class, species, level and HP (current, max, temp), live party view for everyone. Not yet: ability scores, skills, spells, equipment, dice, deployment. The group's edition (2014 vs 2024) is not confirmed yet; default to 2024.
+Done: accounts, campaigns, hosting/joining sessions with a code, per-campaign characters with name, class, species, level and HP (current, max, temp), live party view for everyone. Not yet: ability scores, skills, spells, equipment, dice, deployment. **The group plays the 2024 rules** (confirmed by Faris, 2026-11-19). Build 2024 logic; 2014 support is not needed for now.
 
 ---
 
@@ -62,7 +62,7 @@ Reference notes for building a web app that replaces our paper Dungeons & Dragon
 | **5e "2014"** | 2014 | SRD 5.1 (CC-BY-4.0) | What most tables learned on. Still widely played. |
 | **5e "2024" / "5.5e" / "D&D (2024)"** | PHB Sep 2024, DMG Nov 2024, Monster Manual Feb 2025 | **SRD 5.2 / 5.2.1** (CC-BY-4.0, Apr 2025) | Current official rules. Backward compatible with 2014 adventures. |
 
-**Default for this app: 2024 rules**, with 2014 differences flagged where they affect the sheet. Ask the group which edition they use before building edition-specific logic.
+**This app uses the 2024 rules** (our group plays 2024). 2014 differences are noted only for reference.
 
 Biggest 2014 → 2024 differences that change a character sheet:
 - "Race" is renamed **Species**, and species **no longer give ability score bonuses**.
