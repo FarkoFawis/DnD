@@ -396,11 +396,46 @@ h3 .link { margin-left: 8px; font-weight: 400; }
 .stepper { display: flex; align-items: center; gap: 4px; flex: none; }
 .stepper button { width: 40px; min-height: 40px; border-radius: 10px; border: 1px solid #57534e; background: none; color: var(--text); font-size: 1.2rem; }
 
-/* "Initiate fight": a faint red pulse over everything, three times. Never blocks taps. */
-.fight-alert { position: fixed; inset: 0; z-index: 100; pointer-events: none; display: flex; align-items: flex-start; justify-content: center; background: rgba(220, 38, 38, 0.05); box-shadow: inset 0 0 80px 16px rgba(220, 38, 38, 0.18); opacity: 0; animation: fight-pulse 0.8s ease-in-out 3; }
-.fight-alert-text { margin-top: max(18px, env(safe-area-inset-top)); padding: 8px 22px; border-radius: 999px; background: rgba(127, 29, 29, 0.92); color: #fff; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
-@keyframes fight-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .fight-alert { animation: fight-pulse 2.4s ease-in-out 1; } }
+/* "Initiate fight": a red line with a pulsing diamond, and a faint red glow over everything. Never blocks taps.
+   One 2.6 s timeline: line in, pulse (swords), flip, pulse (!), pulse, collapse, line breaks into sparks. */
+.fight-alert { --fa: #ef4444; position: fixed; inset: 0; z-index: 100; pointer-events: none; overflow: hidden; }
+.fa-tint { position: absolute; inset: 0; background: rgba(220, 38, 38, 0.05); box-shadow: inset 0 0 80px 16px rgba(220, 38, 38, 0.18); opacity: 0; animation: fa-tint 2.6s ease-in-out both; }
+.fa-band { position: absolute; left: 0; right: 0; top: 38%; height: 0; }
+.fa-line { position: absolute; left: 0; right: 0; top: -1.5px; height: 3px; background: var(--fa); box-shadow: 0 0 10px rgba(239, 68, 68, 0.7); animation: fa-line 2.6s cubic-bezier(0.3, 0.8, 0.3, 1) both; }
+.fa-emblem { position: absolute; left: 50%; top: 0; width: min(46vw, 190px); margin: calc(min(46vw, 190px) * -0.355) 0 0 calc(min(46vw, 190px) * -0.5); overflow: visible; filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.55)); animation: fa-emblem 2.6s ease-in-out both; }
+.fa-diamond { fill: #0c0a09; stroke: var(--fa); stroke-width: 9; stroke-linejoin: miter; }
+.fa-chevron { fill: none; stroke: var(--fa); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.fa-swords path, .fa-bang path { fill: none; stroke: var(--fa); stroke-linecap: round; }
+.fa-swords path { stroke-width: 4.5; }
+.fa-swords .fa-guard { stroke-width: 4; }
+.fa-swords circle, .fa-bang circle { fill: var(--fa); }
+.fa-bang path { stroke-width: 10; }
+.fa-swords { animation: fa-first 2.6s steps(1) both; }
+.fa-bang { animation: fa-second 2.6s steps(1) both; }
+.fa-spark { position: absolute; fill: var(--fa); opacity: 0; animation: fa-spark 0.55s ease-out both; }
+@keyframes fa-tint { 0% { opacity: 0; } 13.5% { opacity: 1; } 22% { opacity: 0.15; } 38.5% { opacity: 1; } 47% { opacity: 0.15; } 56% { opacity: 1; } 71%, 100% { opacity: 0; } }
+@keyframes fa-line { 0% { clip-path: inset(-12px 50% -12px 50%); } 6%, 73% { clip-path: inset(-12px 0 -12px 0); } 96%, 100% { clip-path: inset(-12px 0 -12px 100%); } }
+@keyframes fa-emblem {
+  0% { transform: scale(0); }
+  6% { transform: scale(1); }
+  13.5% { transform: scale(1.35); }
+  21%, 23% { transform: scale(1); }
+  27% { transform: scale(0.04, 1); }
+  31% { transform: scale(1); }
+  38.5% { transform: scale(1.35); }
+  46%, 48% { transform: scale(1); }
+  56% { transform: scale(1.35); }
+  63.5% { transform: scale(1); }
+  71%, 100% { transform: scale(0); }
+}
+@keyframes fa-first { 0% { opacity: 1; } 27%, 100% { opacity: 0; } }
+@keyframes fa-second { 0% { opacity: 0; } 27%, 100% { opacity: 1; } }
+@keyframes fa-spark { 0% { opacity: 0; transform: scale(0) rotate(0deg); } 40% { opacity: 1; transform: scale(1) rotate(45deg); } 100% { opacity: 0; transform: scale(0.2) rotate(90deg); } }
+@keyframes fa-fade { 0%, 100% { opacity: 0; } 15%, 80% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .fa-tint, .fa-line, .fa-emblem { animation: fa-fade 2.6s ease-in-out both; }
+  .fa-spark { animation: none; }
+}
 
 /* ---- handouts on the players' screens ---- */
 .handout-overlay { position: fixed; inset: 0; z-index: 70; background: #0c0a09; display: flex; flex-direction: column; padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom)); }
