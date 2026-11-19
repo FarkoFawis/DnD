@@ -37,6 +37,8 @@ export interface Item {
   name: string;
   qty: number;
   notes: string;
+  /** Id of the matching entry in the game content (SRD or a private pack), for its description. */
+  ref?: string;
 }
 
 export interface Spell {
@@ -45,6 +47,22 @@ export interface Spell {
   /** 0 = cantrip */
   level: number;
   prepared: boolean;
+  /** Id of the matching spell in the game content, for its description. */
+  ref?: string;
+  /** Text for a homebrew spell that isn't in any content pack. */
+  description?: string;
+}
+
+/** A class feature, species trait or feat on the sheet. */
+export interface CharacterFeature {
+  id: string;
+  name: string;
+  /** Where it comes from, e.g. "Wizard 1", "Elf", "Origin feat". */
+  source: string;
+  /** Points into the content, see describeRef() in content/info.ts. */
+  ref?: string;
+  /** Text for a homebrew feature that isn't in any content pack. */
+  description?: string;
 }
 
 export const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'] as const;
@@ -59,6 +77,8 @@ export interface CharacterData {
   className: string;
   subclass: string;
   species: string;
+  /** Lineage / ancestry / legacy, e.g. "High Elf". */
+  subspecies: string;
   background: string;
   level: number;
   hpCurrent: number;
@@ -74,6 +94,7 @@ export interface CharacterData {
   skillExpertise: Skill[];
   spellcastingAbility: Ability | null;
   spells: Spell[];
+  features: CharacterFeature[];
   /** Changed through the item:* events, so DM and player edits never clash. */
   inventory: Item[];
   coins: Record<Coin, number>;
@@ -86,6 +107,7 @@ export const DEFAULT_CHARACTER: CharacterData = {
   className: '',
   subclass: '',
   species: '',
+  subspecies: '',
   background: '',
   level: 1,
   hpCurrent: 10,
@@ -100,6 +122,7 @@ export const DEFAULT_CHARACTER: CharacterData = {
   skillExpertise: [],
   spellcastingAbility: null,
   spells: [],
+  features: [],
   inventory: [],
   coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
   notes: '',
@@ -156,7 +179,7 @@ export interface ClientToServerEvents {
   /** Damage (negative) or heal (positive). Sent as a change so concurrent edits never overwrite each other. */
   'character:adjustHp': (input: { characterId: string; delta: number }, ack: CharAck) => void;
   'item:add': (
-    input: { characterId: string; item: { name: string; qty?: number; notes?: string } },
+    input: { characterId: string; item: { name: string; qty?: number; notes?: string; ref?: string } },
     ack: CharAck,
   ) => void;
   /** Change an item's quantity/name/notes. qty 0 removes it. */

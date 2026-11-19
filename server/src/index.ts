@@ -12,6 +12,7 @@ const { httpServer, io } = createApp({
   // Served when it has been built (npm run build); in dev, Vite serves the app on :5173.
   clientDist,
   corsOrigin: process.env.CORS_ORIGIN?.split(','),
+  contentDir: process.env.CONTENT_DIR ?? fileURLToPath(new URL('../data/content', import.meta.url)),
 });
 
 httpServer.listen(port, () => {

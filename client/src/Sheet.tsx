@@ -12,13 +12,17 @@ import {
   type Item,
   type Skill,
 } from '@dnd/shared';
+import type { Content } from '@dnd/shared';
+import { Info } from './Info.tsx';
+import { AddItem, AddSpell, Features, itemEntry, spellEntry } from './SheetContent.tsx';
+import { useContent } from './content/useContent.ts';
 import type { Game } from './useGame.ts';
 
 /** Edits one character (by id). The server decides who may: owner outside sessions, DM inside. */
 export interface SheetActions {
   update: (patch: Partial<CharacterData>) => Promise<boolean>;
   adjustHp: (delta: number) => Promise<boolean>;
-  addItem: (item: { name: string; qty?: number; notes?: string }) => Promise<boolean>;
+  addItem: (item: { name: string; qty?: number; notes?: string; ref?: string }) => Promise<boolean>;
   updateItem: (itemId: string, patch: Partial<Omit<Item, 'id'>>) => Promise<boolean>;
   removeItem: (itemId: string) => Promise<boolean>;
 }
@@ -33,7 +37,7 @@ export function sheetActions(game: Game, characterId: string): SheetActions {
   };
 }
 
-const TABS = ['Main', 'Abilities', 'Items', 'Spells', 'Notes'] as const;
+const TABS = ['Main', 'Abilities', 'Items', 'Spells', 'Features'] as const;
 type Tab = (typeof TABS)[number];
 
 /**
@@ -78,6 +82,7 @@ export function Sheet({
   const [tab, setTab] = useState<Tab>('Main');
   const [draft, setDraft] = useDraft(character);
   const stats = deriveStats(draft);
+  const content = useContent();
 
   /** Set + save immediately (toggles, numbers, selects). */
   const set = <K extends keyof CharacterData>(key: K, value: CharacterData[K]) => {
@@ -189,13 +194,15 @@ export function Sheet({
         </>
       )}
 
-      {tab === 'Items' && <Items character={draft} actions={actions} onCoins={(coins) => set('coins', coins)} readOnly={readOnly} />}
+      {tab === 'Items' && <Items character={draft} actions={actions} onCoins={(coins) => set('coins', coins)} readOnly={readOnly} content={content} />}
 
-      {tab === 'Spells' && <Spells character={draft} stats={stats} set={set} readOnly={readOnly} />}
+      {tab === 'Spells' && <Spells character={draft} stats={stats} set={set} readOnly={readOnly} content={content} />}
 
-      {tab === 'Notes' && (
+      {tab === 'Features' && <Features character={draft} content={content} readOnly={readOnly} onChange={(f) => set('features', f)} />}
+
+      {tab === 'Features' && (
         <label>
-          Feats, features, proficiencies, languages…
+          Notes: proficiencies, languages, anything else
           <textarea
             rows={12}
             maxLength={5000}
@@ -334,22 +341,14 @@ function Items({
   actions,
   onCoins,
   readOnly,
+  content,
 }: {
   character: CharacterData;
   actions: SheetActions;
   onCoins: (c: CharacterData['coins']) => void;
   readOnly: boolean;
+  content: Content | null;
 }) {
-  const [name, setName] = useState('');
-  const [qty, setQty] = useState('1');
-  const add = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = Number.parseInt(qty, 10);
-    if (await actions.addItem({ name, qty: Number.isInteger(q) && q > 0 ? q : 1 })) {
-      setName('');
-      setQty('1');
-    }
-  };
   return (
     <>
       <div className="coins">
@@ -369,10 +368,10 @@ function Items({
         <ul className="items">
           {character.inventory.map((item) => (
             <li key={item.id}>
-              <span className="grow">
-                {item.name}
+              <Info entry={itemEntry(content, item)} className="grow">
+                <span className="block">{item.name}</span>
                 {item.notes && <span className="muted small block">{item.notes}</span>}
-              </span>
+              </Info>
               {readOnly ? (
                 <span className="qty">×{item.qty}</span>
               ) : (
@@ -387,17 +386,8 @@ function Items({
           ))}
         </ul>
       )}
-      {!readOnly && <form onSubmit={add} className="inline-form">
-        <label>
-          Add item
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Potion of Healing" maxLength={80} required />
-        </label>
-        <label className="qty-input">
-          Qty
-          <input type="number" inputMode="numeric" min={1} value={qty} onChange={(e) => setQty(e.target.value)} />
-        </label>
-        <button className="secondary" type="submit">Add</button>
-      </form>}
+      {character.inventory.length > 0 && <p className="muted small">Hold an item (or hover with the mouse) to read it.</p>}
+      {!readOnly && <AddItem content={content} onAdd={actions.addItem} />}
     </>
   );
 }
@@ -407,14 +397,14 @@ function Spells({
   stats,
   set,
   readOnly,
+  content,
 }: {
   character: CharacterData;
   stats: ReturnType<typeof deriveStats>;
   set: <K extends keyof CharacterData>(key: K, value: CharacterData[K]) => void;
   readOnly: boolean;
+  content: Content | null;
 }) {
-  const [name, setName] = useState('');
-  const [level, setLevel] = useState(0);
   const spells = [...character.spells].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
   return (
     <>
@@ -450,10 +440,10 @@ function Spells({
               >
                 {sp.prepared ? '●' : '○'}
               </button>
-              <span className="grow">
+              <Info entry={spellEntry(content, sp)} className="grow">
                 {sp.name}
                 <span className="muted small"> · {sp.level === 0 ? 'Cantrip' : `Level ${sp.level}`}</span>
-              </span>
+              </Info>
               {!readOnly && (
                 <button aria-label={`Remove ${sp.name}`} className="remove" onClick={() => set('spells', character.spells.filter((x) => x.id !== sp.id))}>✕</button>
               )}
@@ -461,38 +451,10 @@ function Spells({
           ))}
         </ul>
       )}
-      {!readOnly && <form
-        className="inline-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!name.trim()) return;
-          set('spells', [...character.spells, { id: newId(), name: name.trim(), level, prepared: true }]);
-          setName('');
-        }}
-      >
-        <label>
-          Add spell
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Magic Missile" maxLength={80} required />
-        </label>
-        <label className="qty-input">
-          Level
-          <select value={level} onChange={(e) => setLevel(Number(e.target.value))}>
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => (
-              <option key={l} value={l}>{l === 0 ? 'C' : l}</option>
-            ))}
-          </select>
-        </label>
-        <button className="secondary" type="submit">Add</button>
-      </form>}
+      {spells.length > 0 && <p className="muted small">Hold a spell (or hover with the mouse) to read it.</p>}
+      {!readOnly && <AddSpell content={content} character={character} onAdd={(sp) => set('spells', [...character.spells, sp])} />}
     </>
   );
 }
 
 export type { Skill };
-
-/** crypto.randomUUID only exists on HTTPS/localhost; phones on the LAN dev server use plain http. */
-function newId(): string {
-  return typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}

@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import type { CharacterSummary } from '@dnd/shared';
+import { CharacterCreator } from './creator/CharacterCreator.tsx';
 import { Sheet, sheetActions } from './Sheet.tsx';
 import type { Game } from './useGame.ts';
 
 /** Your characters, made outside sessions. Any of them can join any campaign. */
 export function Characters({ game, onBack }: { game: Game; onBack: () => void }) {
   const [openId, setOpenId] = useState<string | null>(null);
-  const [name, setName] = useState('');
+  const [creating, setCreating] = useState(false);
   const open = game.characters?.find((c) => c.id === openId);
 
   if (open) {
@@ -41,14 +42,19 @@ export function Characters({ game, onBack }: { game: Game; onBack: () => void })
     );
   }
 
-  const create = async (e: FormEvent) => {
-    e.preventDefault();
-    const created = await game.createCharacter(name);
-    if (created) {
-      setName('');
-      setOpenId(created.id);
-    }
-  };
+  if (creating) {
+    return (
+      <CharacterCreator
+        onCancel={() => setCreating(false)}
+        onDone={async (data) => {
+          const created = await game.createCharacter(data.name, data);
+          if (!created) return false;
+          setCreating(false);
+          setOpenId(created.id);
+        }}
+      />
+    );
+  }
 
   return (
     <>
@@ -71,15 +77,9 @@ export function Characters({ game, onBack }: { game: Game; onBack: () => void })
             ))}
           </ul>
         )}
-        <form onSubmit={create} className="inline-form">
-          <label>
-            New character
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" maxLength={40} required />
-          </label>
-          <button className="secondary" type="submit" disabled={game.status !== 'online'}>
-            Create
-          </button>
-        </form>
+        <button className="primary block-button" onClick={() => setCreating(true)} disabled={game.status !== 'online'}>
+          + New character
+        </button>
       </section>
     </>
   );

@@ -18,6 +18,7 @@ import {
   type ServerToClientEvents,
   type SessionState,
 } from '@dnd/shared';
+import { loadContentPacks } from './content.ts';
 import type { Store } from './store.ts';
 
 interface SocketData {
@@ -34,6 +35,8 @@ export interface AppOptions {
   /** Folder with the built client to serve in production. */
   clientDist?: string;
   corsOrigin?: string | string[];
+  /** Folder with extra content packs (homebrew / private book data). */
+  contentDir?: string;
 }
 
 function cleanText(value: unknown, max: number): string | null {
@@ -45,7 +48,7 @@ function cleanText(value: unknown, max: number): string | null {
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 5 * 60 * 1000;
 
-export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
+export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOptions): {
   httpServer: HttpServer;
   io: IoServer;
 } {
@@ -105,6 +108,17 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
       return;
     }
     res.json({ user });
+  });
+
+  // Extra content packs, on top of the SRD the client already has. Logged-in
+  // users only: a pack can hold text from the group's own books.
+  app.get('/api/content', (req, res) => {
+    const token = bearer(req.headers.authorization);
+    if (!token || !store.userForToken(token)) {
+      res.status(401).json({ error: 'Not logged in.' });
+      return;
+    }
+    res.json({ packs: contentDir ? loadContentPacks(contentDir).packs : [] });
   });
 
   app.post('/api/auth/logout', (req, res) => {

@@ -17,7 +17,8 @@
     "start": "npm start -w server",
     "test": "npm test -w shared && npm test -w server",
     "typecheck": "npm run typecheck --workspaces",
-    "users": "npm run users -w server --"
+    "users": "npm run users -w server --",
+    "content": "npm run content -w server"
   },
   "devDependencies": {
     "concurrently": "^10.0.7",

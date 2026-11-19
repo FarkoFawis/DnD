@@ -35,6 +35,8 @@ A mobile-first web app that replaces our paper character sheets. We play **in pe
 ## Commands (repo root)
 - `npm install` — install all workspaces (Node 22.13+ required for `node:sqlite`).
 - `npm run users -- add Faris Mira` / `list` / `reset-password Mira` / `remove Mira` — manage accounts.
+- `npm run content` — check the private content packs in `server/data/content/` (see `docs/content-packs.md`).
+- `node shared/scripts/build-srd.mjs <5e-database checkout>` — regenerate `shared/src/content/srd.json` from the SRD 5.2 data.
 - `npm run dev` — server on :3001 and client on :5173. Vite is exposed on the LAN (`host: true`) and proxies `/socket.io` and `/api` to the server, so phones on the same Wi-Fi can open `http://<laptop-ip>:5173`.
 - `npm test` — Vitest for `shared` and `server` (server tests run a real HTTP + Socket.IO server on a random port with an in-memory DB).
 - `npm run typecheck` — `tsc --noEmit` in every workspace.
@@ -47,10 +49,13 @@ A mobile-first web app that replaces our paper character sheets. We play **in pe
 - Rules logic goes in `shared/src/rules.ts` with unit tests, never inline in components.
 - Store raw inputs, compute derived values (see Part 2, section 7).
 - Only bundle SRD (CC-BY-4.0) content; anything else is user-entered homebrew.
+- **Game content** (`shared/src/content/`): `srd.json` is the SRD 5.2 pack (generated, don't hand-edit; credit in `SRD-LICENSE.md` and the creator footer). `Content` merges packs (later wins by id). The client loads SRD lazily via `import('@dnd/shared/srd')` plus extra packs from `GET /api/content` (`useContent()`); the server reads them from `server/data/content/*.json` (git-ignored, for homebrew and text typed in from the group's own PHB). Never commit non-SRD book text.
+- Characters point into content by `ref` (spells, items) and feature refs like `class:wizard:Spellcasting` (`describeRef()`); homebrew entries carry their own `description`. Wrap anything with a description in `<Info entry>` (client/src/Info.tsx): hold on phones / hover on PC shows it, and it works in read-only sheets.
+- Character creation logic (choices, per-step checks, building the sheet) is pure and tested in `shared/src/creation.ts`; the UI is `client/src/creator/CharacterCreator.tsx`, a linear step-by-step flow whose draft is kept in localStorage until the character is created.
 
 ## Status
-Rough working prototype (Faris will add feature ideas over time). Done: accounts, home menu, character roster, campaigns, lobby with ready-up and (forced) start, read-only sheets for players in session, live party view, DM live edits. A guided character creator with SRD dropdowns and spell/item descriptions is being built separately. The sheet has tabs: **Main** (HP box, AC, initiative, speed, PB, passive Perception, identity), **Abilities** (six scores, saves, skills with proficiency/expertise), **Items** (coins + inventory), **Spells** (spellcasting ability, save DC, attack, spell list with prepared flag), **Notes** (free text for feats, features, languages). Derived numbers come from `deriveStats()` in `shared/src/rules.ts`.
-Not yet: spell slots and other limited-use resources, rests, conditions/exhaustion, death saves, attacks list, AC calculation from armor, SRD data (class/species pickers), deployment.
+Rough working prototype (Faris will add feature ideas over time). Done: accounts, home menu, character roster, campaigns, lobby with ready-up and (forced) start, read-only sheets for players in session, live party view, DM live edits. Guided character creator (class, background, species, scores, equipment, spells, review; every choice a dropdown of SRD + pack options, with a Homebrew option), descriptions on hold/hover for spells, items and features, rulebook pickers on the sheet. The sheet has tabs: **Main** (HP box, AC, initiative, speed, PB, passive Perception, identity), **Abilities** (six scores, saves, skills with proficiency/expertise), **Items** (coins + inventory), **Spells** (spellcasting ability, save DC, attack, spell list with prepared flag), **Features** (features/traits/feats list with descriptions, plus free-text notes). Derived numbers come from `deriveStats()` in `shared/src/rules.ts`.
+Not yet: spell slots and other limited-use resources, rests, conditions/exhaustion, death saves, attacks list, AC recalculation when armor changes after creation, level-up wizard (ASI/feats, new spells), deployment.
 
 **The group plays the 2024 rules** (confirmed by Faris, 2026-11-19). Build 2024 logic; 2014 support is not needed for now.
 

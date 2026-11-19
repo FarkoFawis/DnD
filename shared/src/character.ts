@@ -3,6 +3,7 @@ import {
   DEFAULT_CHARACTER,
   LIMITS,
   type CharacterData,
+  type CharacterFeature,
   type Item,
   type Spell,
 } from './protocol.ts';
@@ -43,6 +44,7 @@ export function sanitizeItem(v: unknown): Item {
     name,
     qty: int(v.qty ?? 1, 'quantity', 0, 99999),
     notes: text(v.notes ?? '', 'item notes', 500),
+    ...optionalRef(v.ref),
   };
 }
 
@@ -53,6 +55,25 @@ function sanitizeSpell(v: unknown): Spell {
     name: text(v.name, 'spell name', 80),
     level: int(v.level, 'spell level', 0, 9),
     prepared: v.prepared === true,
+    ...optionalRef(v.ref),
+    ...(v.description ? { description: text(v.description, 'spell description', 4000) } : {}),
+  };
+}
+
+function optionalRef(v: unknown): { ref?: string } {
+  return v === undefined || v === null || v === '' ? {} : { ref: text(v, 'reference', 160) };
+}
+
+function sanitizeFeature(v: unknown): CharacterFeature {
+  if (!isObj(v)) throw new Invalid('Invalid feature.');
+  const name = text(v.name, 'feature name', 80);
+  if (!name) throw new Invalid('A feature needs a name.');
+  return {
+    id: text(v.id, 'feature id', 64),
+    name,
+    source: text(v.source ?? '', 'feature source', 80),
+    ...optionalRef(v.ref),
+    ...(v.description ? { description: text(v.description, 'feature description', 4000) } : {}),
   };
 }
 
@@ -62,6 +83,7 @@ const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
   className: (v) => text(v, 'class'),
   subclass: (v) => text(v, 'subclass'),
   species: (v) => text(v, 'species'),
+  subspecies: (v) => text(v, 'subspecies'),
   background: (v) => text(v, 'background'),
   level: (v) => int(v, 'level', 1, 20),
   hpCurrent: (v) => int(v, 'current HP', 0, 9999),
@@ -79,6 +101,7 @@ const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
   skillExpertise: (v) => unique(list(v, 'expertise', (x) => oneOf<Skill>(x, SKILL_KEYS, 'skill'))),
   spellcastingAbility: (v) => (v === null ? null : oneOf(v, ABILITIES, 'spellcasting ability')),
   spells: (v) => list(v, 'spells', sanitizeSpell),
+  features: (v) => list(v, 'features', sanitizeFeature),
   inventory: (v) => list(v, 'inventory', sanitizeItem),
   coins: (v) => {
     if (!isObj(v)) throw new Invalid('Invalid coins.');

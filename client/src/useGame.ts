@@ -129,7 +129,7 @@ export function useGame(token: string, onUnauthorized: () => void) {
     /** Damage (negative) or heal (positive). */
     adjustHp: (characterId: string, delta: number) =>
       charCall((s, done) => s.emit('character:adjustHp', { characterId, delta }, done)),
-    addItem: (characterId: string, item: { name: string; qty?: number; notes?: string }) =>
+    addItem: (characterId: string, item: { name: string; qty?: number; notes?: string; ref?: string }) =>
       charCall((s, done) => s.emit('item:add', { characterId, item }, done)),
     updateItem: (characterId: string, itemId: string, patch: Partial<Omit<Item, 'id'>>) =>
       charCall((s, done) => s.emit('item:update', { characterId, itemId, patch }, done)),
