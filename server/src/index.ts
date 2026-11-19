@@ -9,7 +9,8 @@ const clientDist = fileURLToPath(new URL('../../client/dist', import.meta.url));
 const store = new Store(dbPath);
 const { httpServer, io } = createApp({
   store,
-  clientDist: process.env.NODE_ENV === 'production' ? clientDist : undefined,
+  // Served when it has been built (npm run build); in dev, Vite serves the app on :5173.
+  clientDist,
   corsOrigin: process.env.CORS_ORIGIN?.split(','),
 });
 

@@ -60,7 +60,7 @@ There is no public sign-up. Accounts are created on the server:
 | `npm run users -- reset-password Mira` | Forgotten password: clears it, Mira picks a new one at next login |
 | `npm run users -- remove Jonas` | Delete an account (and their characters) |
 
-Add `DB_PATH=...` in front when the database is not in the default place.
+All commands work on Windows, macOS and Linux. Set the `DB_PATH` environment variable only if the database is not in the default place.
 
 ## Scripts
 
