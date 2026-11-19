@@ -3,6 +3,11 @@ import { StatusPill } from './StatusPill.tsx';
 import type { SessionPlayer, SessionState } from '@dnd/shared';
 import { ClassicSheet } from './ClassicSheet.tsx';
 import { Sheet, sheetActions } from './Sheet.tsx';
+import { CampaignConfig } from './prep/CampaignConfig.tsx';
+import { Recap } from './prep/SessionLog.tsx';
+import { DmTools } from './session/DmTools.tsx';
+import { FightAlert } from './session/FightAlert.tsx';
+import { PlayerExtras } from './session/PlayerExtras.tsx';
 import type { Game } from './useGame.ts';
 
 export function SessionView({ game, session, myId }: { game: Game; session: SessionState; myId: string }) {
@@ -12,6 +17,7 @@ export function SessionView({ game, session, myId }: { game: Game; session: Sess
   if (isHost && session.started) {
     return (
       <>
+        <FightAlert count={game.fightAlerts} />
         <DmSidebar game={game} session={session} />
         <InSession game={game} session={session} isHost me={undefined} myId={myId} />
       </>
@@ -20,6 +26,7 @@ export function SessionView({ game, session, myId }: { game: Game; session: Sess
 
   return (
     <>
+      <FightAlert count={game.fightAlerts} />
       <section className="card">
         <p className="muted">
           {session.campaign.name}
@@ -59,6 +66,11 @@ function Lobby({ game, session, isHost, me, myId }: ViewProps) {
   const readyCount = session.players.filter((p) => p.ready).length;
   const total = session.players.length;
   const allReady = total > 0 && readyCount === total;
+  /** DM: planning the campaign from the lobby. */
+  const [configuring, setConfiguring] = useState(false);
+  if (isHost && configuring) {
+    return <CampaignConfig game={game} campaign={session.campaign} backLabel="Lobby" onBack={() => setConfiguring(false)} />;
+  }
 
   const start = () => {
     if (!allReady) {
@@ -72,6 +84,8 @@ function Lobby({ game, session, isHost, me, myId }: ViewProps) {
   };
 
   return (
+    <>
+    {isHost && <Recap game={game} campaign={session.campaign} />}
     <section className="card">
       <h2 className="card-title">
         Lobby <span className="muted small">{readyCount}/{total} ready</span>
@@ -109,10 +123,14 @@ function Lobby({ game, session, isHost, me, myId }: ViewProps) {
           <button className={`primary start-button ${allReady ? '' : 'dim'}`} onClick={start}>
             Start session
           </button>
+          <button className="secondary wide mt" onClick={() => setConfiguring(true)}>
+            ⚙ Configure: handouts, NPCs, log
+          </button>
         </>
       )}
       <LeaveOrEnd game={game} isHost={isHost} />
     </section>
+    </>
   );
 }
 
@@ -121,6 +139,7 @@ function InSession({ game, session, isHost, me, myId }: ViewProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   return (
     <>
+      {isHost ? <DmTools game={game} session={session} /> : <PlayerExtras session={session} myCharacterId={me?.characterId} />}
       {me && (
         <ClassicSheet
           key={me.characterId}

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { ROOM_CODE_LENGTH } from '@dnd/shared';
-import type { CharacterSummary } from '@dnd/shared';
+import type { CampaignSummary, CharacterSummary } from '@dnd/shared';
+import { CampaignConfig } from './prep/CampaignConfig.tsx';
 import { CharacterLine } from './Characters.tsx';
 import type { Game } from './useGame.ts';
 
@@ -8,6 +9,11 @@ import type { Game } from './useGame.ts';
 export function Play({ game, onBack, onCharacters }: { game: Game; onBack: () => void; onCharacters: () => void }) {
   // People who run campaigns usually want to host; everyone else joins.
   const [mode, setMode] = useState<'join' | 'host'>(game.campaigns?.length ? 'host' : 'join');
+  /** The campaign the DM is planning ("Configure"). */
+  const [configuring, setConfiguring] = useState<CampaignSummary | null>(null);
+  if (configuring) {
+    return <CampaignConfig game={game} campaign={configuring} backLabel="Campaigns" onBack={() => setConfiguring(null)} />;
+  }
   return (
     <>
     <button className="back" onClick={onBack}>‹ Home</button>
@@ -20,7 +26,7 @@ export function Play({ game, onBack, onCharacters }: { game: Game; onBack: () =>
           Host (DM)
         </button>
       </div>
-      {mode === 'join' ? <Join game={game} onCharacters={onCharacters} /> : <Host game={game} />}
+      {mode === 'join' ? <Join game={game} onCharacters={onCharacters} /> : <Host game={game} onConfigure={setConfiguring} />}
     </section>
     </>
   );
@@ -99,7 +105,7 @@ function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) 
   );
 }
 
-function Host({ game }: { game: Game }) {
+function Host({ game, onConfigure }: { game: Game; onConfigure: (c: CampaignSummary) => void }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const create = async (e: FormEvent) => {
@@ -110,7 +116,7 @@ function Host({ game }: { game: Game }) {
   };
   return (
     <>
-      <p className="muted">Pick the campaign you're running tonight.</p>
+      <p className="muted">Pick the campaign you're running tonight, or configure it ahead: handouts, NPCs and opponents.</p>
       {game.campaigns === null ? (
         <p className="muted">Loading campaigns…</p>
       ) : game.campaigns.length === 0 ? (
@@ -118,7 +124,7 @@ function Host({ game }: { game: Game }) {
       ) : (
         <ul className="list">
           {game.campaigns.map((c) => (
-            <li key={c.id}>
+            <li key={c.id} className="campaign-row">
               <button className="list-button" onClick={() => void game.host(c.id)} disabled={game.status !== 'online'}>
                 <span>
                   <strong>{c.name}</strong>
@@ -127,6 +133,9 @@ function Host({ game }: { game: Game }) {
                   </span>
                 </span>
                 {c.liveCode ? <span className="badge">Live · {c.liveCode}</span> : <span className="chev">›</span>}
+              </button>
+              <button className="secondary configure-button" onClick={() => onConfigure(c)} disabled={game.status !== 'online'}>
+                ⚙ Configure
               </button>
             </li>
           ))}

@@ -1,15 +1,31 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, unlink, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { createServer, type Server as HttpServer } from 'node:http';
 import express from 'express';
 import { Server } from 'socket.io';
 import {
   DM_LOCKED_FIELDS,
   DM_ONLY_FIELDS,
+  COINS,
   LIMITS,
   PASSWORD_MIN_LENGTH,
   normalizeRoomCode,
   applyHpChange,
+  addCombatants,
+  applyCombatAction,
+  deriveStats,
+  newCombat,
+  npcInitiative,
+  publicCombat,
+  sanitizeHandout,
+  sanitizeNpc,
+  IMAGE_URL_PATTERN,
+  PREP_LIMITS,
+  type Combatant,
+  type Handout,
+  type LogEvent,
+  type Npc,
   sanitizeCharacterPatch,
   sanitizeItem,
   type CharacterData,
@@ -39,7 +55,16 @@ export interface AppOptions {
   corsOrigin?: string | string[];
   /** Folder with extra content packs (homebrew / private book data). */
   contentDir?: string;
+  /** Folder for pictures the DM uploads for handouts. Without it, uploads are switched off. */
+  uploadsDir?: string;
 }
+
+const IMAGE_TYPES: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
 
 function cleanText(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
@@ -50,7 +75,7 @@ function cleanText(value: unknown, max: number): string | null {
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 5 * 60 * 1000;
 
-export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOptions): {
+export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDir }: AppOptions): {
   httpServer: HttpServer;
   io: IoServer;
 } {
@@ -123,6 +148,42 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
     res.json({ packs: contentDir ? loadContentPacks(contentDir).packs : [] });
   });
 
+  // ---------- handout pictures ----------
+
+  // The DM's phone shrinks pictures before sending them (see client/src/prep/image.ts).
+  app.post(
+    '/api/campaigns/:id/images',
+    express.raw({ type: Object.keys(IMAGE_TYPES), limit: PREP_LIMITS.imageMaxBytes }),
+    (req, res) => {
+      const token = bearer(req.headers.authorization);
+      const user = token ? store.userForToken(token) : undefined;
+      const campaign = store.getCampaign(String(req.params.id));
+      if (!user || !campaign || campaign.ownerId !== user.id) {
+        res.status(403).json({ error: 'Only the DM of this campaign can add pictures.' });
+        return;
+      }
+      const ext = IMAGE_TYPES[String(req.headers['content-type']).split(';')[0]!.trim()];
+      if (!uploadsDir || !ext || !Buffer.isBuffer(req.body) || req.body.length === 0) {
+        res.status(400).json({ error: 'Choose a JPG, PNG, WebP or GIF picture.' });
+        return;
+      }
+      mkdirSync(uploadsDir, { recursive: true });
+      const name = `${randomUUID()}.${ext}`;
+      writeFileSync(join(uploadsDir, name), req.body);
+      res.json({ url: `/api/images/${name}` });
+    },
+  );
+  // No login needed to view: <img> can't send the token, and the names are random and unguessable.
+  if (uploadsDir) {
+    app.use('/api/images', express.static(uploadsDir, { maxAge: '365d', immutable: true, index: false, dotfiles: 'deny' }));
+  }
+  app.use('/api/images', (_req, res) => {
+    res.status(404).end();
+  });
+  const removeImage = (url: string | null | undefined) => {
+    if (uploadsDir && url && IMAGE_URL_PATTERN.test(url)) unlink(join(uploadsDir, basename(url)), () => undefined);
+  };
+
   app.post('/api/auth/logout', (req, res) => {
     const token = bearer(req.headers.authorization);
     if (token) store.logout(token);
@@ -169,6 +230,11 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
       campaign: { id: campaign.id, name: campaign.name },
       host: { ...host, online: isOnline(code, host.id) },
       started: live.started,
+      handout: (() => {
+        const h = live.shown && store.getPrep<Handout>(campaign.id, 'handout', live.shown.handoutId);
+        return h && live.shown ? { ...h, shownAt: live.shown.shownAt } : null;
+      })(),
+      combat: live.combat,
       players: store.sessionPlayers(code).flatMap((p) => {
         const ch = store.getCharacter(p.characterId);
         return ch
@@ -180,7 +246,16 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
 
   const broadcast = (code: string) => {
     const state = sessionState(code);
-    if (state) io.to(roomOf(code)).emit('session:state', state);
+    if (!state) return;
+    if (!state.combat) {
+      io.to(roomOf(code)).emit('session:state', state);
+      return;
+    }
+    // Only the DM sees the opponents' HP and AC.
+    const forPlayers = { ...state, combat: publicCombat(state.combat) };
+    for (const s of io.sockets.sockets.values()) {
+      if (s.data.code === code) s.emit('session:state', s.data.isHost ? state : forPlayers);
+    }
   };
 
   /** Ends a session socket-side: tells everyone, takes all sockets out of the room. */
@@ -223,7 +298,8 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
       }
       socket.data.isHost = isHost;
       broadcast(code);
-      return sessionState(code)!;
+      const state = sessionState(code)!;
+      return isHost || !state.combat ? state : { ...state, combat: publicCombat(state.combat) };
     };
 
     // ---------- characters ----------
@@ -257,6 +333,45 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
 
     const afterChange = (character: CharacterSummary) => {
       if (character.inSession) broadcast(character.inSession);
+    };
+
+    /** Session log: only while the character's session is running. */
+    const logFor = (character: CharacterSummary, ...events: (Omit<LogEvent, 'who'> | false | undefined)[]) => {
+      const live = character.inSession ? store.getSession(character.inSession) : undefined;
+      if (!live?.started || !live.sessionNo) return;
+      for (const e of events) if (e) store.addLog(live.campaignId, live.sessionNo, { ...e, who: character.data.name });
+    };
+    /** Log entries for a change of hit points, coins or level. */
+    const logChanges = (before: CharacterData, character: CharacterSummary) => {
+      const after = character.data;
+      const hp = after.hpCurrent - before.hpCurrent;
+      const temp = after.hpTemp - before.hpTemp;
+      const lost = -Math.min(hp, 0) - Math.min(temp, 0);
+      const coins = (sign: 1 | -1) =>
+        COINS.flatMap((c) => {
+          const d = (after.coins[c] - before.coins[c]) * sign;
+          return d > 0 ? [`${d} ${c}`] : [];
+        }).reverse().join(', ');
+      logFor(
+        character,
+        lost > 0 && { kind: 'damage', amount: lost, what: `${after.hpCurrent}/${after.hpMax} HP` },
+        hp > 0 && { kind: 'heal', amount: hp, what: `${after.hpCurrent}/${after.hpMax} HP` },
+        hp < 0 && after.hpCurrent === 0 && { kind: 'down' },
+        coins(1) !== '' && { kind: 'loot', what: coins(1) },
+        coins(-1) !== '' && { kind: 'lost', what: coins(-1) },
+        after.level > before.level && { kind: 'level', amount: after.level },
+      );
+    };
+    const itemLabel = (name: string, qty: number) => (qty === 1 ? name : `${qty}× ${name}`);
+    const logInventory = (before: Item[], character: CharacterSummary) => {
+      const after = character.data.inventory;
+      const ids = new Set([...before, ...after].map((i) => i.id));
+      for (const id of ids) {
+        const a = before.find((i) => i.id === id);
+        const b = after.find((i) => i.id === id);
+        const d = (b?.qty ?? 0) - (a?.qty ?? 0);
+        if (d !== 0) logFor(character, { kind: d > 0 ? 'loot' : 'lost', what: itemLabel((b ?? a)!.name, Math.abs(d)) });
+      }
     };
 
     socket.on('character:list', (ack) => {
@@ -297,6 +412,8 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
       if (!t.ok) return ack(t);
       const character = store.updateCharacter(t.ch.id, patch);
       ack({ ok: true, character });
+      logChanges(t.ch.data, character);
+      if (patch.inventory) logInventory(t.ch.data.inventory, character);
       afterChange(character);
     });
 
@@ -310,6 +427,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
       // Read-modify-write is safe: node:sqlite is synchronous, so no other event runs in between.
       const character = store.updateCharacter(t.ch.id, applyHpChange(t.ch.data, delta));
       ack({ ok: true, character });
+      logChanges(t.ch.data, character);
       afterChange(character);
     });
 
@@ -325,6 +443,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
           .inventory!;
         const character = store.updateCharacter(t.ch.id, { inventory });
         ack({ ok: true, character });
+        logInventory(t.ch.data.inventory, character);
         afterChange(character);
       } catch (e) {
         ack({ ok: false, error: (e as Error).message });
@@ -362,6 +481,226 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
       if (!name) return ack({ ok: false, error: 'Give the campaign a name.' });
       const c = store.createCampaign(user.id, name);
       ack({ ok: true, campaign: { id: c.id, name: c.name, liveCode: null, lastPlayedAt: null } });
+    });
+
+    // ---------- campaign prep ----------
+
+    const ownCampaign = (campaignId: unknown) => {
+      const campaign = typeof campaignId === 'string' ? store.getCampaign(campaignId) : undefined;
+      return campaign && campaign.ownerId === user.id ? campaign : undefined;
+    };
+    const NOT_DM = { ok: false as const, error: 'Only the DM of this campaign can do that.' };
+    /** Everyone at the table sees prep changes that are on screen (the shown handout). */
+    const afterPrepChange = (campaignId: string) => {
+      const live = store.getSessionByCampaign(campaignId);
+      if (live) broadcast(live.code);
+    };
+
+    socket.on('prep:get', (input, ack) => {
+      const campaign = ownCampaign(input?.campaignId);
+      if (!campaign) return ack(NOT_DM);
+      ack({
+        ok: true,
+        prep: { handouts: store.listPrep<Handout>(campaign.id, 'handout'), npcs: store.listPrep<Npc>(campaign.id, 'npc') },
+      });
+    });
+
+    socket.on('handout:save', (input, ack) => {
+      const campaign = ownCampaign(input?.campaignId);
+      if (!campaign) return ack(NOT_DM);
+      try {
+        const data = sanitizeHandout(input?.handout);
+        const id = typeof input.handout.id === 'string' ? input.handout.id : undefined;
+        const before = id ? store.getPrep<Handout>(campaign.id, 'handout', id) : undefined;
+        if (!before && store.countPrep(campaign.id, 'handout') >= PREP_LIMITS.handoutsPerCampaign) {
+          throw new Error('This campaign has too many handouts. Delete one first.');
+        }
+        const handout = store.savePrep<Handout>(campaign.id, 'handout', id, data);
+        if (before?.imageUrl && before.imageUrl !== handout.imageUrl) removeImage(before.imageUrl);
+        ack({ ok: true, handout });
+        afterPrepChange(campaign.id);
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
+    });
+
+    socket.on('handout:delete', (input, ack) => {
+      const campaign = ownCampaign(input?.campaignId);
+      if (!campaign) return ack(NOT_DM);
+      const handout = typeof input?.handoutId === 'string' ? store.getPrep<Handout>(campaign.id, 'handout', input.handoutId) : undefined;
+      if (handout) {
+        store.deletePrep(campaign.id, 'handout', handout.id);
+        removeImage(handout.imageUrl);
+      }
+      ack({ ok: true });
+      afterPrepChange(campaign.id);
+    });
+
+    socket.on('npc:save', (input, ack) => {
+      const campaign = ownCampaign(input?.campaignId);
+      if (!campaign) return ack(NOT_DM);
+      try {
+        const data = sanitizeNpc(input?.npc);
+        const id = typeof input.npc.id === 'string' ? input.npc.id : undefined;
+        if (!(id && store.getPrep(campaign.id, 'npc', id)) && store.countPrep(campaign.id, 'npc') >= PREP_LIMITS.npcsPerCampaign) {
+          throw new Error('This campaign has too many NPCs. Delete one first.');
+        }
+        ack({ ok: true, npc: store.savePrep<Npc>(campaign.id, 'npc', id, data) });
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
+    });
+
+    socket.on('npc:delete', (input, ack) => {
+      const campaign = ownCampaign(input?.campaignId);
+      if (!campaign) return ack(NOT_DM);
+      if (typeof input?.npcId === 'string') store.deletePrep(campaign.id, 'npc', input.npcId);
+      ack({ ok: true });
+    });
+
+    socket.on('log:get', (input, ack) => {
+      const campaign = ownCampaign(input?.campaignId);
+      if (!campaign) return ack(NOT_DM);
+      const live = store.getSessionByCampaign(campaign.id);
+      const now = live?.started && live.sessionNo ? live.sessionNo : undefined;
+      const before = store.lastLoggedSession(campaign.id, now);
+      ack({
+        ok: true,
+        current: now ? store.listLog(campaign.id, now) : [],
+        previous: before ? store.listLog(campaign.id, before) : [],
+      });
+    });
+
+    // ---------- DM tools during a session ----------
+
+    const log = (live: { campaignId: string; sessionNo: number | null }, event: LogEvent) => {
+      if (live.sessionNo) store.addLog(live.campaignId, live.sessionNo, event);
+    };
+
+    /** The running session this socket is the DM of. */
+    const dmSession = () => {
+      const live = socket.data.code && socket.data.isHost ? store.getSession(socket.data.code) : undefined;
+      return live?.started ? live : undefined;
+    };
+    const NOT_RUNNING = { ok: false as const, error: 'Only the DM can do that, once the session has started.' };
+
+    socket.on('handout:show', (input, ack) => {
+      const live = dmSession();
+      if (!live) return ack(NOT_RUNNING);
+      if (input?.handoutId === null || input?.handoutId === undefined) store.setShownHandout(live.code, null);
+      else {
+        const handout = typeof input.handoutId === 'string' ? store.getPrep<Handout>(live.campaignId, 'handout', input.handoutId) : undefined;
+        if (!handout) return ack({ ok: false, error: 'That handout no longer exists.' });
+        store.setShownHandout(live.code, { handoutId: handout.id, shownAt: Date.now() });
+        log(live, { kind: 'handout', who: '', what: handout.title });
+      }
+      ack({ ok: true });
+      broadcast(live.code);
+    });
+
+    /** Fight entries for the chosen NPCs; several copies get numbered ("Goblin 2"). */
+    const npcCombatants = (campaignId: string, picks: unknown, existing: Combatant[]): Combatant[] => {
+      if (!Array.isArray(picks)) return [];
+      const out: Combatant[] = [];
+      for (const pick of picks.slice(0, 50) as { npcId?: unknown; count?: unknown }[]) {
+        const npc = typeof pick?.npcId === 'string' ? store.getPrep<Npc>(campaignId, 'npc', pick.npcId) : undefined;
+        const count = typeof pick?.count === 'number' && Number.isInteger(pick.count) ? Math.min(20, pick.count) : 1;
+        if (!npc || count < 1) continue;
+        const already = existing.filter((c) => c.kind === 'npc' && c.ref === npc.id).length;
+        for (let i = 1; i <= count; i++) {
+          out.push({
+            id: randomUUID(),
+            kind: 'npc',
+            ref: npc.id,
+            name: count + already > 1 ? `${npc.name} ${already + i}` : npc.name,
+            bonus: npcInitiative(npc),
+            initiative: null,
+            d20: null,
+            hp: { current: npc.hpMax, max: npc.hpMax },
+            armorClass: npc.armorClass,
+          });
+        }
+      }
+      return out;
+    };
+
+    /** "2× Goblin, Bandit captain" */
+    const opponentList = (npcs: Combatant[]) => {
+      const counts = new Map<string, { name: string; n: number }>();
+      for (const c of npcs) {
+        const entry = counts.get(c.ref) ?? { name: c.name.replace(/ \d+$/, ''), n: 0 };
+        counts.set(c.ref, { ...entry, n: entry.n + 1 });
+      }
+      return [...counts.values()].map((x) => (x.n > 1 ? `${x.n}× ${x.name}` : x.name)).join(', ');
+    };
+
+    const playerCombatants = (code: string, only?: unknown): Combatant[] =>
+      store.sessionPlayers(code).flatMap((p) => {
+        const ch = store.getCharacter(p.characterId);
+        if (!ch || (Array.isArray(only) && !only.includes(ch.id))) return [];
+        return [{
+          id: randomUUID(),
+          kind: 'player' as const,
+          ref: ch.id,
+          name: ch.data.name || p.user.username,
+          bonus: deriveStats(ch.data).initiative,
+          initiative: null,
+          d20: null,
+        }];
+      });
+
+    socket.on('combat:start', (input, ack) => {
+      const live = dmSession();
+      if (!live) return ack(NOT_RUNNING);
+      if (live.combat) log(live, { kind: 'fightEnd', who: '', amount: live.combat.round });
+      const npcs = npcCombatants(live.campaignId, input?.npcs, []);
+      store.setCombat(live.code, newCombat([...playerCombatants(live.code), ...npcs]));
+      log(live, { kind: 'fight', who: '', what: opponentList(npcs) });
+      ack({ ok: true });
+      io.to(roomOf(live.code)).emit('session:alert', { kind: 'fight' });
+      broadcast(live.code);
+    });
+
+    socket.on('combat:add', (input, ack) => {
+      const live = dmSession();
+      if (!live?.combat) return ack({ ok: false, error: 'No fight is running.' });
+      const inFight = new Set(live.combat.combatants.filter((c) => c.kind === 'player').map((c) => c.ref));
+      const players = Array.isArray(input?.characterIds)
+        ? playerCombatants(live.code, input.characterIds).filter((c) => !inFight.has(c.ref))
+        : [];
+      const more = [...players, ...npcCombatants(live.campaignId, input?.npcs, live.combat.combatants)];
+      if (live.combat.combatants.length + more.length > 100) return ack({ ok: false, error: 'That fight is too big.' });
+      store.setCombat(live.code, addCombatants(live.combat, more));
+      ack({ ok: true });
+      broadcast(live.code);
+    });
+
+    socket.on('combat:action', (input, ack) => {
+      const live = dmSession();
+      if (!live?.combat) return ack({ ok: false, error: 'No fight is running.' });
+      try {
+        const next = applyCombatAction(live.combat, input);
+        store.setCombat(live.code, next);
+        if (input.type === 'hp') {
+          const before = live.combat.combatants.find((c) => c.id === input.id)!;
+          const dealt = before.hp!.current - next.combatants.find((c) => c.id === input.id)!.hp!.current;
+          if (dealt > 0) log(live, { kind: 'hit', who: before.name, amount: dealt });
+          if (dealt > 0 && dealt === before.hp!.current) log(live, { kind: 'defeated', who: before.name });
+        }
+      } catch (e) {
+        return ack({ ok: false, error: (e as Error).message });
+      }
+      ack({ ok: true });
+      broadcast(live.code);
+    });
+
+    socket.on('combat:end', (ack) => {
+      const live = dmSession();
+      if (!live) return ack(NOT_RUNNING);
+      if (live.combat) log(live, { kind: 'fightEnd', who: '', amount: live.combat.round });
+      store.setCombat(live.code, null);
+      ack({ ok: true });
+      broadcast(live.code);
     });
 
     socket.on('session:host', (input, ack) => {
@@ -409,6 +748,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
           return ack({ ok: false, error: 'You are already in another session. Leave it first.' });
         }
         store.addSessionPlayer(f.code, user.id, ch.id, f.campaign.id);
+        if (f.live.started && f.live.sessionNo) store.addLog(f.campaign.id, f.live.sessionNo, { kind: 'join', who: ch.data.name });
       }
       ack({ ok: true, session: enter(f.code, false) });
     });
@@ -424,7 +764,12 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
     socket.on('session:start', (ack) => {
       const code = socket.data.code;
       if (!code || !socket.data.isHost) return ack({ ok: false, error: 'Only the DM can start the session.' });
-      store.markStarted(code);
+      const before = store.getSession(code);
+      const live = store.markStarted(code);
+      if (live && !before?.started) {
+        const names = sessionState(code)?.players.map((p) => p.character.name).join(', ');
+        log(live, { kind: 'start', who: '', what: names ?? '' });
+      }
       ack({ ok: true });
       broadcast(code);
     });
@@ -452,6 +797,11 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
     socket.on('session:end', (ack) => {
       const code = socket.data.code;
       if (!code || !socket.data.isHost) return ack({ ok: false, error: 'Only the DM can end the session.' });
+      const live = store.getSession(code);
+      if (live?.started) {
+        if (live.combat) log(live, { kind: 'fightEnd', who: '', amount: live.combat.round });
+        log(live, { kind: 'end', who: '' });
+      }
       store.endSession(code);
       closeSession(code, socket.id);
       ack({ ok: true });

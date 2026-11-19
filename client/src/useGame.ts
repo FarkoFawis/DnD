@@ -18,6 +18,8 @@ export function useGame(token: string, onUnauthorized: () => void) {
   const [characters, setCharacters] = useState<CharacterSummary[] | null>(null);
   const [rejoining, setRejoining] = useState(() => savedCode() !== null);
   const [error, setError] = useState<string | null>(null);
+  /** Counts "Initiate fight" alerts from the DM; each one pulses the screen (see FightAlert). */
+  const [fightAlerts, setFightAlerts] = useState(0);
 
   const call = useCallback(<T,>(fn: (s: AppSocket, done: (res: Ack<T>) => void) => void) => {
     return new Promise<Ack<T>>((resolve) => {
@@ -61,6 +63,9 @@ export function useGame(token: string, onUnauthorized: () => void) {
       if (err.message === 'unauthorized') onUnauthorized();
     });
     s.on('session:state', setSession);
+    s.on('session:alert', (alert) => {
+      if (alert.kind === 'fight') setFightAlerts((n) => n + 1);
+    });
     s.on('session:ended', () => {
       saveCode(null);
       setSession(null);
@@ -93,6 +98,10 @@ export function useGame(token: string, onUnauthorized: () => void) {
   };
 
   return {
+    token,
+    /** For features that talk to the server themselves (campaign prep, fights, log). */
+    call,
+    fightAlerts,
     status,
     session,
     campaigns,

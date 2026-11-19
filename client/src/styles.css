@@ -350,3 +350,83 @@ fieldset.sheet-body:disabled select { appearance: none; }
 .unlock-switch { flex-direction: row; align-items: center; gap: 10px; background: #1f2a1f; color: var(--text); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; }
 .unlock-switch input { width: 22px; height: 22px; accent-color: var(--ok); }
 .classic .hp-box, .classic .items, .classic .add-box, .classic .coins { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+
+/* ---- campaign prep ("Configure") ---- */
+.mt { margin-top: 12px; }
+.wide { width: 100%; }
+.tabs.tabs3 { grid-template-columns: repeat(3, 1fr); }
+.campaign-row { display: flex; gap: 8px; align-items: stretch; }
+.campaign-row .list-button { flex: 1; min-width: 0; }
+.configure-button { flex: none; padding: 8px 12px; font-size: 0.85rem; border-radius: 12px; }
+.field-label { display: block; font-size: 0.9rem; color: var(--muted); margin-bottom: 6px; }
+.prep-row { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid #44403c; border-radius: 12px; padding: 4px 8px 4px 4px; }
+.prep-row.showing, .prep-row.picked { border-color: var(--gold); }
+.prep-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; background: none; border: 0; color: var(--text); padding: 8px 10px; }
+.prep-row > .primary, .prep-row > .secondary { flex: none; padding: 8px 14px; font-size: 0.95rem; }
+.thumb { width: 48px; height: 48px; flex: none; border-radius: 8px; object-fit: cover; background: #44403c; }
+.text-thumb { display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 700; }
+.clamp1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.role-tag { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; background: #44403c; color: var(--muted); vertical-align: middle; }
+.role-tag.opponent { background: #7f1d1d; color: #fecaca; }
+.handout-preview { display: block; width: 100%; max-height: 260px; object-fit: contain; border-radius: 12px; background: #000; margin-bottom: 8px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.grid3 input { width: 100%; min-width: 0; }
+.row-gap .grow { flex: 1; }
+/* Opened during a session: covers the table until the DM goes back. */
+.panel { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto; }
+
+/* ---- session log & recap ---- */
+.recap { border: 1px solid #57534e; }
+.recap-lines { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.log-details { margin-top: 12px; }
+.log-details summary { color: var(--muted); font-size: 0.9rem; min-height: 36px; cursor: pointer; }
+.log-list { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.9rem; }
+.log-list li { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid #3a3532; }
+.log-time { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.log-fight, .log-start, .log-end, .log-fightEnd { color: var(--gold); }
+h3 .link { margin-left: 8px; font-weight: 400; }
+
+/* ---- DM table tools, fights ---- */
+.dm-tools { display: flex; flex-direction: column; gap: 10px; }
+.tool-row { display: flex; gap: 8px; }
+.tool-row > button { flex: 1; min-width: 0; padding: 10px 8px; font-size: 0.95rem; }
+.tool-row > button.narrow { flex: 0 0 52px; }
+.danger-text { color: #fca5a5; }
+.fight-button { width: 100%; font-size: 1.15rem; padding: 16px; }
+.showing-note { display: flex; align-items: center; gap: 8px; margin: 0; }
+.tracker { display: flex; flex-direction: column; gap: 10px; }
+.tracker .card-title { margin: 0; }
+.turn-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.turn-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--bg); border: 1px solid transparent; }
+.turn-row.npc { border-left: 3px solid #7f1d1d; }
+.turn-row.player { border-left: 3px solid #57534e; }
+.turn-row.active { border-color: var(--gold); background: #2b2416; }
+.turn-row.down { opacity: 0.55; }
+.turn-row.dm { display: block; padding: 6px 8px; }
+.turn-main { display: flex; align-items: center; gap: 8px; }
+.turn-init { width: 34px; flex: none; text-align: center; font-weight: 800; font-size: 1.15rem; font-variant-numeric: tabular-nums; color: var(--gold); }
+.turn-init-input { width: 56px; flex: none; text-align: center; font-weight: 800; padding: 8px 4px; color: var(--gold); }
+.turn-name { background: none; border: 0; color: var(--text); text-align: left; padding: 2px 0; min-width: 0; }
+.turn-more { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 4px; }
+.combat-card.my-turn { outline: 2px solid var(--ok); }
+.your-turn { font-size: 1.05rem; font-weight: 700; text-align: center; margin-top: 0; }
+.card + .classic, .handout-chip + .classic { margin-top: 12px; }
+.fight-setup .list { margin-top: 0; }
+.pick-row .prep-main { padding: 8px 6px; }
+.stepper { display: flex; align-items: center; gap: 4px; flex: none; }
+.stepper button { width: 40px; min-height: 40px; border-radius: 10px; border: 1px solid #57534e; background: #292524; color: var(--text); font-size: 1.2rem; }
+
+/* "Initiate fight": a faint red pulse over everything, three times. Never blocks taps. */
+.fight-alert { position: fixed; inset: 0; z-index: 100; pointer-events: none; display: flex; align-items: flex-start; justify-content: center; background: rgba(220, 38, 38, 0.05); box-shadow: inset 0 0 80px 16px rgba(220, 38, 38, 0.24); opacity: 0; animation: fight-pulse 0.8s ease-in-out 3; }
+.fight-alert-text { margin-top: max(18px, env(safe-area-inset-top)); padding: 8px 22px; border-radius: 999px; background: rgba(127, 29, 29, 0.92); color: #fff; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+@keyframes fight-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .fight-alert { animation: fight-pulse 2.4s ease-in-out 1; } }
+
+/* ---- handouts on the players' screens ---- */
+.handout-overlay { position: fixed; inset: 0; z-index: 70; background: #0c0a09; display: flex; flex-direction: column; padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom)); }
+.handout-scroll { flex: 1; overflow-y: auto; max-width: 720px; width: 100%; margin: 0 auto; }
+.handout-title { color: var(--gold); font-size: 1.3rem; margin: 8px 0 12px; text-align: center; }
+.handout-image { display: block; width: 100%; height: auto; border-radius: 12px; }
+.handout-text { white-space: pre-wrap; font-size: 1.1rem; line-height: 1.55; margin: 14px 2px; font-family: Georgia, 'Times New Roman', serif; }
+.handout-close { flex: none; width: 100%; max-width: 720px; margin: 10px auto 0; }
+.handout-chip { display: block; width: 100%; text-align: left; background: #3b2f12; color: var(--gold); border: 1px solid #57534e; border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }

@@ -7,6 +7,11 @@ import {
   generateRoomCode,
   normalizeCharacter,
   type CampaignSummary,
+  type Combat,
+  type Handout,
+  type LogEntry,
+  type LogEvent,
+  type Npc,
   type CharacterData,
   type CharacterSummary,
   type PublicUser,
@@ -25,6 +30,11 @@ export interface LiveSession {
   code: string;
   campaignId: string;
   started: boolean;
+  /** The handout on everyone's screen, if any. */
+  shown: { handoutId: string; shownAt: number } | null;
+  combat: Combat | null;
+  /** Which session of the campaign this is (set when the DM starts it), for the session log. */
+  sessionNo: number | null;
 }
 
 interface CharacterRow {
@@ -95,7 +105,104 @@ export class Store {
         joined_at    TEXT NOT NULL DEFAULT (datetime('now')),
         PRIMARY KEY (code, user_id)
       );
+      -- Campaign prep: handouts and NPCs ('handout' | 'npc'), JSON validated by shared/prep.ts.
+      CREATE TABLE IF NOT EXISTS prep_entries (
+        id          TEXT PRIMARY KEY,
+        campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+        kind        TEXT NOT NULL,
+        data        TEXT NOT NULL,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS prep_entries_campaign ON prep_entries(campaign_id, kind);
+      -- What happened in each session of a campaign (shared/log.ts); data = JSON LogEvent.
+      CREATE TABLE IF NOT EXISTS session_log (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+        session_no  INTEGER NOT NULL,
+        at          TEXT NOT NULL DEFAULT (datetime('now')),
+        data        TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS session_log_campaign ON session_log(campaign_id, session_no);
     `);
+    // Added after the first databases were created.
+    const liveCols = (this.db.prepare(`SELECT name FROM pragma_table_info('live_sessions')`).all() as { name: string }[]).map((c) => c.name);
+    if (!liveCols.includes('shown')) this.db.exec('ALTER TABLE live_sessions ADD COLUMN shown TEXT');
+    if (!liveCols.includes('combat')) this.db.exec('ALTER TABLE live_sessions ADD COLUMN combat TEXT');
+    if (!liveCols.includes('session_no')) this.db.exec('ALTER TABLE live_sessions ADD COLUMN session_no INTEGER');
+  }
+
+  // ---------- session log ----------
+
+  addLog(campaignId: string, sessionNo: number, event: LogEvent): void {
+    this.db
+      .prepare('INSERT INTO session_log (campaign_id, session_no, data) VALUES (?, ?, ?)')
+      .run(campaignId, sessionNo, JSON.stringify(event));
+  }
+
+  /** One session's entries, oldest first. */
+  listLog(campaignId: string, sessionNo: number): LogEntry[] {
+    return (
+      this.db
+        .prepare('SELECT id, session_no AS session, at, data FROM session_log WHERE campaign_id = ? AND session_no = ? ORDER BY id')
+        .all(campaignId, sessionNo) as { id: number; session: number; at: string; data: string }[]
+    ).map((r) => ({ ...(JSON.parse(r.data) as LogEvent), id: r.id, session: r.session, at: r.at }));
+  }
+
+  /** Number of the newest logged session before `before` (0 = none). */
+  lastLoggedSession(campaignId: string, before?: number): number {
+    return (
+      this.db
+        .prepare('SELECT coalesce(max(session_no), 0) AS n FROM session_log WHERE campaign_id = ? AND session_no < ?')
+        .get(campaignId, before ?? Number.MAX_SAFE_INTEGER) as { n: number }
+    ).n;
+  }
+
+  // ---------- campaign prep ----------
+
+  listPrep<T extends Handout | Npc>(campaignId: string, kind: 'handout' | 'npc'): T[] {
+    return (
+      this.db
+        .prepare('SELECT id, data FROM prep_entries WHERE campaign_id = ? AND kind = ? ORDER BY created_at, rowid')
+        .all(campaignId, kind) as { id: string; data: string }[]
+    ).map((r) => ({ ...JSON.parse(r.data), id: r.id }) as T);
+  }
+
+  getPrep<T extends Handout | Npc>(campaignId: string, kind: 'handout' | 'npc', id: string): T | undefined {
+    const r = this.db
+      .prepare('SELECT id, data FROM prep_entries WHERE id = ? AND campaign_id = ? AND kind = ?')
+      .get(id, campaignId, kind) as { id: string; data: string } | undefined;
+    return r && ({ ...JSON.parse(r.data), id: r.id } as T);
+  }
+
+  /** Creates the entry, or replaces it when `id` is one of this campaign's entries. */
+  savePrep<T extends Handout | Npc>(campaignId: string, kind: 'handout' | 'npc', id: string | undefined, data: Omit<T, 'id'>): T {
+    if (id && this.getPrep(campaignId, kind, id)) {
+      this.db.prepare('UPDATE prep_entries SET data = ? WHERE id = ?').run(JSON.stringify(data), id);
+    } else {
+      id = randomUUID();
+      this.db
+        .prepare('INSERT INTO prep_entries (id, campaign_id, kind, data) VALUES (?, ?, ?, ?)')
+        .run(id, campaignId, kind, JSON.stringify(data));
+    }
+    return { ...data, id } as T;
+  }
+
+  countPrep(campaignId: string, kind: 'handout' | 'npc'): number {
+    return (
+      this.db.prepare('SELECT count(*) AS n FROM prep_entries WHERE campaign_id = ? AND kind = ?').get(campaignId, kind) as { n: number }
+    ).n;
+  }
+
+  deletePrep(campaignId: string, kind: 'handout' | 'npc', id: string): void {
+    this.db.prepare('DELETE FROM prep_entries WHERE id = ? AND campaign_id = ? AND kind = ?').run(id, campaignId, kind);
+  }
+
+  setShownHandout(code: string, shown: LiveSession['shown']): void {
+    this.db.prepare('UPDATE live_sessions SET shown = ? WHERE code = ?').run(shown && JSON.stringify(shown), code);
+  }
+
+  setCombat(code: string, combat: Combat | null): void {
+    this.db.prepare('UPDATE live_sessions SET combat = ? WHERE code = ?').run(combat && JSON.stringify(combat), code);
   }
 
   /**
@@ -301,25 +408,39 @@ export class Store {
       const res = this.db
         .prepare('INSERT OR IGNORE INTO live_sessions (code, campaign_id) VALUES (?, ?)')
         .run(code, campaignId);
-      if (res.changes === 1) return { code, campaignId, started: false };
+      if (res.changes === 1) return { code, campaignId, started: false, shown: null, combat: null, sessionNo: null };
     }
     throw new Error('Could not allocate a session code');
   }
 
-  private sessionQuery = 'SELECT code, campaign_id AS campaignId, started FROM live_sessions';
-  private toSession = (r: { code: string; campaignId: string; started: number } | undefined): LiveSession | undefined =>
-    r && { code: r.code, campaignId: r.campaignId, started: r.started === 1 };
+  private sessionQuery = 'SELECT code, campaign_id AS campaignId, started, shown, combat, session_no AS sessionNo FROM live_sessions';
+  private toSession = (
+    r: { code: string; campaignId: string; started: number; shown: string | null; combat: string | null; sessionNo: number | null } | undefined,
+  ): LiveSession | undefined =>
+    r && {
+      code: r.code,
+      campaignId: r.campaignId,
+      started: r.started === 1,
+      shown: r.shown ? JSON.parse(r.shown) : null,
+      combat: r.combat ? JSON.parse(r.combat) : null,
+      sessionNo: r.sessionNo,
+    };
 
   getSession(code: string): LiveSession | undefined {
     return this.toSession(this.db.prepare(`${this.sessionQuery} WHERE code = ?`).get(code) as never);
   }
 
-  private getSessionByCampaign(campaignId: string): LiveSession | undefined {
+  getSessionByCampaign(campaignId: string): LiveSession | undefined {
     return this.toSession(this.db.prepare(`${this.sessionQuery} WHERE campaign_id = ?`).get(campaignId) as never);
   }
 
-  markStarted(code: string): void {
-    this.db.prepare('UPDATE live_sessions SET started = 1 WHERE code = ?').run(code);
+  /** Starts the session and gives it the campaign's next session number. Returns the session. */
+  markStarted(code: string): LiveSession | undefined {
+    const live = this.getSession(code);
+    if (!live) return undefined;
+    const sessionNo = live.sessionNo ?? this.lastLoggedSession(live.campaignId) + 1;
+    this.db.prepare('UPDATE live_sessions SET started = 1, session_no = ? WHERE code = ?').run(sessionNo, code);
+    return { ...live, started: true, sessionNo };
   }
 
   endSession(code: string): void {
