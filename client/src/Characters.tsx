@@ -20,6 +20,7 @@ export function Characters({ game, onBack }: { game: Game; onBack: () => void })
           character={open.data}
           actions={sheetActions(game, open.id)}
           readOnly={open.inSession !== null}
+          hpItemsLocked={!open.data.hpItemsUnlocked}
           note={
             open.inSession ? (
               <p className="notice">This character is in a session right now. Only the DM can change it until the session ends.</p>

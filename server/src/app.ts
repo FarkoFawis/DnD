@@ -4,6 +4,8 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import express from 'express';
 import { Server } from 'socket.io';
 import {
+  DM_LOCKED_FIELDS,
+  DM_ONLY_FIELDS,
   LIMITS,
   PASSWORD_MIN_LENGTH,
   normalizeRoomCode,
@@ -227,23 +229,30 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
     // ---------- characters ----------
 
     /**
-     * Who may change a character:
-     * - its owner, while it is not in a session;
-     * - the DM, while it is in the DM's session.
-     * In a session, players only look at their sheet.
+     * Who may change what on a character:
+     * - the DM of the session it is in: everything;
+     * - its owner, outside sessions: everything except HP, items and coins;
+     * - its owner, in a session: nothing (players only read their sheet);
+     * - HP, items and coins: the owner only while the DM has unlocked them
+     *   (hpItemsUnlocked), in or out of a session. Only the DM sets the unlock.
      */
-    const editable = (characterId: unknown) => {
+    const editable = (characterId: unknown, fields: readonly string[] = []) => {
       const ch = typeof characterId === 'string' ? store.getCharacter(characterId) : undefined;
       if (!ch) return { ok: false as const, error: 'That character no longer exists.' };
-      if (ch.inSession) {
-        if (socket.data.isHost && socket.data.code === ch.inSession) return { ok: true as const, ch };
-        if (ch.userId === user.id) {
-          return { ok: false as const, error: 'Your character is in a session. Only the DM can change it now.' };
-        }
-        return { ok: false as const, error: 'You can only change your own characters.' };
-      }
+      const isDm = !!ch.inSession && socket.data.isHost === true && socket.data.code === ch.inSession;
+      if (isDm) return { ok: true as const, ch, isDm };
       if (ch.userId !== user.id) return { ok: false as const, error: 'You can only change your own characters.' };
-      return { ok: true as const, ch };
+      if (fields.some((f) => (DM_ONLY_FIELDS as readonly string[]).includes(f))) {
+        return { ok: false as const, error: 'Only the DM can change that.' };
+      }
+      const locked = fields.filter((f) => (DM_LOCKED_FIELDS as readonly string[]).includes(f));
+      if (locked.length > 0 && !ch.data.hpItemsUnlocked) {
+        return { ok: false as const, error: 'Your DM manages your HP and items. Ask them to unlock it for you.' };
+      }
+      if (ch.inSession && fields.some((f) => !(DM_LOCKED_FIELDS as readonly string[]).includes(f))) {
+        return { ok: false as const, error: 'Your character is in a session. Only the DM can change it now.' };
+      }
+      return { ok: true as const, ch, isDm };
     };
 
     const afterChange = (character: CharacterSummary) => {
@@ -270,7 +279,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
     });
 
     socket.on('character:delete', (input, ack) => {
-      const t = editable(input?.characterId);
+      const t = editable(input?.characterId, ['delete']);
       if (!t.ok) return ack(t);
       if (t.ch.userId !== user.id) return ack({ ok: false, error: 'You can only delete your own characters.' });
       store.deleteCharacter(t.ch.id);
@@ -278,21 +287,21 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
     });
 
     socket.on('character:update', (input, ack) => {
-      const t = editable(input?.characterId);
-      if (!t.ok) return ack(t);
       let patch;
       try {
         patch = sanitizeCharacterPatch(input?.patch);
       } catch (e) {
         return ack({ ok: false, error: (e as Error).message });
       }
+      const t = editable(input?.characterId, Object.keys(patch));
+      if (!t.ok) return ack(t);
       const character = store.updateCharacter(t.ch.id, patch);
       ack({ ok: true, character });
       afterChange(character);
     });
 
     socket.on('character:adjustHp', (input, ack) => {
-      const t = editable(input?.characterId);
+      const t = editable(input?.characterId, ['hpCurrent']);
       if (!t.ok) return ack(t);
       const delta = input?.delta;
       if (typeof delta !== 'number' || !Number.isInteger(delta) || Math.abs(delta) > 9999) {
@@ -309,7 +318,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
       ack: (res: { ok: true; character: CharacterSummary } | { ok: false; error: string }) => void,
       change: (items: Item[]) => Item[],
     ) => {
-      const t = editable(characterId);
+      const t = editable(characterId, ['inventory']);
       if (!t.ok) return ack(t);
       try {
         const inventory = sanitizeCharacterPatch({ inventory: change(t.ch.data.inventory) }, { allowInventory: true })

@@ -71,12 +71,18 @@ export function Sheet({
   actions,
   title,
   readOnly = false,
+  hpItemsLocked = false,
+  dmUnlock = false,
   note,
 }: {
   character: CharacterData;
   actions: SheetActions;
   title: ReactNode;
   readOnly?: boolean;
+  /** Owner view: HP, items and coins are the DM's unless they unlocked them. */
+  hpItemsLocked?: boolean;
+  /** DM view: show the switch that lets the player change their own HP and items. */
+  dmUnlock?: boolean;
   note?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>('Main');
@@ -111,11 +117,27 @@ export function Sheet({
         ))}
       </div>
       {note}
+      {dmUnlock && (
+        <label className="unlock-switch">
+          <input
+            type="checkbox"
+            checked={draft.hpItemsUnlocked}
+            onChange={(e) => set('hpItemsUnlocked', e.target.checked)}
+          />
+          <span className="grow">
+            Player may change their own HP &amp; items
+            <span className="muted small block">Off: only you (the DM) can.</span>
+          </span>
+        </label>
+      )}
+      {hpItemsLocked && !readOnly && (tab === 'Main' || tab === 'Items') && (
+        <p className="notice">Your DM manages your HP, items and coins. Ask them to unlock it if you need to change them.</p>
+      )}
       <fieldset className="sheet-body" disabled={readOnly}>
 
       {tab === 'Main' && (
         <>
-          <HpBox character={draft} onHp={actions.adjustHp} onTemp={(v) => set('hpTemp', v)} readOnly={readOnly} />
+          <HpBox character={draft} onHp={actions.adjustHp} onTemp={(v) => set('hpTemp', v)} readOnly={readOnly || hpItemsLocked} />
           <div className="stat-row">
             <Stat label="AC">
               <NumInput value={draft.armorClass} onChange={(v) => { const n = num(v, 0, 99); if (n !== null) set('armorClass', n); }} />
@@ -194,7 +216,11 @@ export function Sheet({
         </>
       )}
 
-      {tab === 'Items' && <Items character={draft} actions={actions} onCoins={(coins) => set('coins', coins)} readOnly={readOnly} content={content} />}
+      {tab === 'Items' && (
+        <fieldset className="sheet-body" disabled={hpItemsLocked}>
+          <Items character={draft} actions={actions} onCoins={(coins) => set('coins', coins)} readOnly={readOnly || hpItemsLocked} content={content} />
+        </fieldset>
+      )}
 
       {tab === 'Spells' && <Spells character={draft} stats={stats} set={set} readOnly={readOnly} content={content} />}
 
@@ -336,7 +362,7 @@ export function HpBox({
   );
 }
 
-function Items({
+export function Items({
   character,
   actions,
   onCoins,

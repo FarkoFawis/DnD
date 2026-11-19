@@ -161,3 +161,4 @@ export function parsePack(raw: unknown, fallbackId: string): { pack: ContentPack
   }
   return { pack, problems };
 }
+export * from './attacks.ts';

@@ -98,6 +98,11 @@ export interface CharacterData {
   /** Changed through the item:* events, so DM and player edits never clash. */
   inventory: Item[];
   coins: Record<Coin, number>;
+  /**
+   * HP, items and coins belong to the DM. Players may change them on their own
+   * character only while the DM has unlocked it for them.
+   */
+  hpItemsUnlocked: boolean;
   /** Feats, features, proficiencies, languages, anything else. */
   notes: string;
 }
@@ -125,6 +130,7 @@ export const DEFAULT_CHARACTER: CharacterData = {
   features: [],
   inventory: [],
   coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
+  hpItemsUnlocked: false,
   notes: '',
 };
 
@@ -138,6 +144,11 @@ export interface CharacterSummary {
   /** Code of the live session the character is in right now, if any. */
   inSession: string | null;
 }
+
+/** Fields a player may only change while the DM has unlocked them (hpItemsUnlocked). */
+export const DM_LOCKED_FIELDS = ['hpCurrent', 'hpTemp', 'coins', 'inventory'] as const satisfies readonly (keyof CharacterData)[];
+/** Fields only the DM may ever change. */
+export const DM_ONLY_FIELDS = ['hpItemsUnlocked'] as const satisfies readonly (keyof CharacterData)[];
 
 // ---------- Campaigns & live sessions (socket) ----------
 

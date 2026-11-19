@@ -180,3 +180,27 @@ describe('character data', () => {
     expect(old.subspecies).toBe('');
   });
 });
+
+describe('weapon attacks', () => {
+  it('uses Str for melee, Dex for ranged, the better for Finesse', async () => {
+    const { weaponAttacks } = await import('./content/attacks.ts');
+    const c = normalizeCharacter({
+      className: 'Fighter',
+      level: 1,
+      abilities: { str: 16, dex: 14, con: 14, int: 10, wis: 10, cha: 8 },
+      inventory: [
+        { id: 'a', name: 'Longsword', qty: 1, notes: '', ref: 'longsword' },
+        { id: 'b', name: 'Longbow', qty: 1, notes: '', ref: 'longbow' },
+        { id: 'c', name: 'Dagger', qty: 1, notes: '' },
+        { id: 'd', name: 'Rope', qty: 1, notes: '', ref: 'rope' },
+      ],
+    });
+    const rows = weaponAttacks(c, content);
+    expect(rows.map((r) => [r.name, r.toHit, r.damage])).toEqual([
+      ['Longsword', 5, '1d8+3 Slashing'],
+      ['Longbow', 4, '1d8+2 Piercing'],
+      ['Dagger', 5, '1d4+3 Piercing'],
+    ]);
+    expect(rows[0]!.notes).toContain('two-handed 1d10+3');
+  });
+});

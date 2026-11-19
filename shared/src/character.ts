@@ -107,6 +107,10 @@ const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
     if (!isObj(v)) throw new Invalid('Invalid coins.');
     return Object.fromEntries(COINS.map((c) => [c, int(v[c] ?? 0, c, 0, 9_999_999)])) as CharacterData['coins'];
   },
+  hpItemsUnlocked: (v) => {
+    if (typeof v !== 'boolean') throw new Invalid('Invalid unlock flag.');
+    return v;
+  },
   notes: (v) => text(v, 'notes', LIMITS.notesMaxLength),
 };
 

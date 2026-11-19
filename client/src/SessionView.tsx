@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StatusPill } from './StatusPill.tsx';
 import type { SessionPlayer, SessionState } from '@dnd/shared';
+import { ClassicSheet } from './ClassicSheet.tsx';
 import { Sheet, sheetActions } from './Sheet.tsx';
 import type { Game } from './useGame.ts';
 
@@ -121,12 +122,11 @@ function InSession({ game, session, isHost, me, myId }: ViewProps) {
   return (
     <>
       {me && (
-        <Sheet
+        <ClassicSheet
           key={me.characterId}
-          title={me.character.name}
           character={me.character}
           actions={sheetActions(game, me.characterId)}
-          readOnly
+          playerName={me.user.username}
         />
       )}
 
@@ -161,6 +161,7 @@ function InSession({ game, session, isHost, me, myId }: ViewProps) {
                       title={`${p.character.name}'s sheet`}
                       character={p.character}
                       actions={sheetActions(game, p.characterId)}
+                      dmUnlock
                     />
                   </div>
                 )}

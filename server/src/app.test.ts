@@ -116,10 +116,14 @@ describe('characters', () => {
     const { character } = ok(await mira.emitWithAck('character:create', { name: 'Elowen' }));
     expect(character).toMatchObject({ data: { name: 'Elowen', level: 1 }, campaign: null, inSession: null });
     ok(await mira.emitWithAck('character:update', { characterId: character.id, patch: { className: 'Wizard' } }));
-    ok(await mira.emitWithAck('item:add', { characterId: character.id, item: { name: 'Spellbook' } }));
+    // HP, items and coins belong to the DM unless they unlock them.
+    expect(await mira.emitWithAck('item:add', { characterId: character.id, item: { name: 'Spellbook' } })).toMatchObject({ ok: false });
+    expect(await mira.emitWithAck('character:adjustHp', { characterId: character.id, delta: 5 })).toMatchObject({ ok: false });
+    expect(await mira.emitWithAck('character:update', { characterId: character.id, patch: { coins: { cp: 0, sp: 0, ep: 0, gp: 999, pp: 0 } } })).toMatchObject({ ok: false });
+    expect(await mira.emitWithAck('character:update', { characterId: character.id, patch: { hpItemsUnlocked: true } })).toMatchObject({ ok: false });
     const { characters } = ok(await mira.emitWithAck('character:list'));
     expect(characters).toHaveLength(1);
-    expect(characters[0]?.data).toMatchObject({ className: 'Wizard', inventory: [{ name: 'Spellbook' }] });
+    expect(characters[0]?.data).toMatchObject({ className: 'Wizard', inventory: [], hpItemsUnlocked: false });
 
     const jonas = await client(await login('Jonas'));
     expect(await jonas.emitWithAck('character:update', { characterId: character.id, patch: { level: 5 } })).toMatchObject({ ok: false });
@@ -195,6 +199,26 @@ describe('campaign sessions', () => {
     ok(await dm.emitWithAck('character:update', { characterId: id, patch: { level: 2 } }));
     expect(await dm.emitWithAck('character:adjustHp', { characterId: id, delta: 1.5 })).toMatchObject({ ok: false });
     expect(await dm.emitWithAck('character:update', { characterId: id, patch: { inventory: [] } as never })).toMatchObject({ ok: false });
+  });
+
+  it('lets the DM unlock HP and items for one player', async () => {
+    const { dm, session } = await hostCampaign();
+    const { sock: mira, character } = await joinWithNewCharacter('Mira', session.code, 'Elowen');
+    ok(await dm.emitWithAck('session:start'));
+    const id = character.id;
+
+    expect(await mira.emitWithAck('character:update', { characterId: id, patch: { hpItemsUnlocked: true } })).toMatchObject({ ok: false });
+    ok(await dm.emitWithAck('character:update', { characterId: id, patch: { hpItemsUnlocked: true } }));
+
+    ok(await mira.emitWithAck('character:adjustHp', { characterId: id, delta: -2 }));
+    ok(await mira.emitWithAck('item:add', { characterId: id, item: { name: 'Torch', qty: 3 } }));
+    ok(await mira.emitWithAck('character:update', { characterId: id, patch: { coins: { cp: 0, sp: 0, ep: 0, gp: 5, pp: 0 }, hpTemp: 2 } }));
+    // Everything else stays with the DM during the session.
+    expect(await mira.emitWithAck('character:update', { characterId: id, patch: { level: 20 } })).toMatchObject({ ok: false });
+    expect(await mira.emitWithAck('character:update', { characterId: id, patch: { hpItemsUnlocked: false } })).toMatchObject({ ok: false });
+
+    ok(await dm.emitWithAck('character:update', { characterId: id, patch: { hpItemsUnlocked: false } }));
+    expect(await mira.emitWithAck('character:adjustHp', { characterId: id, delta: 1 })).toMatchObject({ ok: false });
   });
 
   it('lets characters travel between campaigns, one session at a time', async () => {
