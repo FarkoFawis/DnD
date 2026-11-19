@@ -417,7 +417,7 @@ h3 .link { margin-left: 8px; font-weight: 400; }
 .stepper button { width: 40px; min-height: 40px; border-radius: 10px; border: 1px solid #57534e; background: #292524; color: var(--text); font-size: 1.2rem; }
 
 /* "Initiate fight": a faint red pulse over everything, three times. Never blocks taps. */
-.fight-alert { position: fixed; inset: 0; z-index: 100; pointer-events: none; display: flex; align-items: flex-start; justify-content: center; background: rgba(220, 38, 38, 0.05); box-shadow: inset 0 0 80px 16px rgba(220, 38, 38, 0.24); opacity: 0; animation: fight-pulse 0.8s ease-in-out 3; }
+.fight-alert { position: fixed; inset: 0; z-index: 100; pointer-events: none; display: flex; align-items: flex-start; justify-content: center; background: rgba(220, 38, 38, 0.05); box-shadow: inset 0 0 80px 16px rgba(220, 38, 38, 0.18); opacity: 0; animation: fight-pulse 0.8s ease-in-out 3; }
 .fight-alert-text { margin-top: max(18px, env(safe-area-inset-top)); padding: 8px 22px; border-radius: 999px; background: rgba(127, 29, 29, 0.92); color: #fff; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
 @keyframes fight-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .fight-alert { animation: fight-pulse 2.4s ease-in-out 1; } }
