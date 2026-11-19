@@ -1,60 +1,57 @@
 import { useState } from 'react';
-import { formatModifier, type Combat, type CombatAction, type Combatant, type Npc, type SessionState } from '@dnd/shared';
-import { CampaignConfig, npcSummary, type ConfigTab } from '../prep/CampaignConfig.tsx';
+import { ABILITIES, abilityModifier, formatModifier, type Combat, type CombatAction, type Combatant, type Npc, type SessionState } from '@dnd/shared';
+import { ConfigTabs, npcSummary } from '../prep/CampaignConfig.tsx';
 import { NumberField } from '../prep/NumberField.tsx';
-import { usePrep } from '../prep/usePrep.ts';
+import type { Prep } from '../prep/usePrep.ts';
+import { RestButtons } from '../Uses.tsx';
 import type { Game } from '../useGame.ts';
 
 type NpcPick = { npcId: string; count: number };
+type Send = (run: Parameters<Game['call']>[0]) => Promise<boolean>;
 
-/**
- * The DM's table tools during a running session: start a fight, track
- * initiative and turns, show handouts, look things up in the campaign prep.
- */
-export function DmTools({ game, session }: { game: Game; session: SessionState }) {
-  const [panel, setPanel] = useState<ConfigTab | null>(null);
-  const [setup, setSetup] = useState(false);
+function useSend(game: Game) {
   const [error, setError] = useState<string | null>(null);
-
-  const send = async (run: Parameters<typeof game.call<object>>[0]) => {
+  const send: Send = async (run) => {
     const res = await game.call<object>(run);
     setError(res.ok ? null : res.error);
     return res.ok;
   };
+  return { send, error, clearError: () => setError(null) };
+}
 
+/**
+ * The DM's Fight page: "Initiate fight" while nothing is going on, then
+ * initiative, the turn order, the opponents' HP and the turn buttons.
+ */
+export function DmFight({ game, session, prep }: { game: Game; session: SessionState; prep: Prep }) {
+  const [setup, setSetup] = useState(false);
+  const { send, error, clearError } = useSend(game);
   return (
     <>
-      <section className="card dm-tools">
-        {error && <p className="error" role="alert" onClick={() => setError(null)}>{error}</p>}
-        {session.handout && (
-          <p className="notice showing-note">
-            <span className="grow">Players see “{session.handout.title}”.</span>
-            <button className="link" onClick={() => void send((s, done) => s.emit('handout:show', { handoutId: null }, done))}>Hide</button>
-          </p>
-        )}
-        {session.combat ? (
-          <CombatTracker
-            combat={session.combat}
-            act={(action) => send((s, done) => s.emit('combat:action', action, done))}
-            onAdd={() => setSetup(true)}
-            onEnd={() => {
-              if (window.confirm('End the fight?')) void send((s, done) => s.emit('combat:end', done));
-            }}
-          />
-        ) : (
+      {error && <p className="error" role="alert" onClick={clearError}>{error}</p>}
+      {session.combat ? (
+        <CombatTracker
+          combat={session.combat}
+          npcs={prep.prep?.npcs ?? []}
+          act={(action) => send((s, done) => s.emit('combat:action', action, done))}
+          onAdd={() => setSetup(true)}
+          onEnd={() => {
+            if (window.confirm('End the fight?')) void send((s, done) => s.emit('combat:end', done));
+          }}
+        />
+      ) : (
+        <div className="fight-idle">
+          <p className="muted">No fight right now.</p>
           <button className="primary fight-button" onClick={() => setSetup(true)}>⚔ Initiate fight</button>
-        )}
-        <div className="tool-row">
-          <button className="secondary" onClick={() => setPanel('handouts')}>Handouts</button>
-          <button className="secondary" onClick={() => setPanel('npcs')}>NPCs</button>
-          <button className="secondary" onClick={() => setPanel('log')}>Log</button>
+          <p className="muted small center">
+            You pick the opponents, then every phone pulses red and buzzes and the players' Fight page opens.
+          </p>
         </div>
-      </section>
-
+      )}
       {setup && (
         <FightSetup
-          game={game}
           session={session}
+          prep={prep}
           onCancel={() => setSetup(false)}
           onGo={async (npcs, characterIds) => {
             const ok = session.combat
@@ -64,29 +61,60 @@ export function DmTools({ game, session }: { game: Game; session: SessionState }
           }}
         />
       )}
-      {panel && (
-        <CampaignConfig
-          game={game}
-          campaign={session.campaign}
-          session={session}
-          initialTab={panel}
-          backLabel="Back to the table"
-          onBack={() => setPanel(null)}
-        />
+    </>
+  );
+}
+
+/**
+ * The DM's Tools page: what the players are looking at, rests and level-ups
+ * for the whole party, and the campaign prep (handouts, NPCs, log).
+ */
+export function DmToolbox({ game, session, prep, active }: { game: Game; session: SessionState; prep: Prep; active: boolean }) {
+  const { send, error, clearError } = useSend(game);
+  const canLevel = session.players.filter((p) => p.character.level < 20 && !p.character.levelUpReady);
+  return (
+    <>
+      {error && <p className="error" role="alert" onClick={clearError}>{error}</p>}
+      {session.handout && (
+        <p className="notice showing-note">
+          <span className="grow">Players see “{session.handout.title}”.</span>
+          <button className="link" onClick={() => void send((s, done) => s.emit('handout:show', { handoutId: null }, done))}>Hide</button>
+        </p>
       )}
+      {session.players.length > 0 && (
+        <section className="card dm-tools">
+          <h3 className="card-title">The whole party</h3>
+          <RestButtons who="the whole party" onRest={(k) => void game.partyRest(k)} />
+          {canLevel.length > 0 && (
+            <button
+              type="button"
+              className="secondary levelup-button"
+              onClick={() => {
+                if (!window.confirm('Let every player level up? Each of them does it on their own phone.')) return;
+                for (const p of canLevel) void game.updateCharacter(p.characterId, { levelUpReady: true });
+              }}
+            >
+              ⬆ The party levels up
+            </button>
+          )}
+        </section>
+      )}
+      <section className="card">
+        <ConfigTabs game={game} campaign={session.campaign} prep={prep} session={session} active={active} />
+      </section>
     </>
   );
 }
 
 /** Who is in the fight: all players, plus the NPCs the DM ticks (several copies possible). */
 function FightSetup(props: {
-  game: Game;
   session: SessionState;
+  prep: Prep;
   onCancel: () => void;
   onGo: (npcs: NpcPick[], characterIds: string[]) => void;
 }) {
   const { session } = props;
-  const { prep, error } = usePrep(props.game, session.campaign.id);
+  const { prep, error } = props.prep;
   const adding = session.combat !== null;
   /** npcId -> how many. Starts empty: the DM ticks who shows up. */
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -114,7 +142,7 @@ function FightSetup(props: {
         {prep === null ? (
           <p className="muted">Loading…</p>
         ) : sorted.length === 0 ? (
-          <p className="notice">No NPCs or opponents planned yet. You can start anyway and add them later under NPCs.</p>
+          <p className="notice">No NPCs or opponents planned yet. You can start anyway and add them later on the Tools page, under NPCs.</p>
         ) : (
           <ul className="list">
             {sorted.map((n) => {
@@ -153,6 +181,8 @@ function FightSetup(props: {
 
 function CombatTracker(props: {
   combat: Combat;
+  /** The campaign's NPCs, to look an opponent's attacks up during the fight. */
+  npcs: Npc[];
   act: (action: CombatAction) => Promise<boolean>;
   onAdd: () => void;
   onEnd: () => void;
@@ -164,9 +194,7 @@ function CombatTracker(props: {
 
   return (
     <div className="tracker">
-      <h2 className="card-title">
-        Fight <span className="muted small">{combat.activeId ? `Round ${combat.round}` : 'Initiative'}</span>
-      </h2>
+      <p className="fight-round">{combat.activeId ? `Round ${combat.round}` : 'Initiative'}</p>
       <div className="tool-row">
         <button
           className={noneRolled ? 'primary' : 'secondary'}
@@ -186,7 +214,7 @@ function CombatTracker(props: {
       {combat.combatants.length === 0 && <p className="muted mt">Nobody is in this fight yet.</p>}
       <ol className="turn-list">
         {combat.combatants.map((c) => (
-          <CombatRow key={c.id} c={c} active={c.id === combat.activeId} open={openId === c.id} onToggle={() => setOpenId(openId === c.id ? null : c.id)} act={act} />
+          <CombatRow key={c.id} c={c} npc={c.kind === 'npc' ? props.npcs.find((n) => n.id === c.ref) : undefined} active={c.id === combat.activeId} open={openId === c.id} onToggle={() => setOpenId(openId === c.id ? null : c.id)} act={act} />
         ))}
       </ol>
       <div className="tool-row">
@@ -203,8 +231,8 @@ function CombatTracker(props: {
   );
 }
 
-function CombatRow(props: { c: Combatant; active: boolean; open: boolean; onToggle: () => void; act: (a: CombatAction) => Promise<boolean> }) {
-  const { c, act } = props;
+function CombatRow(props: { c: Combatant; npc?: Npc; active: boolean; open: boolean; onToggle: () => void; act: (a: CombatAction) => Promise<boolean> }) {
+  const { c, npc, act } = props;
   const [amount, setAmount] = useState<number | null>(null);
   const hit = (sign: 1 | -1) => {
     if (!amount) return;
@@ -243,6 +271,16 @@ function CombatRow(props: { c: Combatant; active: boolean; open: boolean; onTogg
               <NumberField aria-label="Amount" placeholder="Amount" value={amount} min={1} max={9999} onChange={setAmount} onClear={() => setAmount(null)} />
               <button className="damage" disabled={!amount} onClick={() => hit(-1)}>Damage</button>
               <button className="heal" disabled={!amount} onClick={() => hit(1)}>Heal</button>
+            </div>
+          )}
+          {npc && (
+            <div className="turn-npc">
+              <p className="muted small">
+                Speed {npc.speed} ft · {ABILITIES.map((a) => `${a.toUpperCase()} ${formatModifier(abilityModifier(npc.abilities[a]))}`).join(' · ')}
+              </p>
+              {npc.actions && <p className="pre-line">{npc.actions}</p>}
+              {npc.personality && <p className="muted small pre-line">{npc.personality}</p>}
+              {npc.notes && <p className="muted small pre-line">{npc.notes}</p>}
             </div>
           )}
           <div className="tool-row">

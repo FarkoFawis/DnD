@@ -5,7 +5,7 @@ Digital D&D character sheets for our in-person sessions. Everyone uses their pho
 1. Log in with your account (made for you in advance; you choose your password the first time).
 2. **Characters:** make your characters. Any character can join any campaign, one session at a time.
 3. **Play → Host:** the DM picks tonight's campaign and gets a 5-letter code.
-4. **Play → Join:** players type the code, pick a character and tap **Ready** in the lobby. The DM starts the session.
+4. **Play → Join:** players type the code, pick a character and tap **Ready** in the lobby (the DM in the middle, the players' seats around). The DM starts the session.
 5. During the session players see their sheet; only the DM changes it (damage, healing, items).
 
 > Status: rough prototype (2024 rules). Accounts, campaigns, live sessions and a basic character sheet work: HP, AC, abilities, saves, skills, items, coins, spells, notes. The DM can change any player's sheet during a session, e.g. damage, healing, giving or taking items.

@@ -21,48 +21,63 @@ export type ConfigTab = 'handouts' | 'npcs' | 'log';
 /**
  * "Configure": the DM plans a campaign ahead. Handouts (pictures and text to
  * put on the players' phones), NPCs and opponents, and the session log.
- * Also opened during a session (as an overlay), where handouts get a
- * "Show to players" button.
  */
 export function CampaignConfig(props: {
   game: Game;
   campaign: { id: string; name: string };
   onBack: () => void;
   backLabel?: string;
-  initialTab?: ConfigTab;
-  /** The running session, when opened from inside it. */
-  session?: SessionState;
 }) {
-  const { game, campaign, session } = props;
+  const { game, campaign } = props;
   const prep = usePrep(game, campaign.id);
-  const [tab, setTab] = useState<ConfigTab>(props.initialTab ?? 'handouts');
-  const body = (
+  return (
     <>
       <button className="back" onClick={props.onBack}>‹ {props.backLabel ?? 'Back'}</button>
       <section className="card">
         <p className="muted small">Configure</p>
         <h2 className="card-title">{campaign.name}</h2>
-        <div className="tabs tabs3" role="tablist">
-          <button role="tab" aria-selected={tab === 'handouts'} onClick={() => setTab('handouts')}>Handouts</button>
-          <button role="tab" aria-selected={tab === 'npcs'} onClick={() => setTab('npcs')}>NPCs</button>
-          <button role="tab" aria-selected={tab === 'log'} onClick={() => setTab('log')}>Log</button>
-        </div>
-        {prep.error && (
-          <p className="error" role="alert" onClick={() => prep.setError(null)}>{prep.error}</p>
-        )}
-        {tab === 'log' ? (
-          <SessionLog game={game} campaign={campaign} />
-        ) : prep.prep === null ? (
-          <p className="muted">Loading…</p>
-        ) : tab === 'handouts' ? (
-          <Handouts game={game} campaignId={campaign.id} prep={prep} handouts={prep.prep.handouts} session={session} onShown={props.onBack} />
-        ) : (
-          <Npcs prep={prep} npcs={prep.prep.npcs} />
-        )}
+        <ConfigTabs game={game} campaign={campaign} prep={prep} />
       </section>
     </>
   );
-  return session ? <div className="panel"><div className="app">{body}</div></div> : body;
+}
+
+/**
+ * The three tabs of the campaign prep. Also sits on the DM's Tools page
+ * during a session, where handouts get a "Show" button.
+ */
+export function ConfigTabs(props: {
+  game: Game;
+  campaign: { id: string; name: string };
+  prep: Prep;
+  /** The running session, when used inside it. */
+  session?: SessionState;
+  /** False while the page holding the tabs is not open. */
+  active?: boolean;
+}) {
+  const { game, campaign, prep, session } = props;
+  const [tab, setTab] = useState<ConfigTab>('handouts');
+  return (
+    <>
+      <div className="tabs tabs3" role="tablist">
+        <button role="tab" aria-selected={tab === 'handouts'} onClick={() => setTab('handouts')}>Handouts</button>
+        <button role="tab" aria-selected={tab === 'npcs'} onClick={() => setTab('npcs')}>NPCs</button>
+        <button role="tab" aria-selected={tab === 'log'} onClick={() => setTab('log')}>Log</button>
+      </div>
+      {prep.error && (
+        <p className="error" role="alert" onClick={() => prep.setError(null)}>{prep.error}</p>
+      )}
+      {tab === 'log' ? (
+        <SessionLog game={game} campaign={campaign} active={props.active} />
+      ) : prep.prep === null ? (
+        <p className="muted">Loading…</p>
+      ) : tab === 'handouts' ? (
+        <Handouts game={game} campaignId={campaign.id} prep={prep} handouts={prep.prep.handouts} session={session} />
+      ) : (
+        <Npcs prep={prep} npcs={prep.prep.npcs} />
+      )}
+    </>
+  );
 }
 
 // ---------- handouts ----------
@@ -73,7 +88,6 @@ function Handouts(props: {
   prep: Prep;
   handouts: Handout[];
   session?: SessionState;
-  onShown: () => void;
 }) {
   const { game, prep, handouts, session } = props;
   /** 'new' or the id of the handout being edited. */
@@ -82,8 +96,7 @@ function Handouts(props: {
 
   const show = async (handoutId: string | null) => {
     const res = await game.call<object>((s, done) => s.emit('handout:show', { handoutId }, done));
-    if (!res.ok) prep.setError(res.error);
-    else if (handoutId) props.onShown();
+    prep.setError(res.ok ? null : res.error);
   };
 
   if (editing) {

@@ -3,8 +3,8 @@
  * the character's name, the player's name, HP, the last thing they used and
  * their conditions.
  *
- * - DM (`DmParty`): the grid is the main screen; tapping a card opens that
- *   player's sheet under it.
+ * - DM (`DmParty`): the grid is the middle page (session/DmSession.tsx);
+ *   tapping a card opens that player's sheet under it.
  * - Players: the grid is a page next to their sheet (session/PlayerSession.tsx).
  *   Swipe right-to-left on the sheet to slide it in. Their own card is highlighted.
  */
@@ -14,7 +14,7 @@ import { isDead } from '@dnd/shared';
 import { Portrait } from './Portrait.tsx';
 import { Sheet, sheetActions } from './Sheet.tsx';
 import { StatusChips } from './Status.tsx';
-import { RestButtons, actionText } from './Uses.tsx';
+import { actionText } from './Uses.tsx';
 import type { Game } from './useGame.ts';
 
 function PartyCard({ player, isMe, selected, onClick }: { player: SessionPlayer; isMe: boolean; selected?: boolean; onClick?: () => void }) {
@@ -84,7 +84,7 @@ export function PartyGrid({
   );
 }
 
-/** DM: the party grid, rests, and the sheet of the player whose card is tapped. */
+/** DM: the party grid and the sheet of the player whose card is tapped. Nothing else is on this page. */
 export function DmParty({ game, session, myId }: { game: Game; session: SessionState; myId: string }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const open = session.players.find((p) => p.user.id === openId);
@@ -112,21 +112,6 @@ export function DmParty({ game, session, myId }: { game: Game; session: SessionS
             dmUnlock
           />
         </div>
-      )}
-      {session.players.length > 0 && <RestButtons who="the whole party" onRest={(k) => void game.partyRest(k)} />}
-      {session.players.some((p) => p.character.level < 20 && !p.character.levelUpReady) && (
-        <button
-          type="button"
-          className="secondary levelup-button"
-          onClick={() => {
-            if (!window.confirm('Let every player level up? Each of them does it on their own phone.')) return;
-            for (const p of session.players) {
-              if (p.character.level < 20 && !p.character.levelUpReady) void game.updateCharacter(p.characterId, { levelUpReady: true });
-            }
-          }}
-        >
-          ⬆ The party levels up
-        </button>
       )}
     </section>
   );

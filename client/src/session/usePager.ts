@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 /** Touches that start on these never turn the page. */
 const NO_SWIPE =
-  'input, textarea, select, [role="dialog"], .info-backdrop, .picker-backdrop, .drawer, .levelup-overlay, .handout-overlay, .panel';
+  'input, textarea, select, [role="dialog"], .info-backdrop, .picker-backdrop, .drawer, .levelup-overlay, .handout-overlay';
 
 /**
  * Pages side by side that follow the finger: page 0 in the middle, page 1 to
@@ -14,7 +14,7 @@ const NO_SWIPE =
  * between (e.g. 0.4 = 40% of the way from page 0 to page 1).
  */
 export function usePager(min: -1 | 0, max: 1 = 1) {
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState<number>(0);
   const [drag, setDrag] = useState<number | null>(null);
   const live = useRef({ page, min, max });
   live.current = { page, min, max };

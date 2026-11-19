@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Combat, SessionPlayer, SessionState } from '@dnd/shared';
 import { ClassicSheet } from '../ClassicSheet.tsx';
 import { PartyGrid } from '../PartyGrid.tsx';
 import { Portrait } from '../Portrait.tsx';
 import { sheetActions } from '../Sheet.tsx';
 import type { Game } from '../useGame.ts';
+import { Page } from './Page.tsx';
 import { SessionDrawer } from './SessionDrawer.tsx';
 import { usePager } from './usePager.ts';
 
@@ -135,24 +136,6 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
         </div>
       )}
     </>
-  );
-}
-
-/** A full-screen page that slides in over the sheet from one side. `shown`: 0 = away, 1 = fully in. */
-function Page(props: { side: 'left' | 'right'; shown: number; dragging: boolean; open: boolean; children: ReactNode }) {
-  const away = (1 - props.shown) * 100;
-  return (
-    <div
-      className={`party-panel from-${props.side} ${props.dragging ? '' : 'settle'}`}
-      style={{
-        transform: `translateX(${props.side === 'left' ? -away : away}%)`,
-        visibility: props.shown > 0 || props.dragging ? 'visible' : 'hidden',
-      }}
-      aria-hidden={!props.open}
-      inert={!props.open && !props.dragging}
-    >
-      {props.children}
-    </div>
   );
 }
 

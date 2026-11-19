@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { buildRecap, describeLogEntry, recapLines, type LogEntry } from '@dnd/shared';
 import type { Game } from '../useGame.ts';
 
-function useLog(game: Game, campaignId: string) {
+/** `active`: false while the log is on a page that is not open; it loads again when the page opens. */
+function useLog(game: Game, campaignId: string, active = true) {
   const { call, status } = game;
   const [log, setLog] = useState<{ current: LogEntry[]; previous: LogEntry[] } | null>(null);
   const reload = useCallback(async () => {
@@ -10,8 +11,8 @@ function useLog(game: Game, campaignId: string) {
     if (res.ok) setLog({ current: res.current, previous: res.previous });
   }, [call, campaignId]);
   useEffect(() => {
-    if (status === 'online') void reload();
-  }, [status, reload]);
+    if (status === 'online' && active) void reload();
+  }, [status, reload, active]);
   return { log, reload };
 }
 
@@ -65,8 +66,8 @@ function LogList({ entries }: { entries: LogEntry[] }) {
 }
 
 /** The Log tab: tonight's session so far, and the recap of the one before. */
-export function SessionLog({ game, campaign }: { game: Game; campaign: { id: string; name: string } }) {
-  const { log, reload } = useLog(game, campaign.id);
+export function SessionLog({ game, campaign, active }: { game: Game; campaign: { id: string; name: string }; active?: boolean }) {
+  const { log, reload } = useLog(game, campaign.id, active);
   if (!log) return <p className="muted">Loading…</p>;
   const previous = buildRecap(log.previous);
   return (
