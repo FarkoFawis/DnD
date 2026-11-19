@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { PublicUser } from '@dnd/shared';
 import { logout, me, saveCode, savedToken, saveToken } from './api.ts';
-import { Home } from './Home.tsx';
+import { Characters } from './Characters.tsx';
+import { Play } from './Play.tsx';
 import { Login } from './Login.tsx';
 import { SessionView } from './SessionView.tsx';
 import { useGame, type Status } from './useGame.ts';
@@ -63,8 +64,11 @@ export function App() {
   return <LoggedIn auth={auth} onSignOut={signOut} />;
 }
 
+type Screen = 'home' | 'play' | 'characters' | 'settings';
+
 function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
   const game = useGame(auth.token, onSignOut);
+  const [screen, setScreen] = useState<Screen>('home');
   return (
     <Shell status={game.status} user={auth.user.username} onSignOut={game.session ? undefined : onSignOut}>
       {game.error && (
@@ -76,10 +80,41 @@ function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
         <SessionView game={game} session={game.session} myId={auth.user.id} />
       ) : game.rejoining ? (
         <p className="muted">Getting you back into your session…</p>
+      ) : screen === 'play' ? (
+        <Play game={game} onBack={() => setScreen('home')} onCharacters={() => setScreen('characters')} />
+      ) : screen === 'characters' ? (
+        <Characters game={game} onBack={() => setScreen('home')} />
+      ) : screen === 'settings' ? (
+        <>
+          <button className="back" onClick={() => setScreen('home')}>‹ Home</button>
+          <section className="card">
+            <h2 className="card-title">Settings</h2>
+            <p className="muted">Nothing here yet.</p>
+          </section>
+        </>
       ) : (
-        <Home game={game} />
+        <HomeMenu username={auth.user.username} onPick={setScreen} />
       )}
     </Shell>
+  );
+}
+
+function HomeMenu({ username, onPick }: { username: string; onPick: (s: Screen) => void }) {
+  return (
+    <section className="home-menu">
+      {username && <p className="muted center">Welcome back, {username}.</p>}
+      <button className="menu-button primary" onClick={() => onPick('play')}>
+        Play
+        <span className="small">Join or host a session</span>
+      </button>
+      <button className="menu-button" onClick={() => onPick('characters')}>
+        Characters
+        <span className="small">Create and edit your characters</span>
+      </button>
+      <button className="menu-button" onClick={() => onPick('settings')}>
+        Settings
+      </button>
+    </section>
   );
 }
 

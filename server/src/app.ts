@@ -11,6 +11,7 @@ import {
   sanitizeCharacterPatch,
   sanitizeItem,
   type CharacterData,
+  type CharacterSummary,
   type Item,
   type ClientToServerEvents,
   type PublicUser,
@@ -151,17 +152,33 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
       code,
       campaign: { id: campaign.id, name: campaign.name },
       host: { ...host, online: isOnline(code, host.id) },
-      players: store.sessionPlayers(code).map((user) => ({
-        user,
-        online: isOnline(code, user.id),
-        character: store.getOrCreateCharacter(campaign.id, user),
-      })),
+      started: live.started,
+      players: store.sessionPlayers(code).flatMap((p) => {
+        const ch = store.getCharacter(p.characterId);
+        return ch
+          ? [{ user: p.user, characterId: p.characterId, ready: p.ready, online: isOnline(code, p.user.id), character: ch.data }]
+          : [];
+      }),
     };
   };
 
   const broadcast = (code: string) => {
     const state = sessionState(code);
     if (state) io.to(roomOf(code)).emit('session:state', state);
+  };
+
+  /** Ends a session socket-side: tells everyone, takes all sockets out of the room. */
+  const closeSession = (code: string, exceptSocketId?: string) => {
+    const room = io.to(roomOf(code));
+    (exceptSocketId ? room.except(exceptSocketId) : room).emit('session:ended');
+    for (const s of io.sockets.sockets.values()) {
+      if (s.data.code === code) {
+        s.data.code = undefined;
+        s.data.isHost = undefined;
+      }
+    }
+    io.socketsLeave(roomOf(code));
+    for (const key of presence.keys()) if (key.startsWith(`${code}:`)) presence.delete(key);
   };
 
   io.on('connection', (socket) => {
@@ -193,6 +210,126 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
       return sessionState(code)!;
     };
 
+    // ---------- characters ----------
+
+    /**
+     * Who may change a character:
+     * - its owner, while it is not in a session;
+     * - the DM, while it is in the DM's session.
+     * In a session, players only look at their sheet.
+     */
+    const editable = (characterId: unknown) => {
+      const ch = typeof characterId === 'string' ? store.getCharacter(characterId) : undefined;
+      if (!ch) return { ok: false as const, error: 'That character no longer exists.' };
+      if (ch.inSession) {
+        if (socket.data.isHost && socket.data.code === ch.inSession) return { ok: true as const, ch };
+        if (ch.userId === user.id) {
+          return { ok: false as const, error: 'Your character is in a session. Only the DM can change it now.' };
+        }
+        return { ok: false as const, error: 'You can only change your own characters.' };
+      }
+      if (ch.userId !== user.id) return { ok: false as const, error: 'You can only change your own characters.' };
+      return { ok: true as const, ch };
+    };
+
+    const afterChange = (character: CharacterSummary) => {
+      if (character.inSession) broadcast(character.inSession);
+    };
+
+    socket.on('character:list', (ack) => {
+      ack({ ok: true, characters: store.listCharacters(user.id) });
+    });
+
+    socket.on('character:create', (input, ack) => {
+      const name = cleanText(input?.name, LIMITS.textFieldMaxLength);
+      if (!name) return ack({ ok: false, error: 'Give your character a name.' });
+      if (store.countCharacters(user.id) >= LIMITS.charactersPerUser) {
+        return ack({ ok: false, error: 'You have too many characters. Delete one first.' });
+      }
+      let data: Partial<CharacterData> = {};
+      try {
+        if (input?.data !== undefined) data = sanitizeCharacterPatch(input.data, { allowInventory: true });
+      } catch (e) {
+        return ack({ ok: false, error: (e as Error).message });
+      }
+      ack({ ok: true, character: store.createCharacter(user.id, name, data) });
+    });
+
+    socket.on('character:delete', (input, ack) => {
+      const t = editable(input?.characterId);
+      if (!t.ok) return ack(t);
+      if (t.ch.userId !== user.id) return ack({ ok: false, error: 'You can only delete your own characters.' });
+      store.deleteCharacter(t.ch.id);
+      ack({ ok: true });
+    });
+
+    socket.on('character:update', (input, ack) => {
+      const t = editable(input?.characterId);
+      if (!t.ok) return ack(t);
+      let patch;
+      try {
+        patch = sanitizeCharacterPatch(input?.patch);
+      } catch (e) {
+        return ack({ ok: false, error: (e as Error).message });
+      }
+      const character = store.updateCharacter(t.ch.id, patch);
+      ack({ ok: true, character });
+      afterChange(character);
+    });
+
+    socket.on('character:adjustHp', (input, ack) => {
+      const t = editable(input?.characterId);
+      if (!t.ok) return ack(t);
+      const delta = input?.delta;
+      if (typeof delta !== 'number' || !Number.isInteger(delta) || Math.abs(delta) > 9999) {
+        return ack({ ok: false, error: 'Invalid amount.' });
+      }
+      // Read-modify-write is safe: node:sqlite is synchronous, so no other event runs in between.
+      const character = store.updateCharacter(t.ch.id, applyHpChange(t.ch.data, delta));
+      ack({ ok: true, character });
+      afterChange(character);
+    });
+
+    const changeInventory = (
+      characterId: unknown,
+      ack: (res: { ok: true; character: CharacterSummary } | { ok: false; error: string }) => void,
+      change: (items: Item[]) => Item[],
+    ) => {
+      const t = editable(characterId);
+      if (!t.ok) return ack(t);
+      try {
+        const inventory = sanitizeCharacterPatch({ inventory: change(t.ch.data.inventory) }, { allowInventory: true })
+          .inventory!;
+        const character = store.updateCharacter(t.ch.id, { inventory });
+        ack({ ok: true, character });
+        afterChange(character);
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
+    };
+
+    socket.on('item:add', (input, ack) => {
+      changeInventory(input?.characterId, ack, (items) => [
+        ...items,
+        sanitizeItem({ ...(typeof input?.item === 'object' ? input.item : {}), id: randomUUID() }),
+      ]);
+    });
+
+    socket.on('item:update', (input, ack) => {
+      changeInventory(input?.characterId, ack, (items) => {
+        const i = items.findIndex((x) => x.id === input?.itemId);
+        if (i < 0) throw new Error('That item is gone.');
+        const next = sanitizeItem({ ...items[i], ...(typeof input?.patch === 'object' ? input.patch : {}), id: items[i]!.id });
+        return next.qty === 0 ? items.filter((_, j) => j !== i) : items.map((x, j) => (j === i ? next : x));
+      });
+    });
+
+    socket.on('item:remove', (input, ack) => {
+      changeInventory(input?.characterId, ack, (items) => items.filter((x) => x.id !== input?.itemId));
+    });
+
+    // ---------- campaigns & sessions ----------
+
     socket.on('campaign:list', (ack) => {
       ack({ ok: true, campaigns: store.listCampaigns(user.id) });
     });
@@ -213,18 +350,60 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
       ack({ ok: true, session: enter(live.code, true) });
     });
 
-    socket.on('session:join', (input, ack) => {
-      const code = normalizeRoomCode(String(input?.code ?? ''));
-      if (!code) return ack({ ok: false, error: 'That code does not look right.' });
+    const findLive = (rawCode: unknown) => {
+      const code = normalizeRoomCode(String(rawCode ?? ''));
+      if (!code) return { ok: false as const, error: 'That code does not look right.' };
       const live = store.getSession(code);
       const campaign = live && store.getCampaign(live.campaignId);
-      if (!live || !campaign) return ack({ ok: false, error: 'No session is running with that code.' });
+      if (!live || !campaign) return { ok: false as const, error: 'No session is running with that code.' };
       const isHost = campaign.ownerId === user.id;
-      if (!isHost) {
-        store.addSessionPlayer(code, user.id);
-        store.getOrCreateCharacter(campaign.id, user);
+      const isPlayer = store.sessionPlayers(code).some((p) => p.user.id === user.id);
+      return { ok: true as const, code, live, campaign, isHost, isPlayer };
+    };
+
+    socket.on('session:peek', (input, ack) => {
+      const f = findLive(input?.code);
+      if (!f.ok) return ack(f);
+      ack({
+        ok: true,
+        campaign: { id: f.campaign.id, name: f.campaign.name },
+        rejoin: f.isHost || f.isPlayer,
+        characters: store.listCharacters(user.id).filter((c) => store.canJoinCampaign(c, f.campaign.id)),
+      });
+    });
+
+    socket.on('session:join', (input, ack) => {
+      const f = findLive(input?.code);
+      if (!f.ok) return ack(f);
+      if (f.isHost) return ack({ ok: true, session: enter(f.code, true) });
+      if (!f.isPlayer) {
+        const ch = typeof input?.characterId === 'string' ? store.getCharacter(input.characterId) : undefined;
+        if (!ch || ch.userId !== user.id) return ack({ ok: false, error: 'Choose one of your characters.' });
+        if (!store.canJoinCampaign(ch, f.campaign.id)) {
+          return ack({ ok: false, error: 'That character is already in another session.' });
+        }
+        if (store.listCharacters(user.id).some((c) => c.inSession)) {
+          return ack({ ok: false, error: 'You are already in another session. Leave it first.' });
+        }
+        store.addSessionPlayer(f.code, user.id, ch.id, f.campaign.id);
       }
-      ack({ ok: true, session: enter(code, isHost) });
+      ack({ ok: true, session: enter(f.code, false) });
+    });
+
+    socket.on('session:ready', (input, ack) => {
+      const code = socket.data.code;
+      if (!code || socket.data.isHost) return ack({ ok: false, error: 'Join a session as a player first.' });
+      store.setReady(code, user.id, input?.ready === true);
+      ack({ ok: true });
+      broadcast(code);
+    });
+
+    socket.on('session:start', (ack) => {
+      const code = socket.data.code;
+      if (!code || !socket.data.isHost) return ack({ ok: false, error: 'Only the DM can start the session.' });
+      store.markStarted(code);
+      ack({ ok: true });
+      broadcast(code);
     });
 
     socket.on('session:leave', (ack) => {
@@ -251,102 +430,8 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
       const code = socket.data.code;
       if (!code || !socket.data.isHost) return ack({ ok: false, error: 'Only the DM can end the session.' });
       store.endSession(code);
-      io.to(roomOf(code)).except(socket.id).emit('session:ended');
-      for (const s of io.sockets.sockets.values()) {
-        if (s.data.code === code) {
-          s.data.code = undefined;
-          s.data.isHost = undefined;
-        }
-      }
-      io.socketsLeave(roomOf(code));
-      for (const key of presence.keys()) if (key.startsWith(`${code}:`)) presence.delete(key);
+      closeSession(code, socket.id);
       ack({ ok: true });
-    });
-
-    /** Whose character this socket may edit: own as a player, anyone in the session as DM. */
-    const editTarget = (
-      userId: unknown,
-    ): { ok: true; code: string; campaignId: string; target: PublicUser } | { ok: false; error: string } => {
-      const code = socket.data.code;
-      const live = code ? store.getSession(code) : undefined;
-      if (!code || !live) return { ok: false, error: 'Join a session first.' };
-      if (socket.data.isHost) {
-        const target = store.sessionPlayers(code).find((p) => p.id === userId);
-        if (!target) return { ok: false, error: 'That player is not in this session.' };
-        return { ok: true, code, campaignId: live.campaignId, target };
-      }
-      if (userId !== undefined && userId !== user.id) {
-        return { ok: false, error: 'You can only edit your own character.' };
-      }
-      return { ok: true, code, campaignId: live.campaignId, target: user };
-    };
-
-    socket.on('character:update', (input, ack) => {
-      const t = editTarget(input?.userId);
-      if (!t.ok) return ack(t);
-      let patch;
-      try {
-        patch = sanitizeCharacterPatch(input?.patch);
-      } catch (e) {
-        return ack({ ok: false, error: (e as Error).message });
-      }
-      const character = store.updateCharacter(t.campaignId, t.target, patch);
-      ack({ ok: true, character });
-      broadcast(t.code);
-    });
-
-    socket.on('character:adjustHp', (input, ack) => {
-      const t = editTarget(input?.userId);
-      if (!t.ok) return ack(t);
-      const delta = input?.delta;
-      if (typeof delta !== 'number' || !Number.isInteger(delta) || Math.abs(delta) > 9999) {
-        return ack({ ok: false, error: 'Invalid amount.' });
-      }
-      // Read-modify-write is safe: node:sqlite is synchronous, so no other event runs in between.
-      const current = store.getOrCreateCharacter(t.campaignId, t.target);
-      const character = store.updateCharacter(t.campaignId, t.target, applyHpChange(current, delta));
-      ack({ ok: true, character });
-      broadcast(t.code);
-    });
-
-    /** Applies a change to someone's inventory (own, or any player's as DM). */
-    const changeInventory = (
-      userId: unknown,
-      ack: (res: { ok: true; character: CharacterData } | { ok: false; error: string }) => void,
-      change: (items: Item[]) => Item[],
-    ) => {
-      const t = editTarget(userId);
-      if (!t.ok) return ack(t);
-      try {
-        const current = store.getOrCreateCharacter(t.campaignId, t.target);
-        const inventory = sanitizeCharacterPatch({ inventory: change(current.inventory) }, { allowInventory: true })
-          .inventory!;
-        const character = store.updateCharacter(t.campaignId, t.target, { inventory });
-        ack({ ok: true, character });
-        broadcast(t.code);
-      } catch (e) {
-        ack({ ok: false, error: (e as Error).message });
-      }
-    };
-
-    socket.on('item:add', (input, ack) => {
-      changeInventory(input?.userId, ack, (items) => [
-        ...items,
-        sanitizeItem({ ...(typeof input?.item === 'object' ? input.item : {}), id: randomUUID() }),
-      ]);
-    });
-
-    socket.on('item:update', (input, ack) => {
-      changeInventory(input?.userId, ack, (items) => {
-        const i = items.findIndex((x) => x.id === input?.itemId);
-        if (i < 0) throw new Error('That item is gone.');
-        const next = sanitizeItem({ ...items[i], ...(typeof input?.patch === 'object' ? input.patch : {}), id: items[i]!.id });
-        return next.qty === 0 ? items.filter((_, j) => j !== i) : items.map((x, j) => (j === i ? next : x));
-      });
-    });
-
-    socket.on('item:remove', (input, ack) => {
-      changeInventory(input?.userId, ack, (items) => items.filter((x) => x.id !== input?.itemId));
     });
 
     socket.on('disconnect', leaveCurrent);

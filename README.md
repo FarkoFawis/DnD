@@ -3,8 +3,10 @@
 Digital D&D character sheets for our in-person sessions. Everyone uses their phone (Android or iOS).
 
 1. Log in with your account (made for you in advance; you choose your password the first time).
-2. The DM taps **Host**, picks tonight's campaign and gets a 5-letter code.
-3. Players tap **Join** and type the code. Their character for that campaign loads exactly as it was last session.
+2. **Characters:** make your characters. Any character can join any campaign, one session at a time.
+3. **Play → Host:** the DM picks tonight's campaign and gets a 5-letter code.
+4. **Play → Join:** players type the code, pick a character and tap **Ready** in the lobby. The DM starts the session.
+5. During the session players see their sheet; only the DM changes it (damage, healing, items).
 
 > Status: rough prototype (2024 rules). Accounts, campaigns, live sessions and a basic character sheet work: HP, AC, abilities, saves, skills, items, coins, spells, notes. The DM can change any player's sheet during a session, e.g. damage, healing, giving or taking items.
 
@@ -20,7 +22,7 @@ Digital D&D character sheets for our in-person sessions. Everyone uses their pho
 ```
 
 - **The server owns the state, not the DM's phone.** If the DM's battery dies or the browser crashes, nothing is lost. Everyone just reconnects.
-- Characters are stored **per campaign and per player**, so each friend has a separate character in each campaign.
+- Characters belong to players and keep their progress wherever they play.
 - Each phone remembers its login and current session and automatically gets back in after a reload, screen lock or dropped Wi-Fi.
 - `shared/` holds the TypeScript used by both sides: the socket event contract and the rules math (ability modifiers, proficiency bonus, ...).
 

@@ -1,11 +1,16 @@
 import { useState, type FormEvent } from 'react';
 import { ROOM_CODE_LENGTH } from '@dnd/shared';
+import type { CharacterSummary } from '@dnd/shared';
+import { CharacterLine } from './Characters.tsx';
 import type { Game } from './useGame.ts';
 
-export function Home({ game }: { game: Game }) {
+/** Play: join a session with a code, or host one of your campaigns. */
+export function Play({ game, onBack, onCharacters }: { game: Game; onBack: () => void; onCharacters: () => void }) {
   // People who run campaigns usually want to host; everyone else joins.
   const [mode, setMode] = useState<'join' | 'host'>(game.campaigns?.length ? 'host' : 'join');
   return (
+    <>
+    <button className="back" onClick={onBack}>‹ Home</button>
     <section className="card">
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={mode === 'join'} onClick={() => setMode('join')}>
@@ -15,20 +20,62 @@ export function Home({ game }: { game: Game }) {
           Host (DM)
         </button>
       </div>
-      {mode === 'join' ? <Join game={game} /> : <Host game={game} />}
+      {mode === 'join' ? <Join game={game} onCharacters={onCharacters} /> : <Host game={game} />}
     </section>
+    </>
   );
 }
 
-function Join({ game }: { game: Game }) {
+function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  /** After a valid code: pick which character joins. */
+  const [choice, setChoice] = useState<{ code: string; campaign: string; characters: CharacterSummary[] } | null>(null);
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    await game.join(code);
+    const res = await game.peek(code);
+    if (!res.ok) game.setError(res.error);
+    else if (res.rejoin) await game.join(code);
+    else setChoice({ code, campaign: res.campaign.name, characters: res.characters });
     setBusy(false);
   };
+
+  if (choice) {
+    return (
+      <>
+        <p className="muted">
+          Joining <strong>{choice.campaign}</strong>. Who are you playing tonight?
+        </p>
+        {choice.characters.length === 0 ? (
+          <p className="notice">
+            You have no free characters. Create one first (characters already in another session can't join).
+          </p>
+        ) : (
+          <ul className="list">
+            {choice.characters.map((c) => (
+              <li key={c.id}>
+                <button className="list-button" disabled={busy} onClick={async () => {
+                  setBusy(true);
+                  await game.join(choice.code, c.id);
+                  setBusy(false);
+                }}>
+                  <CharacterLine character={c} />
+                  <span className="chev">›</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="row-gap">
+          <button className="ghost" onClick={() => setChoice(null)}>Back</button>
+          <button className="ghost" onClick={onCharacters}>Characters</button>
+        </div>
+      </>
+    );
+  }
+
   return (
     <form onSubmit={submit}>
       <label>
@@ -46,7 +93,7 @@ function Join({ game }: { game: Game }) {
         />
       </label>
       <button className="primary" type="submit" disabled={busy || game.status !== 'online'}>
-        Join
+        Next
       </button>
     </form>
   );

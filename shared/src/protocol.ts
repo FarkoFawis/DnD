@@ -105,6 +105,17 @@ export const DEFAULT_CHARACTER: CharacterData = {
   notes: '',
 };
 
+// ---------- Player-owned characters ----------
+
+export interface CharacterSummary {
+  id: string;
+  data: CharacterData;
+  /** The campaign it last played in (null = never played). Any character can join any campaign. */
+  campaign: { id: string; name: string } | null;
+  /** Code of the live session the character is in right now, if any. */
+  inSession: string | null;
+}
+
 // ---------- Campaigns & live sessions (socket) ----------
 
 export interface CampaignSummary {
@@ -117,7 +128,9 @@ export interface CampaignSummary {
 
 export interface SessionPlayer {
   user: PublicUser;
+  characterId: string;
   online: boolean;
+  ready: boolean;
   character: CharacterData;
 }
 
@@ -125,59 +138,73 @@ export interface SessionState {
   code: string;
   campaign: { id: string; name: string };
   host: PublicUser & { online: boolean };
+  /** false = lobby (players ready up), true = the DM started the session. */
+  started: boolean;
   players: SessionPlayer[];
 }
 
 export type Ack<T> = ({ ok: true } & T) | { ok: false; error: string };
+type CharAck = (res: Ack<{ character: CharacterSummary }>) => void;
 
 export interface ClientToServerEvents {
+  // --- characters (outside sessions: own characters; in a started session: DM only) ---
+  'character:list': (ack: (res: Ack<{ characters: CharacterSummary[] }>) => void) => void;
+  /** New character. `data` (e.g. from the character creator) is validated like an update; inventory is allowed here. */
+  'character:create': (input: { name: string; data?: Partial<CharacterData> }, ack: CharAck) => void;
+  'character:delete': (input: { characterId: string }, ack: (res: Ack<object>) => void) => void;
+  'character:update': (input: { characterId: string; patch: Partial<CharacterData> }, ack: CharAck) => void;
+  /** Damage (negative) or heal (positive). Sent as a change so concurrent edits never overwrite each other. */
+  'character:adjustHp': (input: { characterId: string; delta: number }, ack: CharAck) => void;
+  'item:add': (
+    input: { characterId: string; item: { name: string; qty?: number; notes?: string } },
+    ack: CharAck,
+  ) => void;
+  /** Change an item's quantity/name/notes. qty 0 removes it. */
+  'item:update': (
+    input: { characterId: string; itemId: string; patch: Partial<Omit<Item, 'id'>> },
+    ack: CharAck,
+  ) => void;
+  'item:remove': (input: { characterId: string; itemId: string }, ack: CharAck) => void;
+
+  // --- campaigns & sessions ---
   'campaign:list': (ack: (res: Ack<{ campaigns: CampaignSummary[] }>) => void) => void;
   'campaign:create': (
     input: { name: string },
     ack: (res: Ack<{ campaign: CampaignSummary }>) => void,
   ) => void;
-  /** Start (or resume) the live session of a campaign you own. */
+  /** Open (or resume) the lobby of a campaign you own. */
   'session:host': (
     input: { campaignId: string },
     ack: (res: Ack<{ session: SessionState }>) => void,
   ) => void;
-  /** Join a live session by its code. Your character for that campaign is loaded. */
-  'session:join': (input: { code: string }, ack: (res: Ack<{ session: SessionState }>) => void) => void;
+  /** Look up a code before joining: which campaign, and which of your characters may join it. */
+  'session:peek': (
+    input: { code: string },
+    ack: (
+      res: Ack<{
+        campaign: { id: string; name: string };
+        /** You are the DM or already in this session: just join, no character choice needed. */
+        rejoin: boolean;
+        characters: CharacterSummary[];
+      }>,
+    ) => void,
+  ) => void;
+  /**
+   * Join with one of your characters. Without characterId it only works if you
+   * are already in that session (used to get back in after a reconnect).
+   */
+  'session:join': (
+    input: { code: string; characterId?: string },
+    ack: (res: Ack<{ session: SessionState }>) => void,
+  ) => void;
+  /** Player: ready up (or un-ready) in the lobby. */
+  'session:ready': (input: { ready: boolean }, ack: (res: Ack<object>) => void) => void;
+  /** DM: start the session. The client warns first if not everyone is ready. */
+  'session:start': (ack: (res: Ack<object>) => void) => void;
   /** Player leaves the session (their character stays saved). */
   'session:leave': (ack: (res: Ack<object>) => void) => void;
-  /** Host ends the session for everyone (all characters stay saved). */
+  /** DM ends the session for everyone (all characters stay saved). */
   'session:end': (ack: (res: Ack<object>) => void) => void;
-  /**
-   * Update a character in the current session. Saved immediately.
-   * Players edit their own; the DM may pass `userId` to edit any player's.
-   */
-  'character:update': (
-    input: { patch: Partial<CharacterData>; userId?: string },
-    ack: (res: Ack<{ character: CharacterData }>) => void,
-  ) => void;
-  /**
-   * Damage (negative) or heal (positive) a character. Sent as a change, not a
-   * new value, so a hit from the DM and a potion from the player never overwrite
-   * each other. Same permissions as 'character:update'.
-   */
-  /** Give an item (DM to a player, or a player to themself). */
-  'item:add': (
-    input: { item: { name: string; qty?: number; notes?: string }; userId?: string },
-    ack: (res: Ack<{ character: CharacterData }>) => void,
-  ) => void;
-  /** Change an item's quantity/name/notes. qty 0 removes it. */
-  'item:update': (
-    input: { itemId: string; patch: Partial<Omit<Item, 'id'>>; userId?: string },
-    ack: (res: Ack<{ character: CharacterData }>) => void,
-  ) => void;
-  'item:remove': (
-    input: { itemId: string; userId?: string },
-    ack: (res: Ack<{ character: CharacterData }>) => void,
-  ) => void;
-  'character:adjustHp': (
-    input: { delta: number; userId?: string },
-    ack: (res: Ack<{ character: CharacterData }>) => void,
-  ) => void;
 }
 
 export interface ServerToClientEvents {
@@ -192,4 +219,5 @@ export const LIMITS = {
   textFieldMaxLength: 40,
   notesMaxLength: 5000,
   listMaxLength: 200,
+  charactersPerUser: 50,
 } as const;

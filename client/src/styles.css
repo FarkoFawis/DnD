@@ -145,3 +145,27 @@ textarea { resize: vertical; }
 .hp-row button { width: 44px; }
 .dm-sheet .hp-now { font-size: 1.6rem; }
 .dm-sheet .hp-row button { width: 40px; }
+
+/* ---- home menu, characters, lobby ---- */
+.home-menu { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+.menu-button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 22px 20px; border-radius: 16px; border: 1px solid #44403c; background: var(--card); color: var(--text); font-size: 1.4rem; font-weight: 700; text-align: left; }
+.menu-button.primary { background: var(--accent); border-color: var(--accent); }
+.menu-button .small { font-weight: 400; opacity: 0.8; font-size: 0.9rem; }
+.back { background: none; border: 0; color: var(--muted); font-size: 1rem; padding: 0; margin-bottom: 8px; min-height: 36px; }
+.notice { background: #3b2f12; color: #fde68a; padding: 10px 12px; border-radius: 10px; margin: 0 0 12px; font-size: 0.9rem; }
+.notice.good { background: #12351f; color: #bbf7d0; margin-top: 12px; }
+.row-gap { display: flex; gap: 8px; }
+.row-gap .ghost { margin-top: 8px; }
+.lobby-row { display: flex; align-items: center; gap: 10px; }
+.ready-tag { font-size: 0.8rem; padding: 4px 10px; border-radius: 999px; background: #44403c; color: var(--muted); white-space: nowrap; }
+.ready-tag.yes { background: #15803d; color: white; }
+.ready-button { width: 100%; margin-top: 16px; font-size: 1.2rem; padding: 18px; }
+.ready-button.is-ready { background: #15803d; }
+.start-button { width: 100%; margin-top: 12px; font-size: 1.2rem; padding: 18px; }
+.start-button.dim { background: #57534e; }
+fieldset.sheet-body { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset.sheet-body:disabled input, fieldset.sheet-body:disabled select, fieldset.sheet-body:disabled textarea { opacity: 1; border-color: transparent; background: transparent; padding-left: 0; color: var(--text); -webkit-text-fill-color: var(--text); }
+fieldset.sheet-body:disabled .stat-value input, fieldset.sheet-body:disabled .ability input { text-align: center; padding-left: 4px; }
+fieldset.sheet-body:disabled button:disabled { opacity: 1; cursor: default; }
+fieldset.sheet-body:disabled select { appearance: none; }
+.hp-now.big { font-size: 2.4rem; text-align: center; }

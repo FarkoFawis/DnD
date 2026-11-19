@@ -14,7 +14,7 @@ import {
 } from '@dnd/shared';
 import type { Game } from './useGame.ts';
 
-/** Edits one character: the player's own, or (as DM) the player with `userId`. */
+/** Edits one character (by id). The server decides who may: owner outside sessions, DM inside. */
 export interface SheetActions {
   update: (patch: Partial<CharacterData>) => Promise<boolean>;
   adjustHp: (delta: number) => Promise<boolean>;
@@ -23,13 +23,13 @@ export interface SheetActions {
   removeItem: (itemId: string) => Promise<boolean>;
 }
 
-export function sheetActions(game: Game, userId?: string): SheetActions {
+export function sheetActions(game: Game, characterId: string): SheetActions {
   return {
-    update: (patch) => game.updateCharacter(patch, userId),
-    adjustHp: (delta) => game.adjustHp(delta, userId),
-    addItem: (item) => game.addItem(item, userId),
-    updateItem: (id, patch) => game.updateItem(id, patch, userId),
-    removeItem: (id) => game.removeItem(id, userId),
+    update: (patch) => game.updateCharacter(characterId, patch),
+    adjustHp: (delta) => game.adjustHp(characterId, delta),
+    addItem: (item) => game.addItem(characterId, item),
+    updateItem: (id, patch) => game.updateItem(characterId, id, patch),
+    removeItem: (id) => game.removeItem(characterId, id),
   };
 }
 
@@ -58,7 +58,23 @@ function useDraft(character: CharacterData) {
   return [draft, setDraft] as const;
 }
 
-export function Sheet({ character, actions, title }: { character: CharacterData; actions: SheetActions; title: ReactNode }) {
+/**
+ * The character sheet. With `readOnly` (players during a session) everything is
+ * shown but nothing can be changed; only the DM edits then.
+ */
+export function Sheet({
+  character,
+  actions,
+  title,
+  readOnly = false,
+  note,
+}: {
+  character: CharacterData;
+  actions: SheetActions;
+  title: ReactNode;
+  readOnly?: boolean;
+  note?: ReactNode;
+}) {
   const [tab, setTab] = useState<Tab>('Main');
   const [draft, setDraft] = useDraft(character);
   const stats = deriveStats(draft);
@@ -89,10 +105,12 @@ export function Sheet({ character, actions, title }: { character: CharacterData;
           </button>
         ))}
       </div>
+      {note}
+      <fieldset className="sheet-body" disabled={readOnly}>
 
       {tab === 'Main' && (
         <>
-          <HpBox character={draft} onHp={actions.adjustHp} onTemp={(v) => set('hpTemp', v)} />
+          <HpBox character={draft} onHp={actions.adjustHp} onTemp={(v) => set('hpTemp', v)} readOnly={readOnly} />
           <div className="stat-row">
             <Stat label="AC">
               <NumInput value={draft.armorClass} onChange={(v) => { const n = num(v, 0, 99); if (n !== null) set('armorClass', n); }} />
@@ -149,7 +167,7 @@ export function Sheet({ character, actions, title }: { character: CharacterData;
             ))}
           </ul>
           <h3>Skills</h3>
-          <p className="muted small">Tap to cycle: not proficient → proficient → expertise.</p>
+          {!readOnly && <p className="muted small">Tap to cycle: not proficient → proficient → expertise.</p>}
           <ul className="checks">
             {SKILL_KEYS.map((s) => (
               <ProfRow
@@ -171,9 +189,9 @@ export function Sheet({ character, actions, title }: { character: CharacterData;
         </>
       )}
 
-      {tab === 'Items' && <Items character={draft} actions={actions} onCoins={(coins) => set('coins', coins)} />}
+      {tab === 'Items' && <Items character={draft} actions={actions} onCoins={(coins) => set('coins', coins)} readOnly={readOnly} />}
 
-      {tab === 'Spells' && <Spells character={draft} stats={stats} set={set} />}
+      {tab === 'Spells' && <Spells character={draft} stats={stats} set={set} readOnly={readOnly} />}
 
       {tab === 'Notes' && (
         <label>
@@ -189,6 +207,7 @@ export function Sheet({ character, actions, title }: { character: CharacterData;
           />
         </label>
       )}
+      </fieldset>
     </section>
   );
 }
@@ -254,10 +273,12 @@ export function HpBox({
   character,
   onHp,
   onTemp,
+  readOnly = false,
 }: {
   character: CharacterData;
   onHp: (delta: number) => Promise<boolean>;
   onTemp?: (v: number) => void;
+  readOnly?: boolean;
 }) {
   const [amount, setAmount] = useState('');
   const n = Number.parseInt(amount, 10);
@@ -267,6 +288,18 @@ export function HpBox({
     void onHp(sign * n);
     setAmount('');
   };
+  if (readOnly) {
+    return (
+      <div className="hp-box">
+        <div className="hp-label">Hit points</div>
+        <div className="hp-now big">
+          {character.hpCurrent}
+          <span className="muted"> / {character.hpMax}</span>
+          {character.hpTemp > 0 && <span className="temp-badge">+{character.hpTemp} temp</span>}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="hp-box">
       <div className="hp-label">Hit points</div>
@@ -296,7 +329,17 @@ export function HpBox({
   );
 }
 
-function Items({ character, actions, onCoins }: { character: CharacterData; actions: SheetActions; onCoins: (c: CharacterData['coins']) => void }) {
+function Items({
+  character,
+  actions,
+  onCoins,
+  readOnly,
+}: {
+  character: CharacterData;
+  actions: SheetActions;
+  onCoins: (c: CharacterData['coins']) => void;
+  readOnly: boolean;
+}) {
   const [name, setName] = useState('');
   const [qty, setQty] = useState('1');
   const add = async (e: React.FormEvent) => {
@@ -330,15 +373,21 @@ function Items({ character, actions, onCoins }: { character: CharacterData; acti
                 {item.name}
                 {item.notes && <span className="muted small block">{item.notes}</span>}
               </span>
-              <button aria-label={`One less ${item.name}`} onClick={() => void actions.updateItem(item.id, { qty: item.qty - 1 })}>−</button>
-              <span className="qty">{item.qty}</span>
-              <button aria-label={`One more ${item.name}`} onClick={() => void actions.updateItem(item.id, { qty: item.qty + 1 })}>+</button>
-              <button aria-label={`Remove ${item.name}`} className="remove" onClick={() => void actions.removeItem(item.id)}>✕</button>
+              {readOnly ? (
+                <span className="qty">×{item.qty}</span>
+              ) : (
+                <>
+                  <button aria-label={`One less ${item.name}`} onClick={() => void actions.updateItem(item.id, { qty: item.qty - 1 })}>−</button>
+                  <span className="qty">{item.qty}</span>
+                  <button aria-label={`One more ${item.name}`} onClick={() => void actions.updateItem(item.id, { qty: item.qty + 1 })}>+</button>
+                  <button aria-label={`Remove ${item.name}`} className="remove" onClick={() => void actions.removeItem(item.id)}>✕</button>
+                </>
+              )}
             </li>
           ))}
         </ul>
       )}
-      <form onSubmit={add} className="inline-form">
+      {!readOnly && <form onSubmit={add} className="inline-form">
         <label>
           Add item
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Potion of Healing" maxLength={80} required />
@@ -348,7 +397,7 @@ function Items({ character, actions, onCoins }: { character: CharacterData; acti
           <input type="number" inputMode="numeric" min={1} value={qty} onChange={(e) => setQty(e.target.value)} />
         </label>
         <button className="secondary" type="submit">Add</button>
-      </form>
+      </form>}
     </>
   );
 }
@@ -357,10 +406,12 @@ function Spells({
   character,
   stats,
   set,
+  readOnly,
 }: {
   character: CharacterData;
   stats: ReturnType<typeof deriveStats>;
   set: <K extends keyof CharacterData>(key: K, value: CharacterData[K]) => void;
+  readOnly: boolean;
 }) {
   const [name, setName] = useState('');
   const [level, setLevel] = useState(0);
@@ -403,12 +454,14 @@ function Spells({
                 {sp.name}
                 <span className="muted small"> · {sp.level === 0 ? 'Cantrip' : `Level ${sp.level}`}</span>
               </span>
-              <button aria-label={`Remove ${sp.name}`} className="remove" onClick={() => set('spells', character.spells.filter((x) => x.id !== sp.id))}>✕</button>
+              {!readOnly && (
+                <button aria-label={`Remove ${sp.name}`} className="remove" onClick={() => set('spells', character.spells.filter((x) => x.id !== sp.id))}>✕</button>
+              )}
             </li>
           ))}
         </ul>
       )}
-      <form
+      {!readOnly && <form
         className="inline-form"
         onSubmit={(e) => {
           e.preventDefault();
@@ -430,7 +483,7 @@ function Spells({
           </select>
         </label>
         <button className="secondary" type="submit">Add</button>
-      </form>
+      </form>}
     </>
   );
 }

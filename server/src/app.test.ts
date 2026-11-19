@@ -72,12 +72,20 @@ function nextState(c: Client, predicate: (s: SessionState) => boolean): Promise<
   });
 }
 
-/** Faris hosts a new campaign, returns the DM socket and the session. */
+/** Faris hosts a new campaign, returns the DM socket and the session lobby. */
 async function hostCampaign(name = 'Curse of the Hollow Crown') {
   const dm = await client(await login('Faris'));
   const { campaign } = ok(await dm.emitWithAck('campaign:create', { name }));
   const { session } = ok(await dm.emitWithAck('session:host', { campaignId: campaign.id }));
   return { dm, session, campaign };
+}
+
+/** Logs a player in, creates a character, joins the session with it. */
+async function joinWithNewCharacter(username: string, code: string, characterName = `${username}'s hero`) {
+  const sock = await client(await login(username));
+  const { character } = ok(await sock.emitWithAck('character:create', { name: characterName }));
+  const { session } = ok(await sock.emitWithAck('session:join', { code, characterId: character.id }));
+  return { sock, character, session };
 }
 
 describe('accounts', () => {
@@ -102,18 +110,60 @@ describe('accounts', () => {
   });
 });
 
+describe('characters', () => {
+  it('lets players create, edit, list and delete their own characters', async () => {
+    const mira = await client(await login('Mira'));
+    const { character } = ok(await mira.emitWithAck('character:create', { name: 'Elowen' }));
+    expect(character).toMatchObject({ data: { name: 'Elowen', level: 1 }, campaign: null, inSession: null });
+    ok(await mira.emitWithAck('character:update', { characterId: character.id, patch: { className: 'Wizard' } }));
+    ok(await mira.emitWithAck('item:add', { characterId: character.id, item: { name: 'Spellbook' } }));
+    const { characters } = ok(await mira.emitWithAck('character:list'));
+    expect(characters).toHaveLength(1);
+    expect(characters[0]?.data).toMatchObject({ className: 'Wizard', inventory: [{ name: 'Spellbook' }] });
+
+    const jonas = await client(await login('Jonas'));
+    expect(await jonas.emitWithAck('character:update', { characterId: character.id, patch: { level: 5 } })).toMatchObject({ ok: false });
+    expect(await jonas.emitWithAck('character:delete', { characterId: character.id })).toMatchObject({ ok: false });
+    ok(await mira.emitWithAck('character:delete', { characterId: character.id }));
+    expect(ok(await mira.emitWithAck('character:list')).characters).toEqual([]);
+    expect(await mira.emitWithAck('character:create', { name: '  ' })).toMatchObject({ ok: false });
+    const full = ok(
+      await mira.emitWithAck('character:create', {
+        name: 'Brakka',
+        data: { className: 'Barbarian', level: 3, inventory: [{ id: 'x', name: 'Greataxe', qty: 1, notes: '' }] },
+      }),
+    );
+    expect(full.character.data).toMatchObject({ name: 'Brakka', className: 'Barbarian', level: 3, inventory: [{ name: 'Greataxe' }] });
+    expect(await mira.emitWithAck('character:create', { name: 'Bad', data: { level: 99 } })).toMatchObject({ ok: false });
+  });
+});
+
 describe('campaign sessions', () => {
-  it('lets the DM host a campaign and players join with the code', async () => {
+  it('runs the lobby: pick a character, ready up, DM starts', async () => {
     const { dm, session } = await hostCampaign();
-    expect(session.code).toMatch(/^[A-Z2-9]{5}$/);
-    expect(session.host).toMatchObject({ username: 'Faris', online: true });
+    expect(session).toMatchObject({ started: false, players: [], host: { username: 'Faris', online: true } });
 
     const mira = await client(await login('Mira'));
+    const elowen = ok(await mira.emitWithAck('character:create', { name: 'Elowen' })).character;
+    const peek = ok(await mira.emitWithAck('session:peek', { code: session.code.toLowerCase() }));
+    expect(peek).toMatchObject({ campaign: { name: 'Curse of the Hollow Crown' }, rejoin: false });
+    expect(peek.characters.map((c) => c.id)).toEqual([elowen.id]);
+    expect(await mira.emitWithAck('session:join', { code: session.code })).toMatchObject({ ok: false });
+
     const dmSeesMira = nextState(dm, (s) => s.players.length === 1);
-    const joined = ok(await mira.emitWithAck('session:join', { code: session.code.toLowerCase() }));
-    expect(joined.session.players[0]).toMatchObject({ user: { username: 'Mira' }, online: true });
-    expect(joined.session.players[0]?.character).toMatchObject({ name: 'Mira', level: 1 });
+    const joined = ok(await mira.emitWithAck('session:join', { code: session.code, characterId: elowen.id }));
+    expect(joined.session.players[0]).toMatchObject({ characterId: elowen.id, ready: false, character: { name: 'Elowen' } });
     await dmSeesMira;
+    expect(ok(await mira.emitWithAck('session:peek', { code: session.code })).rejoin).toBe(true);
+
+    const dmSeesReady = nextState(dm, (s) => s.players[0]?.ready === true);
+    ok(await mira.emitWithAck('session:ready', { ready: true }));
+    await dmSeesReady;
+
+    expect(await mira.emitWithAck('session:start')).toMatchObject({ ok: false });
+    const miraSeesStart = nextState(mira, (s) => s.started);
+    ok(await dm.emitWithAck('session:start'));
+    await miraSeesStart;
   });
 
   it('only lets owners host their campaigns and lists them', async () => {
@@ -123,40 +173,67 @@ describe('campaign sessions', () => {
     expect(ok(await mira.emitWithAck('campaign:list')).campaigns).toEqual([]);
   });
 
-  it('saves characters per campaign and loads them next session', async () => {
-    const { dm, session, campaign } = await hostCampaign('Campaign A');
-    const mira = await client(await login('Mira'));
-    ok(await mira.emitWithAck('session:join', { code: session.code }));
-    const dmSeesUpdate = nextState(dm, (s) => s.players[0]?.character.className === 'Wizard');
-    ok(await mira.emitWithAck('character:update', { patch: { name: 'Elowen', className: 'Wizard', level: 3, hpCurrent: 7 } }));
-    await dmSeesUpdate;
-    expect(await mira.emitWithAck('character:update', { patch: { level: 99 } })).toMatchObject({ ok: false });
+  it('makes sheets read-only for players in a session; the DM edits them', async () => {
+    const { dm, session } = await hostCampaign();
+    const { sock: mira, character } = await joinWithNewCharacter('Mira', session.code, 'Elowen');
+    const { sock: jonas } = await joinWithNewCharacter('Jonas', session.code);
+    ok(await dm.emitWithAck('session:start'));
+    const id = character.id;
 
-    // End of the evening.
-    const miraTold = new Promise<void>((resolve) => mira.on('session:ended', () => resolve()));
-    ok(await dm.emitWithAck('session:end'));
-    await miraTold;
+    expect(await mira.emitWithAck('character:update', { characterId: id, patch: { level: 20 } })).toMatchObject({ ok: false });
+    expect(await mira.emitWithAck('character:adjustHp', { characterId: id, delta: 5 })).toMatchObject({ ok: false });
+    expect(await mira.emitWithAck('item:add', { characterId: id, item: { name: 'Gold bar' } })).toMatchObject({ ok: false });
+    expect(await jonas.emitWithAck('character:adjustHp', { characterId: id, delta: -5 })).toMatchObject({ ok: false });
 
-    // A different campaign gives Mira a separate, fresh character.
-    const { session: other } = ok(
+    const miraSeesHit = nextState(mira, (s) => s.players[0]?.character.hpCurrent === 3);
+    ok(await dm.emitWithAck('character:adjustHp', { characterId: id, delta: -7 }));
+    await miraSeesHit;
+    const given = ok(await dm.emitWithAck('item:add', { characterId: id, item: { name: 'Potion of Healing', qty: 2 } }));
+    const potion = given.character.data.inventory[0]!;
+    expect(ok(await dm.emitWithAck('item:update', { characterId: id, itemId: potion.id, patch: { qty: 1 } })).character.data.inventory[0]?.qty).toBe(1);
+    expect(ok(await dm.emitWithAck('item:remove', { characterId: id, itemId: potion.id })).character.data.inventory).toEqual([]);
+    ok(await dm.emitWithAck('character:update', { characterId: id, patch: { level: 2 } }));
+    expect(await dm.emitWithAck('character:adjustHp', { characterId: id, delta: 1.5 })).toMatchObject({ ok: false });
+    expect(await dm.emitWithAck('character:update', { characterId: id, patch: { inventory: [] } as never })).toMatchObject({ ok: false });
+  });
+
+  it('lets characters travel between campaigns, one session at a time', async () => {
+    const { dm, session } = await hostCampaign('Campaign A');
+    const { sock: mira, character } = await joinWithNewCharacter('Mira', session.code, 'Elowen');
+    ok(await dm.emitWithAck('session:start'));
+    ok(await dm.emitWithAck('character:adjustHp', { characterId: character.id, delta: -4 }));
+
+    // Faris opens a second campaign at the same time.
+    const { session: b } = ok(
       await dm.emitWithAck('session:host', {
         campaignId: ok(await dm.emitWithAck('campaign:create', { name: 'Campaign B' })).campaign.id,
       }),
     );
-    const inB = ok(await mira.emitWithAck('session:join', { code: other.code }));
-    expect(inB.session.players[0]?.character).toMatchObject({ name: 'Mira', className: '' });
+    const mira2 = await client(await login('Mira'));
+    expect(ok(await mira2.emitWithAck('session:peek', { code: b.code })).characters).toEqual([]);
+    expect(await mira2.emitWithAck('session:join', { code: b.code, characterId: character.id })).toMatchObject({ ok: false });
 
-    // Next week, Campaign A again: a new code, and Mira's character is back.
-    const nextWeek = ok(await dm.emitWithAck('session:host', { campaignId: campaign.id }));
-    expect(nextWeek.session.code).not.toBe(session.code);
-    const back = ok(await mira.emitWithAck('session:join', { code: nextWeek.session.code }));
-    expect(back.session.players[0]?.character).toMatchObject({ name: 'Elowen', className: 'Wizard', level: 3, hpCurrent: 7 });
+    // After leaving A, Elowen can join B and brings her HP along.
+    ok(await mira.emitWithAck('session:leave'));
+    const inB = ok(await mira2.emitWithAck('session:join', { code: b.code, characterId: character.id }));
+    expect(inB.session.players[0]?.character).toMatchObject({ name: 'Elowen', hpCurrent: 6 });
+  });
+
+  it('frees characters when the DM ends the session, and they can be edited again', async () => {
+    const { dm, session } = await hostCampaign();
+    const { sock: mira, character } = await joinWithNewCharacter('Mira', session.code);
+    ok(await dm.emitWithAck('session:start'));
+    const miraTold = new Promise<void>((resolve) => mira.on('session:ended', () => resolve()));
+    ok(await dm.emitWithAck('session:end'));
+    await miraTold;
+    const list = ok(await mira.emitWithAck('character:list')).characters;
+    expect(list[0]).toMatchObject({ inSession: null, campaign: { name: 'Curse of the Hollow Crown' } });
+    ok(await mira.emitWithAck('character:update', { characterId: character.id, patch: { level: 2 } }));
   });
 
   it('keeps the session when the DM drops, and the DM gets back in', async () => {
     const { dm, session } = await hostCampaign();
-    const mira = await client(await login('Mira'));
-    ok(await mira.emitWithAck('session:join', { code: session.code }));
+    const { sock: mira } = await joinWithNewCharacter('Mira', session.code);
 
     const dmOffline = nextState(mira, (s) => !s.host.online);
     dm.disconnect();
@@ -170,17 +247,21 @@ describe('campaign sessions', () => {
   });
 
   it('survives a server restart (everything is in the database)', async () => {
-    const { session } = await hostCampaign();
+    const { dm, session } = await hostCampaign();
     const token = await login('Mira');
     const mira = await client(token);
-    ok(await mira.emitWithAck('session:join', { code: session.code }));
-    ok(await mira.emitWithAck('character:update', { patch: { hpCurrent: 4 } }));
+    const { character } = ok(await mira.emitWithAck('character:create', { name: 'Elowen' }));
+    ok(await mira.emitWithAck('session:join', { code: session.code, characterId: character.id }));
+    ok(await mira.emitWithAck('session:ready', { ready: true }));
+    ok(await dm.emitWithAck('session:start'));
+    ok(await dm.emitWithAck('character:adjustHp', { characterId: character.id, delta: -6 }));
 
     const restarted = await startApp(store);
     try {
       const again = await client(token, restarted.url);
       const res = ok(await again.emitWithAck('session:join', { code: session.code }));
-      expect(res.session.players[0]?.character.hpCurrent).toBe(4);
+      expect(res.session.started).toBe(true);
+      expect(res.session.players[0]).toMatchObject({ ready: true, character: { hpCurrent: 4 } });
       again.disconnect();
     } finally {
       await restarted.io.close();
@@ -188,72 +269,46 @@ describe('campaign sessions', () => {
   });
 
   it('lets a player leave while keeping their character', async () => {
-    const { dm, session, campaign } = await hostCampaign();
-    const mira = await client(await login('Mira'));
-    ok(await mira.emitWithAck('session:join', { code: session.code }));
-    ok(await mira.emitWithAck('character:update', { patch: { className: 'Rogue' } }));
+    const { dm, session } = await hostCampaign();
+    const { sock: mira } = await joinWithNewCharacter('Mira', session.code);
     const dmSeesLeave = nextState(dm, (s) => s.players.length === 0);
     ok(await mira.emitWithAck('session:leave'));
     await dmSeesLeave;
     expect(await dm.emitWithAck('session:leave')).toMatchObject({ ok: false });
-    const miraUser = store.listUsers().find((u) => u.username === 'Mira')!;
-    expect(store.getOrCreateCharacter(campaign.id, miraUser).className).toBe('Rogue');
-  });
-
-  it('lets the DM change a player\'s character, but not players each other\'s', async () => {
-    const { dm, session } = await hostCampaign();
-    const mira = await client(await login('Mira'));
-    const jonas = await client(await login('Jonas'));
-    const miraId = ok(await mira.emitWithAck('session:join', { code: session.code })).session.players[0]!.user.id;
-    ok(await jonas.emitWithAck('session:join', { code: session.code }));
-
-    const miraSeesHit = nextState(mira, (s) => s.players.find((p) => p.user.id === miraId)?.character.hpCurrent === 3);
-    const res = ok(await dm.emitWithAck('character:update', { userId: miraId, patch: { hpCurrent: 3 } }));
-    expect(res.character.hpCurrent).toBe(3);
-    await miraSeesHit;
-
-    // A hit from the DM and a heal from the player both count.
-    ok(await dm.emitWithAck('character:adjustHp', { userId: miraId, delta: -2 }));
-    const healed = ok(await mira.emitWithAck('character:adjustHp', { delta: 5 }));
-    expect(healed.character.hpCurrent).toBe(6);
-
-    expect(await jonas.emitWithAck('character:update', { userId: miraId, patch: { hpCurrent: 0 } })).toMatchObject({ ok: false });
-    expect(await jonas.emitWithAck('character:adjustHp', { userId: miraId, delta: -1 })).toMatchObject({ ok: false });
-    expect(await dm.emitWithAck('character:adjustHp', { userId: miraId, delta: 1.5 })).toMatchObject({ ok: false });
-    expect(await dm.emitWithAck('character:update', { patch: { hpCurrent: 0 } })).toMatchObject({ ok: false });
-    expect(await dm.emitWithAck('character:update', { userId: 'nobody', patch: { hpCurrent: 0 } })).toMatchObject({ ok: false });
-  });
-
-  it('lets the DM give and take items, and players manage their own', async () => {
-    const { dm, session } = await hostCampaign();
-    const mira = await client(await login('Mira'));
-    const jonas = await client(await login('Jonas'));
-    const miraId = ok(await mira.emitWithAck('session:join', { code: session.code })).session.players[0]!.user.id;
-    ok(await jonas.emitWithAck('session:join', { code: session.code }));
-
-    const miraSeesItem = nextState(mira, (s) => s.players[0]?.character.inventory.length === 1);
-    const given = ok(await dm.emitWithAck('item:add', { userId: miraId, item: { name: 'Potion of Healing', qty: 2 } }));
-    const potion = given.character.inventory[0]!;
-    expect(potion).toMatchObject({ name: 'Potion of Healing', qty: 2, notes: '' });
-    await miraSeesItem;
-
-    // Mira drinks one, then adds her own rope.
-    expect(ok(await mira.emitWithAck('item:update', { itemId: potion.id, patch: { qty: 1 } })).character.inventory[0]?.qty).toBe(1);
-    ok(await mira.emitWithAck('item:add', { item: { name: 'Rope' } }));
-    // Jonas can't touch Mira's stuff.
-    expect(await jonas.emitWithAck('item:remove', { userId: miraId, itemId: potion.id })).toMatchObject({ ok: false });
-    // The DM takes the potion away.
-    const after = ok(await dm.emitWithAck('item:remove', { userId: miraId, itemId: potion.id }));
-    expect(after.character.inventory.map((i) => i.name)).toEqual(['Rope']);
-    // qty 0 removes; nameless items and inventory via character:update are rejected.
-    const rope = after.character.inventory[0]!;
-    expect(ok(await mira.emitWithAck('item:update', { itemId: rope.id, patch: { qty: 0 } })).character.inventory).toEqual([]);
-    expect(await mira.emitWithAck('item:add', { item: { name: '  ' } })).toMatchObject({ ok: false });
-    expect(await mira.emitWithAck('character:update', { patch: { inventory: [] } as never })).toMatchObject({ ok: false });
+    expect(ok(await mira.emitWithAck('character:list')).characters[0]?.inSession).toBeNull();
   });
 
   it('rejects unknown codes', async () => {
     const mira = await client(await login('Mira'));
+    expect(await mira.emitWithAck('session:peek', { code: 'ZZZZZ' })).toMatchObject({ ok: false });
     expect(await mira.emitWithAck('session:join', { code: 'ZZZZZ' })).toMatchObject({ ok: false });
+  });
+});
+
+describe('migration', () => {
+  it('turns first-prototype characters into player-owned ones', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const { mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const path = join(mkdtempSync(join(tmpdir(), 'dnd-')), 'old.sqlite');
+    const old = new DatabaseSync(path);
+    old.exec(`
+      CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE campaigns (id TEXT PRIMARY KEY, name TEXT NOT NULL, owner_id TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), last_played_at TEXT);
+      CREATE TABLE characters (campaign_id TEXT NOT NULL, user_id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (campaign_id, user_id));
+      CREATE TABLE live_sessions (code TEXT PRIMARY KEY, campaign_id TEXT NOT NULL UNIQUE, started_at TEXT);
+      CREATE TABLE session_players (code TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (code, user_id));
+      INSERT INTO users (id, username) VALUES ('u1', 'Mira'), ('u2', 'Faris');
+      INSERT INTO campaigns (id, name, owner_id) VALUES ('c1', 'Old Campaign', 'u2');
+      INSERT INTO characters (campaign_id, user_id, data) VALUES ('c1', 'u1', '{"name":"Elowen","level":3}');
+      INSERT INTO live_sessions (code, campaign_id) VALUES ('ABCDE', 'c1');
+      INSERT INTO session_players (code, user_id) VALUES ('ABCDE', 'u1');
+    `);
+    old.close();
+    const migrated = new Store(path);
+    const [ch] = migrated.listCharacters('u1');
+    expect(ch).toMatchObject({ data: { name: 'Elowen', level: 3 }, campaign: { name: 'Old Campaign' }, inSession: null });
+    migrated.close();
   });
 });
