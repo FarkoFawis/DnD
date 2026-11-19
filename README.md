@@ -1,8 +1,12 @@
 # DnD Table
 
-Digital D&D character sheets for our in-person sessions. Everyone uses their phone (Android or iOS): the DM creates a room, players join it with a short code.
+Digital D&D character sheets for our in-person sessions. Everyone uses their phone (Android or iOS).
 
-> Status: skeleton. Rooms (create, join, reconnect, member list) work. Character sheets come next.
+1. Log in with your account (made for you in advance; you choose your password the first time).
+2. The DM taps **Host**, picks tonight's campaign and gets a 5-letter code.
+3. Players tap **Join** and type the code. Their character for that campaign loads exactly as it was last session.
+
+> Status: early. Accounts, campaigns, sessions and a basic character card (name, class, species, level, HP) work. The full sheet (abilities, skills, spells, equipment) comes next.
 
 ## How it works
 
@@ -16,7 +20,8 @@ Digital D&D character sheets for our in-person sessions. Everyone uses their pho
 ```
 
 - **The server owns the state, not the DM's phone.** If the DM's battery dies or the browser crashes, nothing is lost. Everyone just reconnects.
-- Each phone stores a secret token in `localStorage` and automatically resumes its seat after a reload, screen lock or dropped Wi-Fi.
+- Characters are stored **per campaign and per player**, so each friend has a separate character in each campaign.
+- Each phone remembers its login and current session and automatically gets back in after a reload, screen lock or dropped Wi-Fi.
 - `shared/` holds the TypeScript used by both sides: the socket event contract and the rules math (ability modifiers, proficiency bonus, ...).
 
 ## Repo layout
@@ -34,6 +39,7 @@ Requires **Node.js 22.13 or newer**.
 
 ```bash
 npm install
+npm run users -- add Faris Mira Jonas   # create the accounts (once)
 npm run dev
 ```
 
@@ -41,7 +47,20 @@ This starts the server on `http://localhost:3001` and the app on `http://localho
 
 ### Trying it on phones
 
-The dev server listens on your network. Put the phones on the same Wi-Fi as your computer and open `http://<your-computer-ip>:5173` (Vite prints the "Network" URL when it starts). One phone taps **I'm the DM** and creates a room; the others enter the code.
+The dev server listens on your network. Put the phones on the same Wi-Fi as your computer and open `http://<your-computer-ip>:5173` (Vite prints the "Network" URL when it starts). Log in on each phone, host a campaign on one, and join with the code on the others.
+
+## Managing accounts
+
+There is no public sign-up. Accounts are created on the server:
+
+| Command | Does |
+|---|---|
+| `npm run users -- add Mira Jonas` | Create accounts. Each person picks a password at first login. |
+| `npm run users -- list` | Show accounts and who hasn't set a password yet |
+| `npm run users -- reset-password Mira` | Forgotten password: clears it, Mira picks a new one at next login |
+| `npm run users -- remove Jonas` | Delete an account (and their characters) |
+
+Add `DB_PATH=...` in front when the database is not in the default place.
 
 ## Scripts
 
@@ -52,6 +71,7 @@ The dev server listens on your network. Put the phones on the same Wi-Fi as your
 | `npm run typecheck` | TypeScript checks for all workspaces |
 | `npm run build` | Builds the client into `client/dist` |
 | `npm start` | Production server, also serves the built client |
+| `npm run users -- ...` | Manage accounts (see above) |
 
 ## Configuration (server)
 

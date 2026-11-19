@@ -4,16 +4,21 @@ import express from 'express';
 import { Server } from 'socket.io';
 import {
   LIMITS,
+  PASSWORD_MIN_LENGTH,
   normalizeRoomCode,
+  sanitizeCharacterPatch,
   type ClientToServerEvents,
-  type JoinedPayload,
-  type RoomState,
+  type PublicUser,
   type ServerToClientEvents,
+  type SessionState,
 } from '@dnd/shared';
-import type { Store, StoredMember } from './store.ts';
+import type { Store } from './store.ts';
 
 interface SocketData {
-  member?: StoredMember;
+  user: PublicUser;
+  /** Code of the live session this socket is in, if any. */
+  code?: string;
+  isHost?: boolean;
 }
 
 export type IoServer = Server<ClientToServerEvents, ServerToClientEvents, object, SocketData>;
@@ -25,20 +30,83 @@ export interface AppOptions {
   corsOrigin?: string | string[];
 }
 
-function cleanName(value: unknown, max: number): string | null {
+function cleanText(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
-  const name = value.trim().replace(/\s+/g, ' ');
-  return name.length > 0 && name.length <= max ? name : null;
+  const text = value.trim().replace(/\s+/g, ' ');
+  return text.length > 0 && text.length <= max ? text : null;
 }
+
+const MAX_FAILED_LOGINS = 5;
+const LOCKOUT_MS = 5 * 60 * 1000;
 
 export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
   httpServer: HttpServer;
   io: IoServer;
 } {
   const app = express();
+  app.use(express.json({ limit: '32kb' }));
+
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
   });
+
+  // ---------- accounts ----------
+
+  /** username (lowercase) -> recent failed attempts, to slow down password guessing. */
+  const failedLogins = new Map<string, { count: number; until: number }>();
+
+  app.post('/api/auth/status', (req, res) => {
+    const username = cleanText(req.body?.username, LIMITS.usernameMaxLength);
+    res.json(username ? store.accountStatus(username) : { exists: false, hasPassword: false });
+  });
+
+  app.post('/api/auth/login', (req, res) => {
+    const username = cleanText(req.body?.username, LIMITS.usernameMaxLength);
+    const password = req.body?.password;
+    if (!username || typeof password !== 'string') {
+      res.status(400).json({ error: 'Enter your username and password.' });
+      return;
+    }
+    const key = username.toLowerCase();
+    const failed = failedLogins.get(key);
+    if (failed && failed.count >= MAX_FAILED_LOGINS && failed.until > Date.now()) {
+      res.status(429).json({ error: 'Too many wrong passwords. Try again in a few minutes.' });
+      return;
+    }
+    const status = store.accountStatus(username);
+    if (status.exists && !status.hasPassword && (password.length < PASSWORD_MIN_LENGTH || password.length > 200)) {
+      res.status(400).json({ error: `Choose a password with at least ${PASSWORD_MIN_LENGTH} characters.` });
+      return;
+    }
+    const result = store.login(username, password);
+    if (!result) {
+      const count = (failed && failed.until > Date.now() ? failed.count : 0) + 1;
+      failedLogins.set(key, { count, until: Date.now() + LOCKOUT_MS });
+      res.status(401).json({ error: 'Wrong username or password.' });
+      return;
+    }
+    failedLogins.delete(key);
+    res.json(result);
+  });
+
+  const bearer = (header: string | undefined) => header?.match(/^Bearer (.+)$/)?.[1];
+
+  app.get('/api/auth/me', (req, res) => {
+    const token = bearer(req.headers.authorization);
+    const user = token ? store.userForToken(token) : undefined;
+    if (!user) {
+      res.status(401).json({ error: 'Not logged in.' });
+      return;
+    }
+    res.json({ user });
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    const token = bearer(req.headers.authorization);
+    if (token) store.logout(token);
+    res.json({ ok: true });
+  });
+
   if (clientDist && existsSync(clientDist)) {
     app.use(express.static(clientDist));
     // Single-page app: unknown paths get index.html.
@@ -47,102 +115,164 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
     });
   }
 
+  // ---------- realtime ----------
+
   const httpServer = createServer(app);
   const io: IoServer = new Server(httpServer, {
     cors: corsOrigin ? { origin: corsOrigin } : undefined,
   });
   // Phones lock their screens and drop sockets often. Clients handle that by
-  // sending 'room:resume' with their saved token on every (re)connect.
+  // re-sending 'session:join' with their saved code on every (re)connect.
 
-  /** memberId -> number of open sockets (a member may have several tabs). */
-  const onlineCount = new Map<string, number>();
+  io.use((socket, next) => {
+    const token = (socket.handshake.auth as { token?: unknown })?.token;
+    const user = typeof token === 'string' ? store.userForToken(token) : undefined;
+    if (!user) return next(new Error('unauthorized'));
+    socket.data.user = user;
+    next();
+  });
 
-  const roomState = (code: string): RoomState => {
-    const room = store.getRoom(code);
+  /** "code:userId" -> number of that user's sockets in that session. */
+  const presence = new Map<string, number>();
+  const isOnline = (code: string, userId: string) => (presence.get(`${code}:${userId}`) ?? 0) > 0;
+  const roomOf = (code: string) => `session:${code}`;
+
+  const sessionState = (code: string): SessionState | undefined => {
+    const live = store.getSession(code);
+    const campaign = live && store.getCampaign(live.campaignId);
+    const host = campaign && store.getUser(campaign.ownerId);
+    if (!live || !campaign || !host) return undefined;
     return {
       code,
-      name: room?.name ?? '',
-      members: store.listMembers(code).map((m) => ({
-        id: m.id,
-        name: m.name,
-        role: m.role,
-        online: (onlineCount.get(m.id) ?? 0) > 0,
+      campaign: { id: campaign.id, name: campaign.name },
+      host: { ...host, online: isOnline(code, host.id) },
+      players: store.sessionPlayers(code).map((user) => ({
+        user,
+        online: isOnline(code, user.id),
+        character: store.getOrCreateCharacter(campaign.id, user),
       })),
     };
   };
 
-  const broadcast = (code: string) => io.to(code).emit('room:state', roomState(code));
+  const broadcast = (code: string) => {
+    const state = sessionState(code);
+    if (state) io.to(roomOf(code)).emit('session:state', state);
+  };
 
   io.on('connection', (socket) => {
-    const enter = (member: StoredMember, token: string): JoinedPayload => {
-      if (socket.data.member) leaveCurrent();
-      socket.data.member = member;
-      onlineCount.set(member.id, (onlineCount.get(member.id) ?? 0) + 1);
-      void socket.join(member.roomCode);
-      return {
-        session: { code: member.roomCode, memberId: member.id, token },
-        room: roomState(member.roomCode),
-      };
-    };
+    const user = socket.data.user;
 
     const leaveCurrent = () => {
-      const member = socket.data.member;
-      if (!member) return;
-      socket.data.member = undefined;
-      const n = (onlineCount.get(member.id) ?? 1) - 1;
-      if (n > 0) onlineCount.set(member.id, n);
-      else onlineCount.delete(member.id);
-      void socket.leave(member.roomCode);
-      broadcast(member.roomCode);
+      const code = socket.data.code;
+      if (!code) return;
+      socket.data.code = undefined;
+      socket.data.isHost = undefined;
+      const key = `${code}:${user.id}`;
+      const n = (presence.get(key) ?? 1) - 1;
+      if (n > 0) presence.set(key, n);
+      else presence.delete(key);
+      void socket.leave(roomOf(code));
+      broadcast(code);
     };
 
-    socket.on('room:create', (input, ack) => {
-      const roomName = cleanName(input?.roomName, LIMITS.roomNameMaxLength);
-      const dmName = cleanName(input?.dmName, LIMITS.nameMaxLength);
-      if (!roomName || !dmName) return ack({ ok: false, error: 'Please enter a room name and your name.' });
-      const room = store.createRoom(roomName);
-      const { member, token } = store.addMember(room.code, dmName, 'dm');
-      const payload = enter(member, token);
-      ack({ ok: true, ...payload });
-      broadcast(room.code);
-    });
-
-    socket.on('room:join', (input, ack) => {
-      const code = normalizeRoomCode(String(input?.code ?? ''));
-      const playerName = cleanName(input?.playerName, LIMITS.nameMaxLength);
-      if (!code) return ack({ ok: false, error: 'That room code does not look right.' });
-      if (!playerName) return ack({ ok: false, error: 'Please enter your name.' });
-      if (!store.getRoom(code)) return ack({ ok: false, error: 'No room with that code.' });
-      if (store.isNameTaken(code, playerName)) {
-        return ack({ ok: false, error: 'Someone in this room already uses that name.' });
+    const enter = (code: string, isHost: boolean): SessionState => {
+      if (socket.data.code !== code) {
+        leaveCurrent();
+        socket.data.code = code;
+        const key = `${code}:${user.id}`;
+        presence.set(key, (presence.get(key) ?? 0) + 1);
+        void socket.join(roomOf(code));
       }
-      const { member, token } = store.addMember(code, playerName, 'player');
-      const payload = enter(member, token);
-      ack({ ok: true, ...payload });
+      socket.data.isHost = isHost;
       broadcast(code);
+      return sessionState(code)!;
+    };
+
+    socket.on('campaign:list', (ack) => {
+      ack({ ok: true, campaigns: store.listCampaigns(user.id) });
     });
 
-    socket.on('room:resume', (input, ack) => {
-      const code = normalizeRoomCode(String(input?.code ?? ''));
-      const member =
-        code && typeof input?.memberId === 'string' && typeof input?.token === 'string'
-          ? store.authenticate(code, input.memberId, input.token)
-          : undefined;
-      if (!member) return ack({ ok: false, error: 'Your saved session is no longer valid.' });
-      const payload = enter(member, input.token);
-      ack({ ok: true, ...payload });
-      broadcast(member.roomCode);
+    socket.on('campaign:create', (input, ack) => {
+      const name = cleanText(input?.name, LIMITS.campaignNameMaxLength);
+      if (!name) return ack({ ok: false, error: 'Give the campaign a name.' });
+      const c = store.createCampaign(user.id, name);
+      ack({ ok: true, campaign: { id: c.id, name: c.name, liveCode: null, lastPlayedAt: null } });
     });
 
-    socket.on('room:leave', (ack) => {
-      const member = socket.data.member;
-      if (!member) return ack({ ok: false, error: 'You are not in a room.' });
-      if (member.role === 'dm') {
-        return ack({ ok: false, error: 'The DM cannot leave the room (closing rooms comes later).' });
+    socket.on('session:host', (input, ack) => {
+      const campaign = typeof input?.campaignId === 'string' ? store.getCampaign(input.campaignId) : undefined;
+      if (!campaign || campaign.ownerId !== user.id) {
+        return ack({ ok: false, error: 'You can only host your own campaigns.' });
       }
-      store.removeMember(member.id);
-      leaveCurrent();
+      const live = store.startSession(campaign.id);
+      ack({ ok: true, session: enter(live.code, true) });
+    });
+
+    socket.on('session:join', (input, ack) => {
+      const code = normalizeRoomCode(String(input?.code ?? ''));
+      if (!code) return ack({ ok: false, error: 'That code does not look right.' });
+      const live = store.getSession(code);
+      const campaign = live && store.getCampaign(live.campaignId);
+      if (!live || !campaign) return ack({ ok: false, error: 'No session is running with that code.' });
+      const isHost = campaign.ownerId === user.id;
+      if (!isHost) {
+        store.addSessionPlayer(code, user.id);
+        store.getOrCreateCharacter(campaign.id, user);
+      }
+      ack({ ok: true, session: enter(code, isHost) });
+    });
+
+    socket.on('session:leave', (ack) => {
+      const code = socket.data.code;
+      if (!code) return ack({ ok: false, error: 'You are not in a session.' });
+      if (socket.data.isHost) return ack({ ok: false, error: 'As the DM, end the session instead.' });
+      store.removeSessionPlayer(code, user.id);
+      // Take every tab of this user out of the session.
+      for (const s of io.sockets.sockets.values()) {
+        if (s.id !== socket.id && s.data.user?.id === user.id && s.data.code === code) {
+          s.data.code = undefined;
+          void s.leave(roomOf(code));
+          s.emit('session:ended');
+        }
+      }
+      presence.delete(`${code}:${user.id}`);
+      socket.data.code = undefined;
+      void socket.leave(roomOf(code));
+      broadcast(code);
       ack({ ok: true });
+    });
+
+    socket.on('session:end', (ack) => {
+      const code = socket.data.code;
+      if (!code || !socket.data.isHost) return ack({ ok: false, error: 'Only the DM can end the session.' });
+      store.endSession(code);
+      io.to(roomOf(code)).except(socket.id).emit('session:ended');
+      for (const s of io.sockets.sockets.values()) {
+        if (s.data.code === code) {
+          s.data.code = undefined;
+          s.data.isHost = undefined;
+        }
+      }
+      io.socketsLeave(roomOf(code));
+      for (const key of presence.keys()) if (key.startsWith(`${code}:`)) presence.delete(key);
+      ack({ ok: true });
+    });
+
+    socket.on('character:update', (input, ack) => {
+      const code = socket.data.code;
+      const live = code ? store.getSession(code) : undefined;
+      if (!code || !live || socket.data.isHost) {
+        return ack({ ok: false, error: 'Join a session as a player to edit your character.' });
+      }
+      let patch;
+      try {
+        patch = sanitizeCharacterPatch(input?.patch);
+      } catch (e) {
+        return ack({ ok: false, error: (e as Error).message });
+      }
+      const character = store.updateCharacter(live.campaignId, user, patch);
+      ack({ ok: true, character });
+      broadcast(code);
     });
 
     socket.on('disconnect', leaveCurrent);

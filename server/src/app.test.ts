@@ -1,7 +1,7 @@
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { io as connect, type Socket } from 'socket.io-client';
-import type { ClientToServerEvents, JoinedPayload, RoomState, ServerToClientEvents } from '@dnd/shared';
+import type { Ack, ClientToServerEvents, LoginResult, ServerToClientEvents, SessionState } from '@dnd/shared';
 import { createApp, type IoServer } from './app.ts';
 import { Store } from './store.ts';
 
@@ -12,12 +12,16 @@ let io: IoServer;
 let url: string;
 const clients: Client[] = [];
 
+async function startApp(s: Store) {
+  const app = createApp({ store: s });
+  await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
+  return { io: app.io, url: `http://localhost:${(app.httpServer.address() as AddressInfo).port}` };
+}
+
 beforeEach(async () => {
   store = new Store(':memory:');
-  const app = createApp({ store });
-  io = app.io;
-  await new Promise<void>((resolve) => app.httpServer.listen(0, resolve));
-  url = `http://localhost:${(app.httpServer.address() as AddressInfo).port}`;
+  for (const name of ['Faris', 'Mira', 'Jonas']) store.addUser(name);
+  ({ io, url } = await startApp(store));
 });
 
 afterEach(async () => {
@@ -26,117 +30,178 @@ afterEach(async () => {
   store.close();
 });
 
-async function client(): Promise<Client> {
-  const c: Client = connect(url, { transports: ['websocket'], forceNew: true });
+async function post(path: string, body: unknown, base = url) {
+  const res = await fetch(base + path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+async function login(username: string, password = 'secret123', base = url): Promise<string> {
+  const res = await post('/api/auth/login', { username, password }, base);
+  if (res.status !== 200) throw new Error(String(res.body.error));
+  return (res.body as unknown as LoginResult).token;
+}
+
+async function client(token: string, base = url): Promise<Client> {
+  const c: Client = connect(base, { transports: ['websocket'], forceNew: true, auth: { token } });
   clients.push(c);
-  await new Promise<void>((resolve) => c.on('connect', resolve));
+  await new Promise<void>((resolve, reject) => {
+    c.on('connect', resolve);
+    c.on('connect_error', reject);
+  });
   return c;
 }
 
-function nextState(c: Client, predicate: (s: RoomState) => boolean): Promise<RoomState> {
-  return new Promise((resolve) => {
-    const handler = (s: RoomState) => {
-      if (predicate(s)) {
-        c.off('room:state', handler);
-        resolve(s);
-      }
-    };
-    c.on('room:state', handler);
-  });
-}
-
-function ok<T>(res: { ok: true } & T | { ok: false; error: string }): T {
+function ok<T>(res: Ack<T>): T {
   if (!res.ok) throw new Error(res.error);
   return res;
 }
 
-describe('rooms', () => {
-  it('lets a DM create a room and players join it by code', async () => {
-    const dm = await client();
-    const created = ok<JoinedPayload>(
-      await dm.emitWithAck('room:create', { roomName: 'Friday Game', dmName: 'Faris' }),
-    );
-    expect(created.room.code).toMatch(/^[A-Z2-9]{5}$/);
-    expect(created.room.members).toEqual([
-      expect.objectContaining({ name: 'Faris', role: 'dm', online: true }),
-    ]);
+function nextState(c: Client, predicate: (s: SessionState) => boolean): Promise<SessionState> {
+  return new Promise((resolve) => {
+    const handler = (s: SessionState) => {
+      if (predicate(s)) {
+        c.off('session:state', handler);
+        resolve(s);
+      }
+    };
+    c.on('session:state', handler);
+  });
+}
 
-    const player = await client();
-    const dmSeesPlayer = nextState(dm, (s) => s.members.length === 2);
-    const joined = ok<JoinedPayload>(
-      await player.emitWithAck('room:join', { code: created.room.code.toLowerCase(), playerName: 'Mira' }),
-    );
-    expect(joined.room.name).toBe('Friday Game');
-    expect((await dmSeesPlayer).members.map((m) => m.name)).toEqual(['Faris', 'Mira']);
+/** Faris hosts a new campaign, returns the DM socket and the session. */
+async function hostCampaign(name = 'Curse of the Hollow Crown') {
+  const dm = await client(await login('Faris'));
+  const { campaign } = ok(await dm.emitWithAck('campaign:create', { name }));
+  const { session } = ok(await dm.emitWithAck('session:host', { campaignId: campaign.id }));
+  return { dm, session, campaign };
+}
+
+describe('accounts', () => {
+  it('lets a pre-made account choose its password on first login, then requires it', async () => {
+    expect((await post('/api/auth/status', { username: 'mira' })).body).toEqual({ exists: true, hasPassword: false });
+    expect((await post('/api/auth/login', { username: 'Mira', password: '123' })).status).toBe(400);
+    await login('Mira', 'hunter22');
+    expect((await post('/api/auth/status', { username: 'Mira' })).body).toEqual({ exists: true, hasPassword: true });
+    expect((await post('/api/auth/login', { username: 'Mira', password: 'nope-nope' })).status).toBe(401);
+    expect(await login('mira', 'hunter22')).toBeTruthy();
   });
 
-  it('rejects unknown codes and duplicate names', async () => {
-    const dm = await client();
-    const { room } = ok<JoinedPayload>(
-      await dm.emitWithAck('room:create', { roomName: 'Game', dmName: 'Faris' }),
-    );
-    const p = await client();
-    expect(await p.emitWithAck('room:join', { code: 'ZZZZZ', playerName: 'A' })).toMatchObject({ ok: false });
-    expect(await p.emitWithAck('room:join', { code: room.code, playerName: 'faris' })).toMatchObject({ ok: false });
+  it('rejects unknown users and locks out after repeated wrong passwords', async () => {
+    expect((await post('/api/auth/login', { username: 'Stranger', password: 'whatever' })).status).toBe(401);
+    await login('Jonas', 'right-one');
+    for (let i = 0; i < 5; i++) await post('/api/auth/login', { username: 'Jonas', password: 'wrong' });
+    expect((await post('/api/auth/login', { username: 'Jonas', password: 'right-one' })).status).toBe(429);
   });
 
-  it('keeps the room when the DM disconnects, and the DM can resume', async () => {
-    const dm = await client();
-    const { session, room } = ok<JoinedPayload>(
-      await dm.emitWithAck('room:create', { roomName: 'Game', dmName: 'Faris' }),
-    );
-    const player = await client();
-    ok(await player.emitWithAck('room:join', { code: room.code, playerName: 'Mira' }));
+  it('refuses sockets without a valid token', async () => {
+    await expect(client('bogus')).rejects.toThrow('unauthorized');
+  });
+});
 
-    const playerSeesDmOffline = nextState(player, (s) => s.members.some((m) => m.role === 'dm' && !m.online));
+describe('campaign sessions', () => {
+  it('lets the DM host a campaign and players join with the code', async () => {
+    const { dm, session } = await hostCampaign();
+    expect(session.code).toMatch(/^[A-Z2-9]{5}$/);
+    expect(session.host).toMatchObject({ username: 'Faris', online: true });
+
+    const mira = await client(await login('Mira'));
+    const dmSeesMira = nextState(dm, (s) => s.players.length === 1);
+    const joined = ok(await mira.emitWithAck('session:join', { code: session.code.toLowerCase() }));
+    expect(joined.session.players[0]).toMatchObject({ user: { username: 'Mira' }, online: true });
+    expect(joined.session.players[0]?.character).toMatchObject({ name: 'Mira', level: 1 });
+    await dmSeesMira;
+  });
+
+  it('only lets owners host their campaigns and lists them', async () => {
+    const { campaign } = await hostCampaign();
+    const mira = await client(await login('Mira'));
+    expect(await mira.emitWithAck('session:host', { campaignId: campaign.id })).toMatchObject({ ok: false });
+    expect(ok(await mira.emitWithAck('campaign:list')).campaigns).toEqual([]);
+  });
+
+  it('saves characters per campaign and loads them next session', async () => {
+    const { dm, session, campaign } = await hostCampaign('Campaign A');
+    const mira = await client(await login('Mira'));
+    ok(await mira.emitWithAck('session:join', { code: session.code }));
+    const dmSeesUpdate = nextState(dm, (s) => s.players[0]?.character.className === 'Wizard');
+    ok(await mira.emitWithAck('character:update', { patch: { name: 'Elowen', className: 'Wizard', level: 3, hpCurrent: 7 } }));
+    await dmSeesUpdate;
+    expect(await mira.emitWithAck('character:update', { patch: { level: 99 } })).toMatchObject({ ok: false });
+
+    // End of the evening.
+    const miraTold = new Promise<void>((resolve) => mira.on('session:ended', () => resolve()));
+    ok(await dm.emitWithAck('session:end'));
+    await miraTold;
+
+    // A different campaign gives Mira a separate, fresh character.
+    const { session: other } = ok(
+      await dm.emitWithAck('session:host', {
+        campaignId: ok(await dm.emitWithAck('campaign:create', { name: 'Campaign B' })).campaign.id,
+      }),
+    );
+    const inB = ok(await mira.emitWithAck('session:join', { code: other.code }));
+    expect(inB.session.players[0]?.character).toMatchObject({ name: 'Mira', className: '' });
+
+    // Next week, Campaign A again: a new code, and Mira's character is back.
+    const nextWeek = ok(await dm.emitWithAck('session:host', { campaignId: campaign.id }));
+    expect(nextWeek.session.code).not.toBe(session.code);
+    const back = ok(await mira.emitWithAck('session:join', { code: nextWeek.session.code }));
+    expect(back.session.players[0]?.character).toMatchObject({ name: 'Elowen', className: 'Wizard', level: 3, hpCurrent: 7 });
+  });
+
+  it('keeps the session when the DM drops, and the DM gets back in', async () => {
+    const { dm, session } = await hostCampaign();
+    const mira = await client(await login('Mira'));
+    ok(await mira.emitWithAck('session:join', { code: session.code }));
+
+    const dmOffline = nextState(mira, (s) => !s.host.online);
     dm.disconnect();
-    await playerSeesDmOffline;
+    await dmOffline;
 
-    const dm2 = await client();
-    const playerSeesDmBack = nextState(player, (s) => s.members.every((m) => m.online));
-    const resumed = ok<JoinedPayload>(await dm2.emitWithAck('room:resume', session));
-    expect(resumed.session.memberId).toBe(session.memberId);
-    await playerSeesDmBack;
+    const dm2 = await client(await login('Faris'));
+    const dmBack = nextState(mira, (s) => s.host.online);
+    const resumed = ok(await dm2.emitWithAck('session:join', { code: session.code }));
+    expect(resumed.session.players).toHaveLength(1);
+    await dmBack;
   });
 
-  it('survives a server restart (state is in the database)', async () => {
-    const dm = await client();
-    const { session } = ok<JoinedPayload>(
-      await dm.emitWithAck('room:create', { roomName: 'Game', dmName: 'Faris' }),
-    );
-    // A fresh app on the same store simulates a restarted server process.
-    const app2 = createApp({ store });
-    await new Promise<void>((resolve) => app2.httpServer.listen(0, resolve));
-    const c: Client = connect(`http://localhost:${(app2.httpServer.address() as AddressInfo).port}`, {
-      transports: ['websocket'],
-      forceNew: true,
-    });
-    clients.push(c);
-    const resumed = ok<JoinedPayload>(await c.emitWithAck('room:resume', session));
-    expect(resumed.room.members[0]).toMatchObject({ name: 'Faris', role: 'dm' });
-    c.disconnect();
-    await app2.io.close();
+  it('survives a server restart (everything is in the database)', async () => {
+    const { session } = await hostCampaign();
+    const token = await login('Mira');
+    const mira = await client(token);
+    ok(await mira.emitWithAck('session:join', { code: session.code }));
+    ok(await mira.emitWithAck('character:update', { patch: { hpCurrent: 4 } }));
+
+    const restarted = await startApp(store);
+    try {
+      const again = await client(token, restarted.url);
+      const res = ok(await again.emitWithAck('session:join', { code: session.code }));
+      expect(res.session.players[0]?.character.hpCurrent).toBe(4);
+      again.disconnect();
+    } finally {
+      await restarted.io.close();
+    }
   });
 
-  it('rejects a resume with a wrong token', async () => {
-    const dm = await client();
-    const { session } = ok<JoinedPayload>(
-      await dm.emitWithAck('room:create', { roomName: 'Game', dmName: 'Faris' }),
-    );
-    const other = await client();
-    expect(await other.emitWithAck('room:resume', { ...session, token: 'nope' })).toMatchObject({ ok: false });
-  });
-
-  it('removes a player who leaves', async () => {
-    const dm = await client();
-    const { room } = ok<JoinedPayload>(
-      await dm.emitWithAck('room:create', { roomName: 'Game', dmName: 'Faris' }),
-    );
-    const player = await client();
-    ok(await player.emitWithAck('room:join', { code: room.code, playerName: 'Mira' }));
-    const dmSeesLeave = nextState(dm, (s) => s.members.length === 1);
-    ok(await player.emitWithAck('room:leave'));
+  it('lets a player leave while keeping their character', async () => {
+    const { dm, session, campaign } = await hostCampaign();
+    const mira = await client(await login('Mira'));
+    ok(await mira.emitWithAck('session:join', { code: session.code }));
+    ok(await mira.emitWithAck('character:update', { patch: { className: 'Rogue' } }));
+    const dmSeesLeave = nextState(dm, (s) => s.players.length === 0);
+    ok(await mira.emitWithAck('session:leave'));
     await dmSeesLeave;
-    expect(await dm.emitWithAck('room:leave')).toMatchObject({ ok: false });
+    expect(await dm.emitWithAck('session:leave')).toMatchObject({ ok: false });
+    const miraUser = store.listUsers().find((u) => u.username === 'Mira')!;
+    expect(store.getOrCreateCharacter(campaign.id, miraUser).className).toBe('Rogue');
+  });
+
+  it('rejects unknown codes', async () => {
+    const mira = await client(await login('Mira'));
+    expect(await mira.emitWithAck('session:join', { code: 'ZZZZZ' })).toMatchObject({ ok: false });
   });
 });

@@ -7,33 +7,43 @@ Part 1 of this file describes **the codebase** (how it is built and how to work 
 # Part 1 — Project & architecture
 
 ## What we are building
-A mobile-first web app that replaces our paper character sheets. We play **in person** at a friend's house for a whole evening, with **phones only** (Android + iOS, no PCs). The **DM** creates a room; players join it with a short code from their phone browser (installable as a PWA).
+A mobile-first web app that replaces our paper character sheets. We play **in person** at a friend's house for a whole evening, with **phones only** (Android + iOS, no PCs).
+
+## User flow (agreed with Faris)
+1. **Login.** Accounts are **pre-made** by the admin (`npm run users -- add <names>`); there is no public sign-up. On first login each friend **chooses their own password**.
+2. **Home:** *Join a session* (type the code shown on the DM's phone) or *Host*.
+3. **Host** picks one of **their campaigns** (or creates one) and gets a 5-letter code. The DM is the campaign's owner.
+4. **Characters are saved per campaign and per player.** Joining a campaign's session loads that player's character for that campaign, exactly as it was at the end of the last session. The same friend has a separate character in each campaign.
+5. Ending a session only closes the live room; all characters stay saved.
 
 ## Architecture
 - **Monorepo** with npm workspaces:
-  - `shared/` — TypeScript used by both sides: socket event types (`protocol.ts`), room-code helpers, and pure rules functions (`rules.ts`: ability modifier, proficiency bonus, ...). **All sheet math lives here** so client and server compute the same numbers.
+  - `shared/` — TypeScript used by both sides: the socket/HTTP contract (`protocol.ts`), character validation (`character.ts`), room codes, and pure rules functions (`rules.ts`). **All sheet math lives here** so client and server compute the same numbers.
   - `server/` — Node.js + Express + Socket.IO. Owns the authoritative state and persists it to **SQLite** (`node:sqlite`, file `server/data/dnd.sqlite`, override with `DB_PATH`).
-  - `client/` — React + Vite + TypeScript PWA (`vite-plugin-pwa`). Talks to the server only over Socket.IO.
-- **The server is the source of truth, not the DM's phone.** The DM is just a client with the DM role. If the DM's phone dies, nothing is lost: the room and every sheet are in the database, and anyone can reconnect.
-- **Reconnect by token.** Joining or creating a room returns a secret `token` per member; the client stores it in `localStorage` and sends `room:resume` after reconnects or page reloads. Tokens are stored hashed (SHA-256) on the server.
-- Every server event handler validates its input and answers through a Socket.IO **ack** `{ ok: true, ... } | { ok: false, error }`. Broadcasts of room state go out as `room:state`.
+  - `client/` — React + Vite + TypeScript PWA (`vite-plugin-pwa`).
+- **Auth:** `POST /api/auth/status|login|logout`, `GET /api/auth/me`. Passwords hashed with scrypt; login returns a random token (stored SHA-256 hashed). 5 wrong passwords lock that username for 5 minutes. The socket connects with `auth: { token }` and is refused without a valid one.
+- **Data model:** `users`, `auth_tokens`, `campaigns` (owner = DM), `characters` (PK campaign + user, JSON `data` validated by `shared/character.ts`), `live_sessions` (code ↔ campaign, at most one per campaign), `session_players`.
+- **The server is the source of truth, not the DM's phone.** If the DM's phone dies, the live session, its code and every character are in the database. Each phone stores its login token and current session code in `localStorage` and re-sends `session:join` on every reconnect, so reloads, locked screens and crashes put people straight back in. A server restart loses nothing either.
+- Socket handlers validate input and answer through an **ack** `{ ok: true, ... } | { ok: false, error }`. Session state is broadcast as `session:state`.
 
 ## Commands (repo root)
 - `npm install` — install all workspaces (Node 22.13+ required for `node:sqlite`).
-- `npm run dev` — server on :3001 and client on :5173 together. The Vite dev server is exposed on the LAN (`host: true`) and proxies `/socket.io` to the server, so phones on the same Wi-Fi can open `http://<laptop-ip>:5173`.
-- `npm test` — Vitest for `shared` and `server` (server tests spin up a real Socket.IO server on a random port with an in-memory DB).
+- `npm run users -- add Faris Mira` / `list` / `reset-password Mira` / `remove Mira` — manage accounts.
+- `npm run dev` — server on :3001 and client on :5173. Vite is exposed on the LAN (`host: true`) and proxies `/socket.io` and `/api` to the server, so phones on the same Wi-Fi can open `http://<laptop-ip>:5173`.
+- `npm test` — Vitest for `shared` and `server` (server tests run a real HTTP + Socket.IO server on a random port with an in-memory DB).
 - `npm run typecheck` — `tsc --noEmit` in every workspace.
 - `npm run build` then `npm start` — production: the server serves the built client from `client/dist`.
 
 ## Conventions
 - TypeScript strict everywhere. `shared` is consumed as source (no build step); the server runs through `tsx`.
-- Add new socket events to `shared/src/protocol.ts` first, then implement server handler + client call.
+- Add new socket events to `shared/src/protocol.ts` first, then the server handler, then the client call.
+- New character fields: add to `CharacterData` + `DEFAULT_CHARACTER` and to the validator in `shared/src/character.ts`. Old saved characters are merged onto the defaults, so adding fields needs no migration.
 - Rules logic goes in `shared/src/rules.ts` with unit tests, never inline in components.
 - Store raw inputs, compute derived values (see Part 2, section 7).
 - Only bundle SRD (CC-BY-4.0) content; anything else is user-entered homebrew.
 
 ## Status
-Skeleton only: create/join/resume rooms and a live member list. Character sheets, dice, HP tracking, etc. are not built yet. The group's edition (2014 vs 2024) is not confirmed yet; default to 2024.
+Done: accounts, campaigns, hosting/joining sessions with a code, per-campaign characters with name, class, species, level and HP (current, max, temp), live party view for everyone. Not yet: ability scores, skills, spells, equipment, dice, deployment. The group's edition (2014 vs 2024) is not confirmed yet; default to 2024.
 
 ---
 
