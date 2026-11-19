@@ -51,3 +51,24 @@ export async function me(token: string): Promise<PublicUser | null> {
   if (!res.ok) throw new Error('Server unavailable');
   return ((await res.json()) as { user: PublicUser }).user;
 }
+
+// ---------- character portraits ----------
+
+/** Where a character's uploaded portrait lives. `version` is CharacterData.portrait ("" = none). */
+export const portraitUrl = (characterId: string, version: string) =>
+  version ? `/api/portraits/${characterId}?v=${encodeURIComponent(version)}` : null;
+
+async function portraitCall(characterId: string, init: RequestInit): Promise<void> {
+  const res = await fetch(`/api/characters/${characterId}/portrait`, {
+    ...init,
+    headers: { ...(init.headers as Record<string, string> | undefined), authorization: `Bearer ${savedToken() ?? ''}` },
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? (res.status === 413 ? 'That picture is too large.' : 'Could not save the picture.'));
+  }
+}
+
+export const uploadPortrait = (characterId: string, image: Blob) =>
+  portraitCall(characterId, { method: 'PUT', headers: { 'content-type': image.type }, body: image });
+export const removePortrait = (characterId: string) => portraitCall(characterId, { method: 'DELETE' });

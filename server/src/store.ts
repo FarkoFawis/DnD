@@ -95,7 +95,35 @@ export class Store {
         joined_at    TEXT NOT NULL DEFAULT (datetime('now')),
         PRIMARY KEY (code, user_id)
       );
+      -- Character portraits, kept out of the character JSON so sheets stay small.
+      CREATE TABLE IF NOT EXISTS portraits (
+        character_id TEXT PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE,
+        mime         TEXT NOT NULL,
+        data         BLOB NOT NULL,
+        updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+      );
     `);
+  }
+
+  // ---------- portraits ----------
+
+  setPortrait(characterId: string, mime: string, data: Uint8Array): void {
+    this.db
+      .prepare(
+        `INSERT INTO portraits (character_id, mime, data) VALUES (?, ?, ?)
+         ON CONFLICT(character_id) DO UPDATE SET mime = excluded.mime, data = excluded.data, updated_at = datetime('now')`,
+      )
+      .run(characterId, mime, data);
+  }
+
+  getPortrait(characterId: string): { mime: string; data: Uint8Array } | undefined {
+    return this.db.prepare('SELECT mime, data FROM portraits WHERE character_id = ?').get(characterId) as
+      | { mime: string; data: Uint8Array }
+      | undefined;
+  }
+
+  deletePortrait(characterId: string): void {
+    this.db.prepare('DELETE FROM portraits WHERE character_id = ?').run(characterId);
   }
 
   /**

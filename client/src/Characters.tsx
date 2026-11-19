@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { CharacterSummary } from '@dnd/shared';
+import { uploadPortrait } from './api.ts';
 import { CharacterCreator } from './creator/CharacterCreator.tsx';
+import { Portrait, PortraitPicker } from './Portrait.tsx';
 import { Sheet, sheetActions } from './Sheet.tsx';
 import type { Game } from './useGame.ts';
 
@@ -21,6 +23,7 @@ export function Characters({ game, onBack }: { game: Game; onBack: () => void })
           actions={sheetActions(game, open.id)}
           readOnly={open.inSession !== null}
           hpItemsLocked={!open.data.hpItemsUnlocked}
+          portrait={<PortraitPicker characterId={open.id} character={open.data} onChanged={() => void game.refreshCharacters()} />}
           note={
             open.inSession ? (
               <p className="notice">This character is in a session right now. Only the DM can change it until the session ends.</p>
@@ -47,9 +50,13 @@ export function Characters({ game, onBack }: { game: Game; onBack: () => void })
     return (
       <CharacterCreator
         onCancel={() => setCreating(false)}
-        onDone={async (data) => {
+        onDone={async (data, picture) => {
           const created = await game.createCharacter(data.name, data);
           if (!created) return false;
+          if (picture) {
+            // The character exists now; a failed upload only means no picture yet.
+            await uploadPortrait(created.id, picture).then(() => game.refreshCharacters(), () => game.setError('The character was created, but the picture could not be saved. Add it on the sheet.'));
+          }
           setCreating(false);
           setOpenId(created.id);
         }}
@@ -71,7 +78,8 @@ export function Characters({ game, onBack }: { game: Game; onBack: () => void })
             {game.characters.map((c) => (
               <li key={c.id}>
                 <button className="list-button" onClick={() => setOpenId(c.id)}>
-                  <CharacterLine character={c} />
+                  <Portrait characterId={c.id} character={c.data} className="thumb" />
+                  <span className="grow"><CharacterLine character={c} /></span>
                   {c.inSession ? <span className="badge">In session</span> : <span className="chev">›</span>}
                 </button>
               </li>

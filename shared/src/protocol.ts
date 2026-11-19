@@ -153,9 +153,19 @@ export interface CharacterData {
   concentration: Concentration | null;
   /** Death saving throws, used while at 0 HP. 3 successes = stable, 3 failures = dead. */
   deathSaves: DeathSaves;
+  /**
+   * Version stamp of the uploaded portrait ("" = none, show the default).
+   * The picture itself is at GET /api/portraits/<characterId>?v=<portrait>;
+   * upload with PUT /api/characters/<id>/portrait (image body).
+   */
+  portrait: string;
   /** Feats, features, proficiencies, languages, anything else. */
   notes: string;
 }
+
+export const PORTRAIT_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+/** Upload limit. The client shrinks pictures to about 400x600 first, far below this. */
+export const PORTRAIT_MAX_BYTES = 400_000;
 
 export const DEFAULT_CHARACTER: CharacterData = {
   name: '',
@@ -188,6 +198,7 @@ export const DEFAULT_CHARACTER: CharacterData = {
   exhaustion: 0,
   concentration: null,
   deathSaves: { successes: 0, failures: 0 },
+  portrait: '',
   notes: '',
 };
 
@@ -205,7 +216,7 @@ export interface CharacterSummary {
 /** Fields a player may only change while the DM has unlocked them (hpItemsUnlocked). */
 export const DM_LOCKED_FIELDS = ['hpCurrent', 'hpTemp', 'coins', 'inventory'] as const satisfies readonly (keyof CharacterData)[];
 /** Fields only the DM may ever change. */
-export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves'] as const satisfies readonly (keyof CharacterData)[];
+export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves', 'portrait'] as const satisfies readonly (keyof CharacterData)[];
 
 // ---------- Campaigns & live sessions (socket) ----------
 
