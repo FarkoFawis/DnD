@@ -7,7 +7,7 @@
  * by the ids below). The maximums are always computed from class, level and
  * ability scores, so a level-up or a new score changes them with no migration.
  */
-import type { CharacterData, LastAction } from './protocol.ts';
+import type { CharacterData, Concentration, LastAction } from './protocol.ts';
 import { abilityModifier, proficiencyBonus } from './rules.ts';
 
 /** How a rest refreshes something. `shortOne`: one use back on a Short Rest, all on a Long Rest. */
@@ -208,7 +208,12 @@ export const ordinal = (n: number) => ORD[n] ?? `${n}th`;
  * Spends what a use needs and returns the new `used` map plus what to show the
  * DM. Throws an Error with a friendly message when it isn't possible.
  */
-export function applyUse(c: CharacterData, req: UseRequest): { used: Record<string, number>; action: Omit<LastAction, 'at'> } {
+export function applyUse(
+  c: CharacterData,
+  req: UseRequest,
+  /** Whether the spell being cast needs concentration (from the content; the sheet doesn't store it). */
+  spellInfo: { concentration?: boolean; ref?: string } = {},
+): { used: Record<string, number>; action: Omit<LastAction, 'at'>; concentration?: Concentration } {
   const next = { ...c.used };
   if (req.kind === 'attack') {
     const name = req.name.trim().slice(0, 80);
@@ -218,14 +223,18 @@ export function applyUse(c: CharacterData, req: UseRequest): { used: Record<stri
   if (req.kind === 'spell') {
     const spell = c.spells.find((s) => s.id === req.spellId);
     if (!spell) throw new Error('That spell is not on your sheet.');
-    if (spell.level === 0) return { used: next, action: { name: spell.name, detail: 'cantrip' } };
-    if (req.ritual) return { used: next, action: { name: spell.name, detail: 'ritual' } };
+    // A new concentration spell replaces the one being held.
+    const conc = spellInfo.concentration
+      ? { concentration: { name: spell.name, ...(spell.ref ? { ref: spell.ref } : {}), saveDc: null } }
+      : {};
+    if (spell.level === 0) return { used: next, action: { name: spell.name, detail: 'cantrip' }, ...conc };
+    if (req.ritual) return { used: next, action: { name: spell.name, detail: 'ritual' }, ...conc };
     const slot = spellSlots(c).find((s) => s.id === (req.slot ?? castOptions(c, spell.level)[0]?.id));
     if (!slot) throw new Error(`No spell slots of level ${spell.level} or higher left.`);
     if (slot.level < spell.level) throw new Error(`${spell.name} needs a level ${spell.level} slot or higher.`);
     if (used(c, slot.id) >= slot.max) throw new Error(`No level ${slot.level} slots left.`);
     next[slot.id] = used(c, slot.id) + 1;
-    return { used: next, action: { name: spell.name, detail: `${ordinal(slot.level)}-level slot` } };
+    return { used: next, action: { name: spell.name, detail: `${ordinal(slot.level)}-level slot` }, ...conc };
   }
   const u = limitedUses(c).find((x) => x.id === req.useId);
   if (!u) throw new Error('That feature has no limited uses.');
@@ -241,10 +250,21 @@ export function applyUse(c: CharacterData, req: UseRequest): { used: Record<stri
 /**
  * What a rest changes. Short Rest: Pact Magic slots and short-rest features
  * come back (one use of `shortOne` features). Long Rest: everything comes back,
- * HP goes to max and temporary HP goes away (2024 rules).
+ * HP goes to max, temporary HP goes away, one Exhaustion level is removed and
+ * concentration ends (2024 rules).
  */
 export function applyRest(c: CharacterData, kind: 'short' | 'long'): Partial<CharacterData> {
-  if (kind === 'long') return { used: {}, hpCurrent: c.hpMax, hpTemp: 0 };
+  if (c.deathSaves.failures >= 3) return {}; // the dead don't rest
+  if (kind === 'long') {
+    return {
+      used: {},
+      hpCurrent: c.hpMax,
+      hpTemp: 0,
+      exhaustion: Math.max(0, c.exhaustion - 1),
+      concentration: null,
+      deathSaves: { successes: 0, failures: 0 },
+    };
+  }
   const next = { ...c.used };
   for (const s of spellSlots(c)) if (s.pact) delete next[s.id];
   for (const u of limitedUses(c)) {

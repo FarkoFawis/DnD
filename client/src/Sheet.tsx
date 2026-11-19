@@ -12,12 +12,16 @@ import {
   type Item,
   type Skill,
   spellSlots,
+  type DeathSaveResult,
+  type LevelUpChoices,
   type UseRequest,
 } from '@dnd/shared';
 import type { Content } from '@dnd/shared';
 import { Info } from './Info.tsx';
 import { AddItem, AddSpell, Features, itemEntry, spellEntry, spellGlance } from './SheetContent.tsx';
 import { useContent } from './content/useContent.ts';
+import { ConcentrationBanner, ConditionBadges, ConditionEditor, DeathSaves } from './Status.tsx';
+import { LevelUp } from './creator/LevelUp.tsx';
 import { CustomUsesEditor, RestButtons, SlotTracker, UsesList } from './Uses.tsx';
 import type { Game } from './useGame.ts';
 
@@ -31,6 +35,9 @@ export interface SheetActions {
   use: (req: UseRequest) => Promise<boolean>;
   restore: (id: string) => Promise<boolean>;
   rest: (kind: 'short' | 'long') => Promise<boolean>;
+  concentration: (action: 'end' | 'kept') => Promise<boolean>;
+  deathSave: (result: DeathSaveResult) => Promise<boolean>;
+  levelUp: (choices: LevelUpChoices) => Promise<boolean>;
 }
 
 export function sheetActions(game: Game, characterId: string): SheetActions {
@@ -43,6 +50,9 @@ export function sheetActions(game: Game, characterId: string): SheetActions {
     use: (req) => game.use(characterId, req),
     restore: (id) => game.restore(characterId, id),
     rest: (kind) => game.rest(characterId, kind),
+    concentration: (action) => game.concentration(characterId, action),
+    deathSave: (result) => game.deathSave(characterId, result),
+    levelUp: (choices) => game.levelUp(characterId, choices),
   };
 }
 
@@ -95,6 +105,7 @@ export function Sheet({
   note?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>('Main');
+  const [levelling, setLevelling] = useState(false);
   const [draft, setDraft] = useDraft(character);
   const stats = deriveStats(draft);
   const content = useContent();
@@ -147,6 +158,21 @@ export function Sheet({
       {tab === 'Main' && (
         <>
           <HpBox character={draft} onHp={actions.adjustHp} onTemp={(v) => set('hpTemp', v)} readOnly={readOnly || hpItemsLocked} />
+          <DeathSaves character={character} onRoll={readOnly ? undefined : (r) => void actions.deathSave(r)} />
+          <ConcentrationBanner character={character} content={content} onAction={readOnly ? undefined : (a) => void actions.concentration(a)} />
+          {dmUnlock ? (
+            <>
+              <h3 className="section-label">Conditions</h3>
+              <ConditionEditor
+                character={character}
+                content={content}
+                onConditions={(next) => void actions.update({ conditions: next })}
+                onExhaustion={(n) => void actions.update({ exhaustion: n })}
+              />
+            </>
+          ) : (
+            <ConditionBadges character={character} content={content} />
+          )}
           <div className="stat-row">
             <Stat label="AC">
               <NumInput value={draft.armorClass} onChange={(v) => { const n = num(v, 0, 99); if (n !== null) set('armorClass', n); }} />
@@ -168,6 +194,22 @@ export function Sheet({
             <label>Max HP<NumInput value={draft.hpMax} onChange={(v) => { const n = num(v, 1, 9999); if (n !== null) set('hpMax', n); }} /></label>
             <label>Extra initiative<NumInput value={draft.initiativeBonus} onChange={(v) => { const n = num(v, -20, 20); if (n !== null) set('initiativeBonus', n); }} /></label>
           </div>
+          {!readOnly && character.level < 20 && (
+            <button type="button" className="secondary levelup-button" onClick={() => setLevelling(true)}>
+              ⬆ Level up to {character.level + 1}
+            </button>
+          )}
+          {levelling && (
+            <LevelUp
+              character={character}
+              onCancel={() => setLevelling(false)}
+              onDone={async (choices) => {
+                const ok = await actions.levelUp(choices);
+                if (ok) setLevelling(false);
+                return ok;
+              }}
+            />
+          )}
         </>
       )}
 

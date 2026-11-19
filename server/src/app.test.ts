@@ -249,6 +249,68 @@ describe('campaign sessions', () => {
     await rested;
   });
 
+  it('handles concentration, conditions and death saves', async () => {
+    const { dm, session } = await hostCampaign();
+    const { sock: mira, character } = await joinWithNewCharacter('Mira', session.code, 'Elowen');
+    const id = character.id;
+    ok(await dm.emitWithAck('character:update', {
+      characterId: id,
+      patch: {
+        className: 'Wizard', level: 1, hpMax: 30, hpCurrent: 30,
+        spells: [{ id: 'dm', name: 'Detect Magic', level: 1, prepared: true, ref: 'detect-magic' }],
+      },
+    }));
+    ok(await dm.emitWithAck('session:start'));
+
+    const cast = ok(await mira.emitWithAck('character:use', { characterId: id, use: { kind: 'spell', spellId: 'dm' } }));
+    expect(cast.character.data.concentration).toEqual({ name: 'Detect Magic', ref: 'detect-magic', saveDc: null });
+    const hit = ok(await dm.emitWithAck('character:adjustHp', { characterId: id, delta: -24 }));
+    expect(hit.character.data.concentration?.saveDc).toBe(12);
+    const kept = ok(await mira.emitWithAck('character:concentration', { characterId: id, action: 'kept' }));
+    expect(kept.character.data.concentration?.saveDc).toBeNull();
+
+    // Conditions are the DM's; an incapacitating one ends concentration.
+    expect(await mira.emitWithAck('character:update', { characterId: id, patch: { conditions: [] } })).toMatchObject({ ok: false });
+    const stunned = ok(await dm.emitWithAck('character:update', { characterId: id, patch: { conditions: ['stunned'] } }));
+    expect(stunned.character.data).toMatchObject({ conditions: ['stunned'], concentration: null });
+
+    // Down to 0: the player records death saves, the DM sees them.
+    expect(await mira.emitWithAck('character:deathSave', { characterId: id, result: 'success' })).toMatchObject({ ok: false });
+    ok(await dm.emitWithAck('character:adjustHp', { characterId: id, delta: -6 }));
+    const dmSees = nextState(dm, (s) => s.players[0]?.character.deathSaves.failures === 2);
+    ok(await mira.emitWithAck('character:deathSave', { characterId: id, result: 'nat1' }));
+    await dmSees;
+    const up = ok(await mira.emitWithAck('character:deathSave', { characterId: id, result: 'nat20' }));
+    expect(up.character.data).toMatchObject({ hpCurrent: 1, deathSaves: { successes: 0, failures: 0 } });
+  });
+
+  it('levels a character up through the wizard choices', async () => {
+    const mira = await client(await login('Mira'));
+    const { character } = ok(await mira.emitWithAck('character:create', {
+      name: 'Bram',
+      data: { className: 'Fighter', level: 2, hpMax: 20 },
+    }));
+    expect(await mira.emitWithAck('character:levelUp', { characterId: character.id, choices: {} })).toMatchObject({
+      ok: false,
+      error: 'Pick a subclass.',
+    });
+    const res = ok(await mira.emitWithAck('character:levelUp', {
+      characterId: character.id,
+      choices: { hpRoll: 9, subclassId: 'champion' },
+    }));
+    expect(res.character.data).toMatchObject({ level: 3, subclass: 'Champion', hpMax: 29 });
+
+    // In a session only the DM levels characters up.
+    const { dm, session } = await hostCampaign();
+    ok(await mira.emitWithAck('session:join', { code: session.code, characterId: character.id }));
+    const choices = { featId: 'ability-score-improvement', asi: { str: 2 } };
+    expect(await mira.emitWithAck('character:levelUp', { characterId: character.id, choices })).toMatchObject({ ok: false });
+    expect(ok(await dm.emitWithAck('character:levelUp', { characterId: character.id, choices })).character.data).toMatchObject({
+      level: 4,
+      abilities: { str: 12 },
+    });
+  });
+
   it('lets characters travel between campaigns, one session at a time', async () => {
     const { dm, session } = await hostCampaign('Campaign A');
     const { sock: mira, character } = await joinWithNewCharacter('Mira', session.code, 'Elowen');

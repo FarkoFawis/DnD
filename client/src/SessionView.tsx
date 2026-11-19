@@ -4,6 +4,7 @@ import type { SessionPlayer, SessionState } from '@dnd/shared';
 import { ClassicSheet } from './ClassicSheet.tsx';
 import { Sheet, sheetActions } from './Sheet.tsx';
 import type { Game } from './useGame.ts';
+import { StatusChips } from './Status.tsx';
 import { RestButtons } from './Uses.tsx';
 
 export function SessionView({ game, session, myId }: { game: Game; session: SessionState; myId: string }) {
@@ -253,6 +254,7 @@ function PartySummary({ player, isMe }: { player: SessionPlayer; isMe: boolean }
         <span className="muted small block">
           {[c.species, c.className, `Lv ${c.level}`].filter(Boolean).join(' · ')} · AC {c.armorClass} · {player.user.username}
         </span>
+        <StatusChips character={c} />
         <span className="hpbar" aria-hidden>
           <span style={{ width: `${pct}%` }} className={pct <= 25 ? 'low' : ''} />
         </span>

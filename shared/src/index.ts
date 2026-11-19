@@ -5,3 +5,5 @@ export * from './rules.ts';
 export * from './content/index.ts';
 export * from './creation.ts';
 export * from './resources.ts';
+export * from './status.ts';
+export * from './levelup.ts';

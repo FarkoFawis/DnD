@@ -1,5 +1,5 @@
 import type { Content } from './index.ts';
-import type { BackgroundDef, ClassDef, FeatDef, ItemDef, SpeciesDef, SpellDef, SubclassDef } from './types.ts';
+import type { BackgroundDef, ClassDef, ConditionDef, FeatDef, ItemDef, SpeciesDef, SpellDef, SubclassDef } from './types.ts';
 import { ABILITY_NAMES, SKILLS } from '../rules.ts';
 
 /** What the long-press / hover popup shows. `body` uses **bold** and newlines. */
@@ -41,6 +41,10 @@ export function itemInfo(i: ItemDef): InfoEntry {
   if (i.cost) facts.push(['Cost', i.cost]);
   if (i.weight) facts.push(['Weight', `${i.weight} lb.`]);
   return { title: i.name, subtitle: i.category, facts, body: i.description };
+}
+
+export function conditionInfo(c: ConditionDef): InfoEntry {
+  return { title: c.name, subtitle: 'Condition', body: c.description };
 }
 
 export function featInfo(f: FeatDef): InfoEntry {
