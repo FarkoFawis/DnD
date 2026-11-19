@@ -11,16 +11,33 @@ import {
   type CharacterData,
   type Item,
   type Skill,
+  spellSlots,
+  type DeathSaveResult,
+  type LevelUpChoices,
+  type UseRequest,
 } from '@dnd/shared';
+import type { Content } from '@dnd/shared';
+import { Info } from './Info.tsx';
+import { AddItem, AddSpell, Features, itemEntry, spellEntry, spellGlance } from './SheetContent.tsx';
+import { useContent } from './content/useContent.ts';
+import { ConcentrationBanner, ConditionBadges, ConditionEditor, DeathSaves } from './Status.tsx';
+import { LevelUp } from './creator/LevelUp.tsx';
+import { CustomUsesEditor, RestButtons, SlotTracker, UsesList } from './Uses.tsx';
 import type { Game } from './useGame.ts';
 
 /** Edits one character (by id). The server decides who may: owner outside sessions, DM inside. */
 export interface SheetActions {
   update: (patch: Partial<CharacterData>) => Promise<boolean>;
   adjustHp: (delta: number) => Promise<boolean>;
-  addItem: (item: { name: string; qty?: number; notes?: string }) => Promise<boolean>;
+  addItem: (item: { name: string; qty?: number; notes?: string; ref?: string }) => Promise<boolean>;
   updateItem: (itemId: string, patch: Partial<Omit<Item, 'id'>>) => Promise<boolean>;
   removeItem: (itemId: string) => Promise<boolean>;
+  use: (req: UseRequest) => Promise<boolean>;
+  restore: (id: string) => Promise<boolean>;
+  rest: (kind: 'short' | 'long') => Promise<boolean>;
+  concentration: (action: 'end' | 'kept') => Promise<boolean>;
+  deathSave: (result: DeathSaveResult) => Promise<boolean>;
+  levelUp: (choices: LevelUpChoices) => Promise<boolean>;
 }
 
 export function sheetActions(game: Game, characterId: string): SheetActions {
@@ -30,10 +47,16 @@ export function sheetActions(game: Game, characterId: string): SheetActions {
     addItem: (item) => game.addItem(characterId, item),
     updateItem: (id, patch) => game.updateItem(characterId, id, patch),
     removeItem: (id) => game.removeItem(characterId, id),
+    use: (req) => game.use(characterId, req),
+    restore: (id) => game.restore(characterId, id),
+    rest: (kind) => game.rest(characterId, kind),
+    concentration: (action) => game.concentration(characterId, action),
+    deathSave: (result) => game.deathSave(characterId, result),
+    levelUp: (choices) => game.levelUp(characterId, choices),
   };
 }
 
-const TABS = ['Main', 'Abilities', 'Items', 'Spells', 'Notes'] as const;
+const TABS = ['Main', 'Abilities', 'Items', 'Spells', 'Features'] as const;
 type Tab = (typeof TABS)[number];
 
 /**
@@ -67,17 +90,28 @@ export function Sheet({
   actions,
   title,
   readOnly = false,
+  hpItemsLocked = false,
+  dmUnlock = false,
   note,
+  portrait,
 }: {
   character: CharacterData;
   actions: SheetActions;
   title: ReactNode;
   readOnly?: boolean;
+  /** Owner view: HP, items and coins are the DM's unless they unlocked them. */
+  hpItemsLocked?: boolean;
+  /** DM view: show the switch that lets the player change their own HP and items. */
+  dmUnlock?: boolean;
   note?: ReactNode;
+  /** Portrait (with its upload buttons for the owner), shown on the Main tab. */
+  portrait?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>('Main');
+  const [levelling, setLevelling] = useState(false);
   const [draft, setDraft] = useDraft(character);
   const stats = deriveStats(draft);
+  const content = useContent();
 
   /** Set + save immediately (toggles, numbers, selects). */
   const set = <K extends keyof CharacterData>(key: K, value: CharacterData[K]) => {
@@ -106,11 +140,43 @@ export function Sheet({
         ))}
       </div>
       {note}
+      {dmUnlock && (
+        <label className="unlock-switch">
+          <input
+            type="checkbox"
+            checked={draft.hpItemsUnlocked}
+            onChange={(e) => set('hpItemsUnlocked', e.target.checked)}
+          />
+          <span className="grow">
+            Player may change their own HP &amp; items
+            <span className="muted small block">Off: only you (the DM) can.</span>
+          </span>
+        </label>
+      )}
+      {hpItemsLocked && !readOnly && (tab === 'Main' || tab === 'Items') && (
+        <p className="notice">Your DM manages your HP, items and coins. Ask them to unlock it if you need to change them.</p>
+      )}
+      {tab === 'Main' && portrait}
       <fieldset className="sheet-body" disabled={readOnly}>
 
       {tab === 'Main' && (
         <>
-          <HpBox character={draft} onHp={actions.adjustHp} onTemp={(v) => set('hpTemp', v)} readOnly={readOnly} />
+          <HpBox character={draft} onHp={actions.adjustHp} onTemp={(v) => set('hpTemp', v)} readOnly={readOnly || hpItemsLocked} />
+          <DeathSaves character={character} onRoll={readOnly ? undefined : (r) => void actions.deathSave(r)} />
+          <ConcentrationBanner character={character} content={content} onAction={readOnly ? undefined : (a) => void actions.concentration(a)} />
+          {dmUnlock ? (
+            <>
+              <h3 className="section-label">Conditions</h3>
+              <ConditionEditor
+                character={character}
+                content={content}
+                onConditions={(next) => void actions.update({ conditions: next })}
+                onExhaustion={(n) => void actions.update({ exhaustion: n })}
+              />
+            </>
+          ) : (
+            <ConditionBadges character={character} content={content} />
+          )}
           <div className="stat-row">
             <Stat label="AC">
               <NumInput value={draft.armorClass} onChange={(v) => { const n = num(v, 0, 99); if (n !== null) set('armorClass', n); }} />
@@ -132,6 +198,22 @@ export function Sheet({
             <label>Max HP<NumInput value={draft.hpMax} onChange={(v) => { const n = num(v, 1, 9999); if (n !== null) set('hpMax', n); }} /></label>
             <label>Extra initiative<NumInput value={draft.initiativeBonus} onChange={(v) => { const n = num(v, -20, 20); if (n !== null) set('initiativeBonus', n); }} /></label>
           </div>
+          {!readOnly && character.level < 20 && (
+            <button type="button" className="secondary levelup-button" onClick={() => setLevelling(true)}>
+              ⬆ Level up to {character.level + 1}
+            </button>
+          )}
+          {levelling && (
+            <LevelUp
+              character={character}
+              onCancel={() => setLevelling(false)}
+              onDone={async (choices) => {
+                const ok = await actions.levelUp(choices);
+                if (ok) setLevelling(false);
+                return ok;
+              }}
+            />
+          )}
         </>
       )}
 
@@ -189,13 +271,42 @@ export function Sheet({
         </>
       )}
 
-      {tab === 'Items' && <Items character={draft} actions={actions} onCoins={(coins) => set('coins', coins)} readOnly={readOnly} />}
+      {tab === 'Items' && (
+        <fieldset className="sheet-body" disabled={hpItemsLocked}>
+          <Items character={draft} actions={actions} onCoins={(coins) => set('coins', coins)} readOnly={readOnly || hpItemsLocked} content={content} />
+        </fieldset>
+      )}
 
-      {tab === 'Spells' && <Spells character={draft} stats={stats} set={set} readOnly={readOnly} />}
+      {tab === 'Spells' && (
+        <>
+          <Spells character={draft} stats={stats} set={set} readOnly={readOnly} content={content} />
+          {spellSlots(character).length > 0 && (
+            <>
+              <h3 className="section-label">Spell slots</h3>
+              <SlotTracker character={character} onRestore={readOnly ? undefined : (id) => void actions.restore(id)} />
+            </>
+          )}
+        </>
+      )}
 
-      {tab === 'Notes' && (
+      {tab === 'Features' && (
+        <>
+          <h3 className="section-label">Limited uses</h3>
+          <UsesList
+            character={character}
+            content={content}
+            onUse={readOnly ? undefined : actions.use}
+            onRestore={readOnly ? undefined : (id) => void actions.restore(id)}
+          />
+          <CustomUsesEditor list={draft.customResources} readOnly={readOnly} onChange={(l) => set('customResources', l)} />
+          {!readOnly && <RestButtons who={character.name || 'this character'} onRest={(k) => void actions.rest(k)} />}
+          <Features character={draft} content={content} readOnly={readOnly} onChange={(f) => set('features', f)} />
+        </>
+      )}
+
+      {tab === 'Features' && (
         <label>
-          Feats, features, proficiencies, languages…
+          Notes: proficiencies, languages, anything else
           <textarea
             rows={12}
             maxLength={5000}
@@ -329,27 +440,19 @@ export function HpBox({
   );
 }
 
-function Items({
+export function Items({
   character,
   actions,
   onCoins,
   readOnly,
+  content,
 }: {
   character: CharacterData;
   actions: SheetActions;
   onCoins: (c: CharacterData['coins']) => void;
   readOnly: boolean;
+  content: Content | null;
 }) {
-  const [name, setName] = useState('');
-  const [qty, setQty] = useState('1');
-  const add = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = Number.parseInt(qty, 10);
-    if (await actions.addItem({ name, qty: Number.isInteger(q) && q > 0 ? q : 1 })) {
-      setName('');
-      setQty('1');
-    }
-  };
   return (
     <>
       <div className="coins">
@@ -369,10 +472,10 @@ function Items({
         <ul className="items">
           {character.inventory.map((item) => (
             <li key={item.id}>
-              <span className="grow">
-                {item.name}
+              <Info entry={itemEntry(content, item)} className="grow" tapToOpen>
+                <span className="block">{item.name}</span>
                 {item.notes && <span className="muted small block">{item.notes}</span>}
-              </span>
+              </Info>
               {readOnly ? (
                 <span className="qty">×{item.qty}</span>
               ) : (
@@ -387,17 +490,8 @@ function Items({
           ))}
         </ul>
       )}
-      {!readOnly && <form onSubmit={add} className="inline-form">
-        <label>
-          Add item
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Potion of Healing" maxLength={80} required />
-        </label>
-        <label className="qty-input">
-          Qty
-          <input type="number" inputMode="numeric" min={1} value={qty} onChange={(e) => setQty(e.target.value)} />
-        </label>
-        <button className="secondary" type="submit">Add</button>
-      </form>}
+      {character.inventory.length > 0 && <p className="muted small">Tap an item to read it.</p>}
+      {!readOnly && <AddItem content={content} onAdd={actions.addItem} />}
     </>
   );
 }
@@ -407,14 +501,14 @@ function Spells({
   stats,
   set,
   readOnly,
+  content,
 }: {
   character: CharacterData;
   stats: ReturnType<typeof deriveStats>;
   set: <K extends keyof CharacterData>(key: K, value: CharacterData[K]) => void;
   readOnly: boolean;
+  content: Content | null;
 }) {
-  const [name, setName] = useState('');
-  const [level, setLevel] = useState(0);
   const spells = [...character.spells].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
   return (
     <>
@@ -450,10 +544,13 @@ function Spells({
               >
                 {sp.prepared ? '●' : '○'}
               </button>
-              <span className="grow">
-                {sp.name}
-                <span className="muted small"> · {sp.level === 0 ? 'Cantrip' : `Level ${sp.level}`}</span>
-              </span>
+              <Info entry={spellEntry(content, sp)} className="grow" tapToOpen>
+                <span className="block">
+                  {sp.name}
+                  <span className="muted small"> · {sp.level === 0 ? 'Cantrip' : `Level ${sp.level}`}</span>
+                </span>
+                {spellGlance(content, sp) && <span className="muted small block">{spellGlance(content, sp)}</span>}
+              </Info>
               {!readOnly && (
                 <button aria-label={`Remove ${sp.name}`} className="remove" onClick={() => set('spells', character.spells.filter((x) => x.id !== sp.id))}>✕</button>
               )}
@@ -461,38 +558,10 @@ function Spells({
           ))}
         </ul>
       )}
-      {!readOnly && <form
-        className="inline-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!name.trim()) return;
-          set('spells', [...character.spells, { id: newId(), name: name.trim(), level, prepared: true }]);
-          setName('');
-        }}
-      >
-        <label>
-          Add spell
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Magic Missile" maxLength={80} required />
-        </label>
-        <label className="qty-input">
-          Level
-          <select value={level} onChange={(e) => setLevel(Number(e.target.value))}>
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => (
-              <option key={l} value={l}>{l === 0 ? 'C' : l}</option>
-            ))}
-          </select>
-        </label>
-        <button className="secondary" type="submit">Add</button>
-      </form>}
+      {spells.length > 0 && <p className="muted small">Tap a spell to read what it does.</p>}
+      {!readOnly && <AddSpell content={content} character={character} onAdd={(sp) => set('spells', [...character.spells, sp])} />}
     </>
   );
 }
 
 export type { Skill };
-
-/** crypto.randomUUID only exists on HTTPS/localhost; phones on the LAN dev server use plain http. */
-function newId(): string {
-  return typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}

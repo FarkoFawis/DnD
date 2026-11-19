@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Ack, CampaignSummary, CharacterData, CharacterSummary, Item, SessionState } from '@dnd/shared';
+import type { Ack, CampaignSummary, CharacterData, CharacterSummary, Item, DeathSaveResult, LevelUpChoices, SessionState, UseRequest } from '@dnd/shared';
 import { saveCode, savedCode } from './api.ts';
 import { createSocket, type AppSocket } from './socket.ts';
 
@@ -129,12 +129,32 @@ export function useGame(token: string, onUnauthorized: () => void) {
     /** Damage (negative) or heal (positive). */
     adjustHp: (characterId: string, delta: number) =>
       charCall((s, done) => s.emit('character:adjustHp', { characterId, delta }, done)),
-    addItem: (characterId: string, item: { name: string; qty?: number; notes?: string }) =>
+    addItem: (characterId: string, item: { name: string; qty?: number; notes?: string; ref?: string }) =>
       charCall((s, done) => s.emit('item:add', { characterId, item }, done)),
     updateItem: (characterId: string, itemId: string, patch: Partial<Omit<Item, 'id'>>) =>
       charCall((s, done) => s.emit('item:update', { characterId, itemId, patch }, done)),
     removeItem: (characterId: string, itemId: string) =>
       charCall((s, done) => s.emit('item:remove', { characterId, itemId }, done)),
+    /** Cast a spell, use a limited feature or attack; spends a slot or use. */
+    use: (characterId: string, use: UseRequest) =>
+      charCall((s, done) => s.emit('character:use', { characterId, use }, done)),
+    concentration: (characterId: string, action: 'end' | 'kept') =>
+      charCall((s, done) => s.emit('character:concentration', { characterId, action }, done)),
+    deathSave: (characterId: string, result: DeathSaveResult) =>
+      charCall((s, done) => s.emit('character:deathSave', { characterId, result }, done)),
+    levelUp: (characterId: string, choices: LevelUpChoices) =>
+      charCall((s, done) => s.emit('character:levelUp', { characterId, choices }, done)),
+    /** Give back one spent slot or use. */
+    restore: (characterId: string, id: string) =>
+      charCall((s, done) => s.emit('character:restore', { characterId, id }, done)),
+    rest: (characterId: string, kind: 'short' | 'long') =>
+      charCall((s, done) => s.emit('character:rest', { characterId, kind }, done)),
+    /** DM: the whole party rests. */
+    partyRest: async (kind: 'short' | 'long') => {
+      const res = await call<object>((s, done) => s.emit('session:rest', { kind }, done));
+      if (!res.ok) setError(res.error);
+      return res.ok;
+    },
 
     characters,
     refreshCharacters,

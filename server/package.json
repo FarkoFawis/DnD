@@ -7,6 +7,7 @@
     "dev": "tsx watch --disable-warning=ExperimentalWarning src/index.ts",
     "start": "tsx --disable-warning=ExperimentalWarning src/index.ts",
     "users": "tsx --disable-warning=ExperimentalWarning src/users.ts",
+    "content": "tsx src/contentCli.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { StatusPill } from './StatusPill.tsx';
 import type { SessionPlayer, SessionState } from '@dnd/shared';
-import { Sheet, sheetActions } from './Sheet.tsx';
+import { ClassicSheet } from './ClassicSheet.tsx';
+import { sheetActions } from './Sheet.tsx';
 import type { Game } from './useGame.ts';
+import { DmParty, PartyPanel } from './PartyGrid.tsx';
+import { Portrait } from './Portrait.tsx';
 
 export function SessionView({ game, session, myId }: { game: Game; session: SessionState; myId: string }) {
   const isHost = session.host.id === myId;
@@ -116,60 +119,23 @@ function Lobby({ game, session, isHost, me, myId }: ViewProps) {
 }
 
 function InSession({ game, session, isHost, me, myId }: ViewProps) {
-  /** DM: the player whose sheet is open. */
-  const [openId, setOpenId] = useState<string | null>(null);
   return (
     <>
       {me && (
-        <Sheet
+        <ClassicSheet
           key={me.characterId}
-          title={me.character.name}
           character={me.character}
           actions={sheetActions(game, me.characterId)}
-          readOnly
+          playerName={me.user.username}
+          portrait={<Portrait characterId={me.characterId} character={me.character} />}
         />
       )}
 
-      <section className="card">
-        <h2 className="card-title">Party</h2>
-        {isHost && session.players.length > 0 && (
-          <p className="muted small mb">Tap a player to open their sheet: change HP, give or take items, edit anything.</p>
-        )}
-        {session.players.length === 0 ? (
-          <p className="muted">No players in this session.</p>
-        ) : (
-          <ul className="members">
-            {session.players.map((p) => (
-              <li key={p.user.id} className={`party-row ${p.online ? '' : 'away'}`}>
-                {isHost ? (
-                  <button
-                    className="row-button"
-                    aria-expanded={openId === p.user.id}
-                    onClick={() => setOpenId(openId === p.user.id ? null : p.user.id)}
-                  >
-                    <PartySummary player={p} isMe={false} />
-                  </button>
-                ) : (
-                  <div className="row-static">
-                    <PartySummary player={p} isMe={p.user.id === myId} />
-                  </div>
-                )}
-                {isHost && openId === p.user.id && (
-                  <div className="dm-sheet">
-                    <Sheet
-                      key={p.characterId}
-                      title={`${p.character.name}'s sheet`}
-                      character={p.character}
-                      actions={sheetActions(game, p.characterId)}
-                    />
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        {!isHost && <LeaveOrEnd game={game} isHost={false} />}
-      </section>
+      {isHost ? (
+        <DmParty game={game} session={session} myId={myId} />
+      ) : (
+        <PartyPanel session={session} myId={myId} footer={<LeaveOrEnd game={game} isHost={false} />} />
+      )}
     </>
   );
 }
@@ -227,29 +193,5 @@ function LeaveOrEnd({ game, isHost }: { game: Game; isHost: boolean }) {
     <button className="ghost" onClick={() => void game.leave()}>
       Leave session
     </button>
-  );
-}
-
-function PartySummary({ player, isMe }: { player: SessionPlayer; isMe: boolean }) {
-  const c = player.character;
-  const pct = Math.max(0, Math.min(100, (c.hpCurrent / c.hpMax) * 100));
-  return (
-    <>
-      <span className={`dot ${player.online ? 'on' : 'off'}`} />
-      <span className="grow">
-        <strong>{c.name || player.user.username}</strong>
-        {isMe && <span className="muted small"> (you)</span>}
-        <span className="muted small block">
-          {[c.species, c.className, `Lv ${c.level}`].filter(Boolean).join(' · ')} · AC {c.armorClass} · {player.user.username}
-        </span>
-        <span className="hpbar" aria-hidden>
-          <span style={{ width: `${pct}%` }} className={pct <= 25 ? 'low' : ''} />
-        </span>
-      </span>
-      <span className="hp-text">
-        {c.hpCurrent}/{c.hpMax}
-        {c.hpTemp > 0 && <span className="muted small"> +{c.hpTemp}</span>}
-      </span>
-    </>
   );
 }

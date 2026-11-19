@@ -4,10 +4,25 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import express from 'express';
 import { Server } from 'socket.io';
 import {
+  DM_LOCKED_FIELDS,
+  DM_ONLY_FIELDS,
   LIMITS,
   PASSWORD_MIN_LENGTH,
   normalizeRoomCode,
-  applyHpChange,
+  Content,
+  afterConditionsSet,
+  afterHpSet,
+  applyDamageOrHealing,
+  applyDeathSave,
+  applyLevelUp,
+  DEATH_SAVE_LABEL,
+  type DeathSaveResult,
+  type LevelUpChoices,
+  PORTRAIT_MAX_BYTES,
+  PORTRAIT_TYPES,
+  applyRest,
+  applyUse,
+  type UseRequest,
   sanitizeCharacterPatch,
   sanitizeItem,
   type CharacterData,
@@ -18,6 +33,8 @@ import {
   type ServerToClientEvents,
   type SessionState,
 } from '@dnd/shared';
+import { SRD } from '@dnd/shared/srd';
+import { loadContentPacks } from './content.ts';
 import type { Store } from './store.ts';
 
 interface SocketData {
@@ -34,6 +51,26 @@ export interface AppOptions {
   /** Folder with the built client to serve in production. */
   clientDist?: string;
   corsOrigin?: string | string[];
+  /** Folder with extra content packs (homebrew / private book data). */
+  contentDir?: string;
+}
+
+/** Brings untrusted level-up choices into shape; applyLevelUp() checks the values. */
+function cleanLevelUp(v: unknown): LevelUpChoices {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  const s = (x: unknown, max: number) => (typeof x === 'string' ? x.slice(0, max) : '');
+  const asiIn = (typeof o.asi === 'object' && o.asi !== null ? o.asi : {}) as Record<string, unknown>;
+  const asi: LevelUpChoices['asi'] = {};
+  for (const a of ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const) if (typeof asiIn[a] === 'number') asi[a] = asiIn[a];
+  return {
+    hpRoll: typeof o.hpRoll === 'number' ? o.hpRoll : null,
+    subclassId: s(o.subclassId, 80),
+    customSubclass: s(o.customSubclass, LIMITS.textFieldMaxLength),
+    featId: s(o.featId, 80),
+    customFeat: s(o.customFeat, 80),
+    asi,
+    spells: Array.isArray(o.spells) ? o.spells.slice(0, 40).map((x) => s(x, 80)) : [],
+  };
 }
 
 function cleanText(value: unknown, max: number): string | null {
@@ -45,7 +82,7 @@ function cleanText(value: unknown, max: number): string | null {
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 5 * 60 * 1000;
 
-export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
+export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOptions): {
   httpServer: HttpServer;
   io: IoServer;
 } {
@@ -107,6 +144,87 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
     res.json({ user });
   });
 
+  // Extra content packs, on top of the SRD the client already has. Logged-in
+  // users only: a pack can hold text from the group's own books.
+  app.get('/api/content', (req, res) => {
+    const token = bearer(req.headers.authorization);
+    if (!token || !store.userForToken(token)) {
+      res.status(401).json({ error: 'Not logged in.' });
+      return;
+    }
+    res.json({ packs: contentDir ? loadContentPacks(contentDir).packs : [] });
+  });
+
+  // ---------- character portraits ----------
+
+  /** The image bytes must really be what the header says: check the magic numbers. */
+  const sniff = (b: Uint8Array): string | null => {
+    if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+    if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+    return null;
+  };
+
+  /** Only the character's owner changes its portrait (cosmetic, so in a session too). */
+  const ownCharacter = (req: express.Request, res: express.Response) => {
+    const token = bearer(req.headers.authorization);
+    const user = token ? store.userForToken(token) : undefined;
+    if (!user) {
+      res.status(401).json({ error: 'Not logged in.' });
+      return undefined;
+    }
+    const ch = store.getCharacter(String(req.params.id));
+    if (!ch || ch.userId !== user.id) {
+      res.status(404).json({ error: 'That is not one of your characters.' });
+      return undefined;
+    }
+    return ch;
+  };
+
+  const portraitChanged = (characterId: string, version: string) => {
+    const character = store.updateCharacter(characterId, { portrait: version });
+    if (character.inSession) broadcast(character.inSession);
+    return character;
+  };
+
+  app.put(
+    '/api/characters/:id/portrait',
+    express.raw({ type: PORTRAIT_TYPES as unknown as string[], limit: PORTRAIT_MAX_BYTES }),
+    (req, res) => {
+      const ch = ownCharacter(req, res);
+      if (!ch) return;
+      const body: unknown = req.body;
+      const mime = body instanceof Uint8Array && body.length > 12 ? sniff(body) : null;
+      if (!(body instanceof Uint8Array) || !mime) {
+        res.status(400).json({ error: 'Send a JPEG, PNG or WebP picture.' });
+        return;
+      }
+      store.setPortrait(ch.id, mime, body);
+      res.json({ character: portraitChanged(ch.id, Date.now().toString(36)) });
+    },
+  );
+
+  app.delete('/api/characters/:id/portrait', (req, res) => {
+    const ch = ownCharacter(req, res);
+    if (!ch) return;
+    store.deletePortrait(ch.id);
+    res.json({ character: portraitChanged(ch.id, '') });
+  });
+
+  /** Public by design: <img> can't send the login token, and character ids are unguessable. */
+  app.get('/api/portraits/:id', (req, res) => {
+    const p = store.getPortrait(String(req.params.id));
+    if (!p) {
+      res.status(404).end();
+      return;
+    }
+    res.setHeader('Content-Type', p.mime);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // The client adds ?v=<version>, so a new upload gets a new URL.
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    res.end(Buffer.from(p.data));
+  });
+
   app.post('/api/auth/logout', (req, res) => {
     const token = bearer(req.headers.authorization);
     if (token) store.logout(token);
@@ -137,6 +255,15 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
     socket.data.user = user;
     next();
   });
+
+  /** SRD plus the private packs, re-read at most every few seconds so edited packs show up. */
+  let cached: { at: number; content: Content } | undefined;
+  const gameContent = (): Content => {
+    if (!cached || Date.now() - cached.at > 5000) {
+      cached = { at: Date.now(), content: new Content([SRD, ...(contentDir ? loadContentPacks(contentDir).packs : [])]) };
+    }
+    return cached.content;
+  };
 
   /** "code:userId" -> number of that user's sockets in that session. */
   const presence = new Map<string, number>();
@@ -213,23 +340,30 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
     // ---------- characters ----------
 
     /**
-     * Who may change a character:
-     * - its owner, while it is not in a session;
-     * - the DM, while it is in the DM's session.
-     * In a session, players only look at their sheet.
+     * Who may change what on a character:
+     * - the DM of the session it is in: everything;
+     * - its owner, outside sessions: everything except HP, items and coins;
+     * - its owner, in a session: nothing (players only read their sheet);
+     * - HP, items and coins: the owner only while the DM has unlocked them
+     *   (hpItemsUnlocked), in or out of a session. Only the DM sets the unlock.
      */
-    const editable = (characterId: unknown) => {
+    const editable = (characterId: unknown, fields: readonly string[] = []) => {
       const ch = typeof characterId === 'string' ? store.getCharacter(characterId) : undefined;
       if (!ch) return { ok: false as const, error: 'That character no longer exists.' };
-      if (ch.inSession) {
-        if (socket.data.isHost && socket.data.code === ch.inSession) return { ok: true as const, ch };
-        if (ch.userId === user.id) {
-          return { ok: false as const, error: 'Your character is in a session. Only the DM can change it now.' };
-        }
-        return { ok: false as const, error: 'You can only change your own characters.' };
-      }
+      const isDm = !!ch.inSession && socket.data.isHost === true && socket.data.code === ch.inSession;
+      if (isDm) return { ok: true as const, ch, isDm };
       if (ch.userId !== user.id) return { ok: false as const, error: 'You can only change your own characters.' };
-      return { ok: true as const, ch };
+      if (fields.some((f) => (DM_ONLY_FIELDS as readonly string[]).includes(f))) {
+        return { ok: false as const, error: 'Only the DM can change that.' };
+      }
+      const locked = fields.filter((f) => (DM_LOCKED_FIELDS as readonly string[]).includes(f));
+      if (locked.length > 0 && !ch.data.hpItemsUnlocked) {
+        return { ok: false as const, error: 'Your DM manages your HP and items. Ask them to unlock it for you.' };
+      }
+      if (ch.inSession && fields.some((f) => !(DM_LOCKED_FIELDS as readonly string[]).includes(f))) {
+        return { ok: false as const, error: 'Your character is in a session. Only the DM can change it now.' };
+      }
+      return { ok: true as const, ch, isDm };
     };
 
     const afterChange = (character: CharacterSummary) => {
@@ -256,7 +390,7 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
     });
 
     socket.on('character:delete', (input, ack) => {
-      const t = editable(input?.characterId);
+      const t = editable(input?.characterId, ['delete']);
       if (!t.ok) return ack(t);
       if (t.ch.userId !== user.id) return ack({ ok: false, error: 'You can only delete your own characters.' });
       store.deleteCharacter(t.ch.id);
@@ -264,28 +398,33 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
     });
 
     socket.on('character:update', (input, ack) => {
-      const t = editable(input?.characterId);
-      if (!t.ok) return ack(t);
       let patch;
       try {
         patch = sanitizeCharacterPatch(input?.patch);
       } catch (e) {
         return ack({ ok: false, error: (e as Error).message });
       }
-      const character = store.updateCharacter(t.ch.id, patch);
+      const t = editable(input?.characterId, Object.keys(patch));
+      if (!t.ok) return ack(t);
+      // Setting HP or conditions directly has the same side effects as damage would.
+      const extra = {
+        ...(patch.hpCurrent !== undefined ? afterHpSet(t.ch.data, patch.hpCurrent) : {}),
+        ...(patch.conditions !== undefined ? afterConditionsSet(t.ch.data, patch.conditions) : {}),
+      };
+      const character = store.updateCharacter(t.ch.id, { ...extra, ...patch });
       ack({ ok: true, character });
       afterChange(character);
     });
 
     socket.on('character:adjustHp', (input, ack) => {
-      const t = editable(input?.characterId);
+      const t = editable(input?.characterId, ['hpCurrent']);
       if (!t.ok) return ack(t);
       const delta = input?.delta;
       if (typeof delta !== 'number' || !Number.isInteger(delta) || Math.abs(delta) > 9999) {
         return ack({ ok: false, error: 'Invalid amount.' });
       }
       // Read-modify-write is safe: node:sqlite is synchronous, so no other event runs in between.
-      const character = store.updateCharacter(t.ch.id, applyHpChange(t.ch.data, delta));
+      const character = store.updateCharacter(t.ch.id, applyDamageOrHealing(t.ch.data, delta));
       ack({ ok: true, character });
       afterChange(character);
     });
@@ -295,7 +434,7 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
       ack: (res: { ok: true; character: CharacterSummary } | { ok: false; error: string }) => void,
       change: (items: Item[]) => Item[],
     ) => {
-      const t = editable(characterId);
+      const t = editable(characterId, ['inventory']);
       if (!t.ok) return ack(t);
       try {
         const inventory = sanitizeCharacterPatch({ inventory: change(t.ch.data.inventory) }, { allowInventory: true })
@@ -326,6 +465,119 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
 
     socket.on('item:remove', (input, ack) => {
       changeInventory(input?.characterId, ack, (items) => items.filter((x) => x.id !== input?.itemId));
+    });
+
+    // ---------- spells, limited uses, rests ----------
+
+    /** The owner (in a session too) or the DM of the session the character is in. */
+    const usable = (characterId: unknown) => {
+      const ch = typeof characterId === 'string' ? store.getCharacter(characterId) : undefined;
+      if (!ch) return { ok: false as const, error: 'That character no longer exists.' };
+      const isDm = !!ch.inSession && socket.data.isHost === true && socket.data.code === ch.inSession;
+      if (!isDm && ch.userId !== user.id) return { ok: false as const, error: 'You can only use your own character.' };
+      return { ok: true as const, ch, isDm };
+    };
+
+    /** DM of its session, or its owner outside sessions. */
+    const restable = (characterId: unknown) => {
+      const t = usable(characterId);
+      if (t.ok && !t.isDm && t.ch.inSession) return { ok: false as const, error: 'Your DM decides when the party rests.' };
+      return t;
+    };
+
+    socket.on('character:use', (input, ack) => {
+      const t = usable(input?.characterId);
+      if (!t.ok) return ack(t);
+      const req = input?.use as UseRequest | undefined;
+      if (!req || typeof req !== 'object' || !['spell', 'feature', 'attack'].includes(req.kind)) {
+        return ack({ ok: false, error: 'Nothing to use.' });
+      }
+      try {
+        const clean: UseRequest =
+          req.kind === 'spell'
+            ? { kind: 'spell', spellId: String(req.spellId), slot: req.slot === undefined ? undefined : String(req.slot), ritual: req.ritual === true }
+            : req.kind === 'feature'
+              ? { kind: 'feature', useId: String(req.useId), amount: typeof req.amount === 'number' ? req.amount : undefined }
+              : { kind: 'attack', name: String(req.name ?? '') };
+        const spell = clean.kind === 'spell' ? t.ch.data.spells.find((x) => x.id === clean.spellId) : undefined;
+        const def = spell?.ref ? gameContent().spell(spell.ref) : undefined;
+        const r = applyUse(t.ch.data, clean, { concentration: def?.concentration === true });
+        const character = store.updateCharacter(t.ch.id, {
+          used: r.used,
+          lastAction: { ...r.action, at: new Date().toISOString() },
+          ...(r.concentration ? { concentration: r.concentration } : {}),
+        });
+        ack({ ok: true, character });
+        afterChange(character);
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
+    });
+
+    socket.on('character:concentration', (input, ack) => {
+      const t = usable(input?.characterId);
+      if (!t.ok) return ack(t);
+      const now = t.ch.data.concentration;
+      if (!now) return ack({ ok: false, error: 'Not concentrating on anything.' });
+      if (input?.action !== 'end' && input?.action !== 'kept') return ack({ ok: false, error: 'Invalid action.' });
+      const character = store.updateCharacter(t.ch.id, {
+        concentration: input.action === 'end' ? null : { ...now, saveDc: null },
+      });
+      ack({ ok: true, character });
+      afterChange(character);
+    });
+
+    socket.on('character:deathSave', (input, ack) => {
+      const t = usable(input?.characterId);
+      if (!t.ok) return ack(t);
+      try {
+        const result = input?.result as DeathSaveResult;
+        const character = store.updateCharacter(t.ch.id, {
+          ...applyDeathSave(t.ch.data, result),
+          lastAction: { name: 'Death save', detail: DEATH_SAVE_LABEL[result], at: new Date().toISOString() },
+        });
+        ack({ ok: true, character });
+        afterChange(character);
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
+    });
+
+    socket.on('character:levelUp', (input, ack) => {
+      const t = editable(input?.characterId, ['level']);
+      if (!t.ok) return ack(t);
+      try {
+        const character = store.updateCharacter(
+          t.ch.id,
+          applyLevelUp(t.ch.data, cleanLevelUp(input?.choices), gameContent(), randomUUID),
+        );
+        ack({ ok: true, character });
+        afterChange(character);
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
+    });
+
+    socket.on('character:restore', (input, ack) => {
+      const t = restable(input?.characterId);
+      if (!t.ok) return ack(t);
+      const id = String(input?.id ?? '');
+      const n = t.ch.data.used[id] ?? 0;
+      if (n <= 0) return ack({ ok: false, error: 'Nothing spent there.' });
+      const used = { ...t.ch.data.used, [id]: n - 1 };
+      if (used[id] === 0) delete used[id];
+      const character = store.updateCharacter(t.ch.id, { used });
+      ack({ ok: true, character });
+      afterChange(character);
+    });
+
+    socket.on('character:rest', (input, ack) => {
+      const t = restable(input?.characterId);
+      if (!t.ok) return ack(t);
+      if (input?.kind !== 'short' && input?.kind !== 'long') return ack({ ok: false, error: 'Short or long rest?' });
+      const character = store.updateCharacter(t.ch.id, applyRest(t.ch.data, input.kind));
+      ack({ ok: true, character });
+      afterChange(character);
     });
 
     // ---------- campaigns & sessions ----------
@@ -432,6 +684,18 @@ export function createApp({ store, clientDist, corsOrigin }: AppOptions): {
       store.endSession(code);
       closeSession(code, socket.id);
       ack({ ok: true });
+    });
+
+    socket.on('session:rest', (input, ack) => {
+      const code = socket.data.code;
+      if (!code || !socket.data.isHost) return ack({ ok: false, error: 'Only the DM can call a rest.' });
+      if (input?.kind !== 'short' && input?.kind !== 'long') return ack({ ok: false, error: 'Short or long rest?' });
+      for (const p of store.sessionPlayers(code)) {
+        const ch = store.getCharacter(p.characterId);
+        if (ch) store.updateCharacter(ch.id, applyRest(ch.data, input.kind));
+      }
+      ack({ ok: true });
+      broadcast(code);
     });
 
     socket.on('disconnect', leaveCurrent);

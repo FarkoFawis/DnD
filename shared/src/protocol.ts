@@ -31,12 +31,17 @@ export const PASSWORD_MIN_LENGTH = 6;
 // ---------- Characters ----------
 
 import type { Ability, Skill } from './rules.ts';
+import type { UseRequest } from './resources.ts';
+import type { DeathSaveResult } from './status.ts';
+import type { LevelUpChoices } from './levelup.ts';
 
 export interface Item {
   id: string;
   name: string;
   qty: number;
   notes: string;
+  /** Id of the matching entry in the game content (SRD or a private pack), for its description. */
+  ref?: string;
 }
 
 export interface Spell {
@@ -45,6 +50,53 @@ export interface Spell {
   /** 0 = cantrip */
   level: number;
   prepared: boolean;
+  /** Id of the matching spell in the game content, for its description. */
+  ref?: string;
+  /** Text for a homebrew spell that isn't in any content pack. */
+  description?: string;
+}
+
+/** A class feature, species trait or feat on the sheet. */
+export interface CharacterFeature {
+  id: string;
+  name: string;
+  /** Where it comes from, e.g. "Wizard 1", "Elf", "Origin feat". */
+  source: string;
+  /** Points into the content, see describeRef() in content/info.ts. */
+  ref?: string;
+  /** Text for a homebrew feature that isn't in any content pack. */
+  description?: string;
+}
+
+/** A limited-use thing the player or DM adds by hand (a feat, a magic item, homebrew). */
+export interface CustomResource {
+  id: string;
+  name: string;
+  max: number;
+  resetOn: 'short' | 'long';
+}
+
+/** The last thing a player used, shown to the DM next to their name. */
+export interface LastAction {
+  name: string;
+  /** e.g. "3rd-level slot", "cantrip", "attack". */
+  detail?: string;
+  /** ISO time. */
+  at: string;
+}
+
+/** The spell a character is concentrating on. */
+export interface Concentration {
+  name: string;
+  /** Spell ref in the content, for its description. */
+  ref?: string;
+  /** Set when the character took damage and still has to roll the Constitution save. */
+  saveDc: number | null;
+}
+
+export interface DeathSaves {
+  successes: number;
+  failures: number;
 }
 
 export const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'] as const;
@@ -59,6 +111,8 @@ export interface CharacterData {
   className: string;
   subclass: string;
   species: string;
+  /** Lineage / ancestry / legacy, e.g. "High Elf". */
+  subspecies: string;
   background: string;
   level: number;
   hpCurrent: number;
@@ -74,18 +128,51 @@ export interface CharacterData {
   skillExpertise: Skill[];
   spellcastingAbility: Ability | null;
   spells: Spell[];
+  features: CharacterFeature[];
   /** Changed through the item:* events, so DM and player edits never clash. */
   inventory: Item[];
   coins: Record<Coin, number>;
+  /**
+   * HP, items and coins belong to the DM. Players may change them on their own
+   * character only while the DM has unlocked it for them.
+   */
+  hpItemsUnlocked: boolean;
+  /**
+   * How many of each limited thing are spent: spell slots ("slot1".."slot9",
+   * "pact") and features (ids from limitedUses() in resources.ts). Missing = 0.
+   * Changed through character:use and rests, never sent as a whole.
+   */
+  used: Record<string, number>;
+  /** Limited-use things added by hand. */
+  customResources: CustomResource[];
+  lastAction: LastAction | null;
+  /** Condition ids (content: "prone", "poisoned", ...). Exhaustion is a level, below. */
+  conditions: string[];
+  /** Exhaustion level 0-6. */
+  exhaustion: number;
+  concentration: Concentration | null;
+  /** Death saving throws, used while at 0 HP. 3 successes = stable, 3 failures = dead. */
+  deathSaves: DeathSaves;
+  /**
+   * Version stamp of the uploaded portrait ("" = none, show the default).
+   * The picture itself is at GET /api/portraits/<characterId>?v=<portrait>;
+   * upload with PUT /api/characters/<id>/portrait (image body).
+   */
+  portrait: string;
   /** Feats, features, proficiencies, languages, anything else. */
   notes: string;
 }
+
+export const PORTRAIT_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+/** Upload limit. The client shrinks pictures to about 400x600 first, far below this. */
+export const PORTRAIT_MAX_BYTES = 400_000;
 
 export const DEFAULT_CHARACTER: CharacterData = {
   name: '',
   className: '',
   subclass: '',
   species: '',
+  subspecies: '',
   background: '',
   level: 1,
   hpCurrent: 10,
@@ -100,8 +187,18 @@ export const DEFAULT_CHARACTER: CharacterData = {
   skillExpertise: [],
   spellcastingAbility: null,
   spells: [],
+  features: [],
   inventory: [],
   coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
+  hpItemsUnlocked: false,
+  used: {},
+  customResources: [],
+  lastAction: null,
+  conditions: [],
+  exhaustion: 0,
+  concentration: null,
+  deathSaves: { successes: 0, failures: 0 },
+  portrait: '',
   notes: '',
 };
 
@@ -115,6 +212,11 @@ export interface CharacterSummary {
   /** Code of the live session the character is in right now, if any. */
   inSession: string | null;
 }
+
+/** Fields a player may only change while the DM has unlocked them (hpItemsUnlocked). */
+export const DM_LOCKED_FIELDS = ['hpCurrent', 'hpTemp', 'coins', 'inventory'] as const satisfies readonly (keyof CharacterData)[];
+/** Fields only the DM may ever change. */
+export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves', 'portrait'] as const satisfies readonly (keyof CharacterData)[];
 
 // ---------- Campaigns & live sessions (socket) ----------
 
@@ -156,7 +258,7 @@ export interface ClientToServerEvents {
   /** Damage (negative) or heal (positive). Sent as a change so concurrent edits never overwrite each other. */
   'character:adjustHp': (input: { characterId: string; delta: number }, ack: CharAck) => void;
   'item:add': (
-    input: { characterId: string; item: { name: string; qty?: number; notes?: string } },
+    input: { characterId: string; item: { name: string; qty?: number; notes?: string; ref?: string } },
     ack: CharAck,
   ) => void;
   /** Change an item's quantity/name/notes. qty 0 removes it. */
@@ -165,6 +267,22 @@ export interface ClientToServerEvents {
     ack: CharAck,
   ) => void;
   'item:remove': (input: { characterId: string; itemId: string }, ack: CharAck) => void;
+  /**
+   * Cast a spell, use a limited feature or make an attack. Spends a slot or a use
+   * (refused when none are left) and shows the DM what was used. Its owner may
+   * always do this, in a session too; so may the DM.
+   */
+  'character:use': (input: { characterId: string; use: UseRequest }, ack: CharAck) => void;
+  /** Concentration: "end" drops the spell, "kept" clears the pending save after a successful roll. Owner or DM. */
+  'character:concentration': (input: { characterId: string; action: 'end' | 'kept' }, ack: CharAck) => void;
+  /** Record a death saving throw at 0 HP (the die is rolled at the table). Owner or DM. */
+  'character:deathSave': (input: { characterId: string; result: DeathSaveResult }, ack: CharAck) => void;
+  /** Gain a level with the choices from the level-up wizard. The owner outside sessions, or the DM. */
+  'character:levelUp': (input: { characterId: string; choices: Partial<LevelUpChoices> }, ack: CharAck) => void;
+  /** DM (or the owner outside a session): give back one spent slot or use. */
+  'character:restore': (input: { characterId: string; id: string }, ack: CharAck) => void;
+  /** Short or Long Rest for one character: the DM in a session, or its owner outside one. */
+  'character:rest': (input: { characterId: string; kind: 'short' | 'long' }, ack: CharAck) => void;
 
   // --- campaigns & sessions ---
   'campaign:list': (ack: (res: Ack<{ campaigns: CampaignSummary[] }>) => void) => void;
@@ -205,6 +323,8 @@ export interface ClientToServerEvents {
   'session:leave': (ack: (res: Ack<object>) => void) => void;
   /** DM ends the session for everyone (all characters stay saved). */
   'session:end': (ack: (res: Ack<object>) => void) => void;
+  /** DM: the whole party takes a Short or Long Rest. */
+  'session:rest': (input: { kind: 'short' | 'long' }, ack: (res: Ack<object>) => void) => void;
 }
 
 export interface ServerToClientEvents {
