@@ -221,6 +221,34 @@ describe('campaign sessions', () => {
     expect(await mira.emitWithAck('character:adjustHp', { characterId: id, delta: 1 })).toMatchObject({ ok: false });
   });
 
+  it('tracks spell slots and uses, shows the DM the last action, and refreshes on a rest', async () => {
+    const { dm, session } = await hostCampaign();
+    const { sock: mira, character } = await joinWithNewCharacter('Mira', session.code, 'Elowen');
+    const id = character.id;
+    ok(await dm.emitWithAck('character:update', {
+      characterId: id,
+      patch: { className: 'Wizard', level: 1, spells: [{ id: 'mm', name: 'Magic Missile', level: 1, prepared: true }] },
+    }));
+    ok(await dm.emitWithAck('session:start'));
+
+    // Players can't rewrite their own counters, only spend through character:use.
+    expect(await mira.emitWithAck('character:update', { characterId: id, patch: { used: {} } })).toMatchObject({ ok: false });
+
+    const dmSees = nextState(dm, (s) => s.players[0]?.character.lastAction?.name === 'Magic Missile');
+    ok(await mira.emitWithAck('character:use', { characterId: id, use: { kind: 'spell', spellId: 'mm' } }));
+    expect((await dmSees).players[0]?.character.lastAction).toMatchObject({ detail: '1st-level slot' });
+    ok(await mira.emitWithAck('character:use', { characterId: id, use: { kind: 'spell', spellId: 'mm' } }));
+    const out = await mira.emitWithAck('character:use', { characterId: id, use: { kind: 'spell', spellId: 'mm' } });
+    expect(out).toMatchObject({ ok: false, error: expect.stringMatching(/No spell slots/) });
+
+    // Only the DM calls rests during a session.
+    expect(await mira.emitWithAck('character:rest', { characterId: id, kind: 'long' })).toMatchObject({ ok: false });
+    expect(await mira.emitWithAck('session:rest', { kind: 'long' })).toMatchObject({ ok: false });
+    const rested = nextState(mira, (s) => Object.keys(s.players[0]?.character.used ?? { x: 1 }).length === 0);
+    ok(await dm.emitWithAck('session:rest', { kind: 'long' }));
+    await rested;
+  });
+
   it('lets characters travel between campaigns, one session at a time', async () => {
     const { dm, session } = await hostCampaign('Campaign A');
     const { sock: mira, character } = await joinWithNewCharacter('Mira', session.code, 'Elowen');

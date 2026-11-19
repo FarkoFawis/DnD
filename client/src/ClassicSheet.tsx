@@ -5,7 +5,7 @@
  * adapted to a phone. Read-only, except HP and items when the DM unlocked them.
  * Tap anything with a description (spell, item, feature, attack) to read it.
  */
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   ABILITIES,
   ABILITY_NAMES,
@@ -14,6 +14,7 @@ import {
   SKILL_KEYS,
   deriveStats,
   formatModifier,
+  limitedUses,
   weaponAttacks,
   type CharacterData,
 } from '@dnd/shared';
@@ -21,6 +22,7 @@ import { Info } from './Info.tsx';
 import { HpBox, Items, type SheetActions } from './Sheet.tsx';
 import { featureEntry, itemEntry, spellEntry, spellGlance } from './SheetContent.tsx';
 import { useContent } from './content/useContent.ts';
+import { CastButton, SlotTracker, UsesList, actionText } from './Uses.tsx';
 
 export function ClassicSheet({ character: c, actions, playerName }: { character: CharacterData; actions: SheetActions; playerName: string }) {
   const content = useContent();
@@ -30,9 +32,23 @@ export function ClassicSheet({ character: c, actions, playerName }: { character:
   const unlocked = c.hpItemsUnlocked;
   const spellsByLevel = [...c.spells].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
   const levels = [...new Set(spellsByLevel.map((s) => s.level))];
+  const hasUses = limitedUses(c).length > 0;
+
+  // Short confirmation after something is used ("Magic Missile · 1st-level slot").
+  const [flash, setFlash] = useState<string | null>(null);
+  const lastAt = c.lastAction?.at;
+  const [seenAt, setSeenAt] = useState(lastAt);
+  useEffect(() => {
+    if (lastAt === seenAt) return;
+    setSeenAt(lastAt);
+    setFlash(actionText(c.lastAction));
+    const t = setTimeout(() => setFlash(null), 2500);
+    return () => clearTimeout(t);
+  }, [lastAt, seenAt, c.lastAction]);
 
   return (
     <article className="classic" aria-label={`${c.name}'s character sheet`}>
+      {flash && <p className="use-flash" role="status">Used: {flash}</p>}
       <header className="cs-banner">
         <div className="cs-name">
           <span className="cs-name-value">{c.name || 'Unnamed'}</span>
@@ -115,7 +131,7 @@ export function ClassicSheet({ character: c, actions, playerName }: { character:
         {attacks.length > 0 && (
           <table className="cs-attacks">
             <thead>
-              <tr><th>Name</th><th>Atk</th><th>Damage / type</th></tr>
+              <tr><th>Name</th><th>Atk</th><th>Damage / type</th><th><span className="sr-only">Use</span></th></tr>
             </thead>
             <tbody>
               {attacks.map((a) => {
@@ -126,6 +142,9 @@ export function ClassicSheet({ character: c, actions, playerName }: { character:
                     <td><Info entry={entry} tapToOpen>{a.name}</Info>{a.notes && <span className="cs-note">{a.notes}</span>}</td>
                     <td className="num">{formatModifier(a.toHit)}</td>
                     <td>{a.damage}</td>
+                    <td className="use-cell">
+                      <button type="button" className="use-button" onClick={() => void actions.use({ kind: 'attack', name: a.name })}>Attack</button>
+                    </td>
                   </tr>
                 );
               })}
@@ -137,16 +156,18 @@ export function ClassicSheet({ character: c, actions, playerName }: { character:
             Spell save DC <strong>{stats.spellSaveDc}</strong> · Spell attack <strong>{formatModifier(stats.spellAttack!)}</strong> · {ABILITY_NAMES[c.spellcastingAbility!]}
           </p>
         )}
+        <SlotTracker character={c} />
         {levels.map((lvl) => (
           <div key={lvl} className="cs-spells">
             <span className="cs-sublabel">{lvl === 0 ? 'Cantrips' : `Level ${lvl}`}</span>
             <ul>
               {spellsByLevel.filter((s) => s.level === lvl).map((s) => (
-                <li key={s.id} className={s.prepared ? '' : 'unprepared'}>
-                  <Info entry={spellEntry(content, s)} tapToOpen>
-                    <span className="block">{s.name}{!s.prepared && <span className="muted small"> (not prepared)</span>}</span>
+                <li key={s.id} className={`cs-spell ${s.prepared || s.level === 0 ? '' : 'unprepared'}`}>
+                  <Info entry={spellEntry(content, s)} tapToOpen className="grow">
+                    <span className="block">{s.name}{!s.prepared && s.level > 0 && <span className="muted small"> (not prepared)</span>}</span>
                     {spellGlance(content, s) && <span className="cs-note">{spellGlance(content, s)}</span>}
                   </Info>
+                  {(s.prepared || s.level === 0) && <CastButton character={c} spell={s} content={content} onUse={actions.use} />}
                 </li>
               ))}
             </ul>
@@ -179,6 +200,12 @@ export function ClassicSheet({ character: c, actions, playerName }: { character:
           </div>
         )}
       </Box>
+
+      {hasUses && (
+        <Box label="Limited uses">
+          <UsesList character={c} content={content} onUse={actions.use} />
+        </Box>
+      )}
 
       <Box label="Features & traits">
         {c.features.length === 0 ? (

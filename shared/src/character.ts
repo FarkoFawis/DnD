@@ -4,6 +4,8 @@ import {
   LIMITS,
   type CharacterData,
   type CharacterFeature,
+  type CustomResource,
+  type LastAction,
   type Item,
   type Spell,
 } from './protocol.ts';
@@ -77,6 +79,28 @@ function sanitizeFeature(v: unknown): CharacterFeature {
   };
 }
 
+function sanitizeCustomResource(v: unknown): CustomResource {
+  if (!isObj(v)) throw new Invalid('Invalid limited use.');
+  const name = text(v.name, 'limited use name', 80);
+  if (!name) throw new Invalid('A limited use needs a name.');
+  return {
+    id: text(v.id, 'limited use id', 64),
+    name,
+    max: int(v.max, 'number of uses', 1, 99),
+    resetOn: oneOf(v.resetOn, ['short', 'long'] as const, 'rest'),
+  };
+}
+
+function sanitizeLastAction(v: unknown): LastAction | null {
+  if (v === null) return null;
+  if (!isObj(v)) throw new Invalid('Invalid last action.');
+  return {
+    name: text(v.name, 'action name', 80),
+    ...(v.detail ? { detail: text(v.detail, 'action detail', 80) } : {}),
+    at: text(v.at, 'action time', 40),
+  };
+}
+
 type Field = keyof CharacterData;
 const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
   name: (v) => text(v, 'name'),
@@ -111,6 +135,18 @@ const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
     if (typeof v !== 'boolean') throw new Invalid('Invalid unlock flag.');
     return v;
   },
+  used: (v) => {
+    if (!isObj(v) || Object.keys(v).length > 100) throw new Invalid('Invalid uses.');
+    const out: Record<string, number> = {};
+    for (const [k, n] of Object.entries(v)) {
+      if (k.length > 80) throw new Invalid('Invalid uses.');
+      const count = int(n, 'uses', 0, 999);
+      if (count > 0) out[k] = count;
+    }
+    return out;
+  },
+  customResources: (v) => list(v, 'limited uses', sanitizeCustomResource),
+  lastAction: sanitizeLastAction,
   notes: (v) => text(v, 'notes', LIMITS.notesMaxLength),
 };
 

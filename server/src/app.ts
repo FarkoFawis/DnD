@@ -10,6 +10,9 @@ import {
   PASSWORD_MIN_LENGTH,
   normalizeRoomCode,
   applyHpChange,
+  applyRest,
+  applyUse,
+  type UseRequest,
   sanitizeCharacterPatch,
   sanitizeItem,
   type CharacterData,
@@ -351,6 +354,72 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
       changeInventory(input?.characterId, ack, (items) => items.filter((x) => x.id !== input?.itemId));
     });
 
+    // ---------- spells, limited uses, rests ----------
+
+    /** The owner (in a session too) or the DM of the session the character is in. */
+    const usable = (characterId: unknown) => {
+      const ch = typeof characterId === 'string' ? store.getCharacter(characterId) : undefined;
+      if (!ch) return { ok: false as const, error: 'That character no longer exists.' };
+      const isDm = !!ch.inSession && socket.data.isHost === true && socket.data.code === ch.inSession;
+      if (!isDm && ch.userId !== user.id) return { ok: false as const, error: 'You can only use your own character.' };
+      return { ok: true as const, ch, isDm };
+    };
+
+    /** DM of its session, or its owner outside sessions. */
+    const restable = (characterId: unknown) => {
+      const t = usable(characterId);
+      if (t.ok && !t.isDm && t.ch.inSession) return { ok: false as const, error: 'Your DM decides when the party rests.' };
+      return t;
+    };
+
+    socket.on('character:use', (input, ack) => {
+      const t = usable(input?.characterId);
+      if (!t.ok) return ack(t);
+      const req = input?.use as UseRequest | undefined;
+      if (!req || typeof req !== 'object' || !['spell', 'feature', 'attack'].includes(req.kind)) {
+        return ack({ ok: false, error: 'Nothing to use.' });
+      }
+      try {
+        const clean: UseRequest =
+          req.kind === 'spell'
+            ? { kind: 'spell', spellId: String(req.spellId), slot: req.slot === undefined ? undefined : String(req.slot), ritual: req.ritual === true }
+            : req.kind === 'feature'
+              ? { kind: 'feature', useId: String(req.useId), amount: typeof req.amount === 'number' ? req.amount : undefined }
+              : { kind: 'attack', name: String(req.name ?? '') };
+        const r = applyUse(t.ch.data, clean);
+        const character = store.updateCharacter(t.ch.id, {
+          used: r.used,
+          lastAction: { ...r.action, at: new Date().toISOString() },
+        });
+        ack({ ok: true, character });
+        afterChange(character);
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
+    });
+
+    socket.on('character:restore', (input, ack) => {
+      const t = restable(input?.characterId);
+      if (!t.ok) return ack(t);
+      const id = String(input?.id ?? '');
+      const n = t.ch.data.used[id] ?? 0;
+      if (n <= 0) return ack({ ok: false, error: 'Nothing spent there.' });
+      const used = { ...t.ch.data.used, [id]: n - 1 };
+      if (used[id] === 0) delete used[id];
+      const character = store.updateCharacter(t.ch.id, { used });
+      ack({ ok: true, character });
+      afterChange(character);
+    });
+
+    socket.on('character:rest', (input, ack) => {
+      const t = restable(input?.characterId);
+      if (!t.ok) return ack(t);
+      if (input?.kind !== 'short' && input?.kind !== 'long') return ack({ ok: false, error: 'Short or long rest?' });
+      const character = store.updateCharacter(t.ch.id, applyRest(t.ch.data, input.kind));
+      ack({ ok: true, character });
+      afterChange(character);
+    });
+
     // ---------- campaigns & sessions ----------
 
     socket.on('campaign:list', (ack) => {
@@ -455,6 +524,18 @@ export function createApp({ store, clientDist, corsOrigin, contentDir }: AppOpti
       store.endSession(code);
       closeSession(code, socket.id);
       ack({ ok: true });
+    });
+
+    socket.on('session:rest', (input, ack) => {
+      const code = socket.data.code;
+      if (!code || !socket.data.isHost) return ack({ ok: false, error: 'Only the DM can call a rest.' });
+      if (input?.kind !== 'short' && input?.kind !== 'long') return ack({ ok: false, error: 'Short or long rest?' });
+      for (const p of store.sessionPlayers(code)) {
+        const ch = store.getCharacter(p.characterId);
+        if (ch) store.updateCharacter(ch.id, applyRest(ch.data, input.kind));
+      }
+      ack({ ok: true });
+      broadcast(code);
     });
 
     socket.on('disconnect', leaveCurrent);

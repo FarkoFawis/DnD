@@ -31,6 +31,7 @@ export const PASSWORD_MIN_LENGTH = 6;
 // ---------- Characters ----------
 
 import type { Ability, Skill } from './rules.ts';
+import type { UseRequest } from './resources.ts';
 
 export interface Item {
   id: string;
@@ -63,6 +64,23 @@ export interface CharacterFeature {
   ref?: string;
   /** Text for a homebrew feature that isn't in any content pack. */
   description?: string;
+}
+
+/** A limited-use thing the player or DM adds by hand (a feat, a magic item, homebrew). */
+export interface CustomResource {
+  id: string;
+  name: string;
+  max: number;
+  resetOn: 'short' | 'long';
+}
+
+/** The last thing a player used, shown to the DM next to their name. */
+export interface LastAction {
+  name: string;
+  /** e.g. "3rd-level slot", "cantrip", "attack". */
+  detail?: string;
+  /** ISO time. */
+  at: string;
 }
 
 export const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'] as const;
@@ -103,6 +121,15 @@ export interface CharacterData {
    * character only while the DM has unlocked it for them.
    */
   hpItemsUnlocked: boolean;
+  /**
+   * How many of each limited thing are spent: spell slots ("slot1".."slot9",
+   * "pact") and features (ids from limitedUses() in resources.ts). Missing = 0.
+   * Changed through character:use and rests, never sent as a whole.
+   */
+  used: Record<string, number>;
+  /** Limited-use things added by hand. */
+  customResources: CustomResource[];
+  lastAction: LastAction | null;
   /** Feats, features, proficiencies, languages, anything else. */
   notes: string;
 }
@@ -131,6 +158,9 @@ export const DEFAULT_CHARACTER: CharacterData = {
   inventory: [],
   coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
   hpItemsUnlocked: false,
+  used: {},
+  customResources: [],
+  lastAction: null,
   notes: '',
 };
 
@@ -148,7 +178,7 @@ export interface CharacterSummary {
 /** Fields a player may only change while the DM has unlocked them (hpItemsUnlocked). */
 export const DM_LOCKED_FIELDS = ['hpCurrent', 'hpTemp', 'coins', 'inventory'] as const satisfies readonly (keyof CharacterData)[];
 /** Fields only the DM may ever change. */
-export const DM_ONLY_FIELDS = ['hpItemsUnlocked'] as const satisfies readonly (keyof CharacterData)[];
+export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'used', 'lastAction'] as const satisfies readonly (keyof CharacterData)[];
 
 // ---------- Campaigns & live sessions (socket) ----------
 
@@ -199,6 +229,16 @@ export interface ClientToServerEvents {
     ack: CharAck,
   ) => void;
   'item:remove': (input: { characterId: string; itemId: string }, ack: CharAck) => void;
+  /**
+   * Cast a spell, use a limited feature or make an attack. Spends a slot or a use
+   * (refused when none are left) and shows the DM what was used. Its owner may
+   * always do this, in a session too; so may the DM.
+   */
+  'character:use': (input: { characterId: string; use: UseRequest }, ack: CharAck) => void;
+  /** DM (or the owner outside a session): give back one spent slot or use. */
+  'character:restore': (input: { characterId: string; id: string }, ack: CharAck) => void;
+  /** Short or Long Rest for one character: the DM in a session, or its owner outside one. */
+  'character:rest': (input: { characterId: string; kind: 'short' | 'long' }, ack: CharAck) => void;
 
   // --- campaigns & sessions ---
   'campaign:list': (ack: (res: Ack<{ campaigns: CampaignSummary[] }>) => void) => void;
@@ -239,6 +279,8 @@ export interface ClientToServerEvents {
   'session:leave': (ack: (res: Ack<object>) => void) => void;
   /** DM ends the session for everyone (all characters stay saved). */
   'session:end': (ack: (res: Ack<object>) => void) => void;
+  /** DM: the whole party takes a Short or Long Rest. */
+  'session:rest': (input: { kind: 'short' | 'long' }, ack: (res: Ack<object>) => void) => void;
 }
 
 export interface ServerToClientEvents {
