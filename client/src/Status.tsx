@@ -90,7 +90,7 @@ export function ConditionEditor({
         <strong className="exhaustion-level">{c.exhaustion}</strong>
         <button type="button" aria-label="More exhaustion" disabled={c.exhaustion >= 6} onClick={() => onExhaustion(c.exhaustion + 1)}>+</button>
       </div>
-      <p className="muted small">Hold a condition to read it. The player sees a badge with the rules.</p>
+      <p className="muted small hint">Hold a condition to read it. The player sees a badge with the rules.</p>
     </div>
   );
 }

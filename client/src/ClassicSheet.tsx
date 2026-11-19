@@ -218,7 +218,7 @@ export function ClassicSheet({
           </div>
         ))}
         {attacks.length === 0 && c.spells.length === 0 && <p className="muted small">No weapons or spells.</p>}
-        {(attacks.length > 0 || c.spells.length > 0) && <p className="cs-hint">Tap a name to read what it does.</p>}
+        {(attacks.length > 0 || c.spells.length > 0) && <p className="cs-hint hint">Tap a name to read what it does.</p>}
       </Box>
 
       <Box label="Equipment">

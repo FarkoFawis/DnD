@@ -116,7 +116,7 @@ function Host({ game, onConfigure }: { game: Game; onConfigure: (c: CampaignSumm
   };
   return (
     <>
-      <p className="muted">Pick the campaign you're running tonight, or configure it ahead: handouts, NPCs and opponents.</p>
+      <p className="muted hint">Pick the campaign you're running tonight, or configure it ahead: handouts, NPCs and opponents.</p>
       {game.campaigns === null ? (
         <p className="muted">Loading campaigns…</p>
       ) : game.campaigns.length === 0 ? (

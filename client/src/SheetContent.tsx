@@ -200,7 +200,7 @@ export function Features({
         <p className="muted small">None yet. Characters made with the guide get theirs automatically.</p>
       ) : (
         <>
-          <p className="muted small">Tap one to read it.</p>
+          <p className="muted small hint">Tap one to read it.</p>
           <ul className="items">
             {list.map((f) => (
               <li key={f.id}>

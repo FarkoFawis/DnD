@@ -95,7 +95,7 @@ export function DmParty({ game, session, myId }: { game: Game; session: SessionS
   return (
     <section className="party">
       <h2 className="party-title">Party</h2>
-      {session.players.length > 0 && <p className="muted small mb">Tap a player to open their sheet: change HP, give or take items, edit anything.</p>}
+      {session.players.length > 0 && <p className="muted small mb hint">Tap a player to open their sheet: change HP, give or take items, edit anything.</p>}
       <PartyGrid players={session.players} myId={myId} selectedId={openId} onSelect={(id) => setOpenId(openId === id ? null : id)} />
       {open && (
         <div className="dm-sheet" ref={sheet}>

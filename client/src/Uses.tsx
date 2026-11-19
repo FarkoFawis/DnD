@@ -48,7 +48,7 @@ export function SlotTracker({ character: c, onRestore }: { character: CharacterD
           <Pips max={s.max} spent={used(c, s.id)} onRestore={onRestore && (() => onRestore(s.id))} label={`${ordinal(s.level)}-level slot`} />
         </div>
       ))}
-      <p className="muted small slot-hint">{slots[0]!.pact ? 'Pact slots come back on a Short or Long Rest.' : 'Spell slots come back on a Long Rest.'}</p>
+      <p className="muted small slot-hint hint">{slots[0]!.pact ? 'Pact slots come back on a Short or Long Rest.' : 'Spell slots come back on a Long Rest.'}</p>
     </div>
   );
 }

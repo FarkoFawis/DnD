@@ -114,7 +114,7 @@ function Handouts(props: {
   }
   return (
     <>
-      <p className="muted small">
+      <p className="muted small hint">
         {live
           ? 'Show a picture or a text on every player’s phone.'
           : 'Pictures and texts you can put on every player’s phone during the session: maps, letters, portraits, riddles.'}
@@ -229,7 +229,7 @@ function Npcs({ prep, npcs }: { prep: Prep; npcs: Npc[] }) {
   }
   return (
     <>
-      <p className="muted small">
+      <p className="muted small hint">
         The people and monsters of your adventure, with their stats and personality. Opponents are ready to pick when you start a fight.
       </p>
       {npcs.length === 0 && <p className="muted mt">Nobody here yet.</p>}

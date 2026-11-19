@@ -149,7 +149,7 @@ export function Sheet({
           />
           <span className="grow">
             Player may change their own HP &amp; items
-            <span className="muted small block">Off: only you (the DM) can.</span>
+            <span className="muted small block hint">Off: only you (the DM) can.</span>
           </span>
         </label>
       )}
@@ -261,7 +261,7 @@ export function Sheet({
             ))}
           </ul>
           <h3>Skills</h3>
-          {!readOnly && <p className="muted small">Tap to cycle: not proficient → proficient → expertise.</p>}
+          {!readOnly && <p className="muted small hint">Tap to cycle: not proficient → proficient → expertise.</p>}
           <ul className="checks">
             {SKILL_KEYS.map((s) => (
               <ProfRow
@@ -502,7 +502,7 @@ export function Items({
           ))}
         </ul>
       )}
-      {character.inventory.length > 0 && <p className="muted small">Tap an item to read it.</p>}
+      {character.inventory.length > 0 && <p className="muted small hint">Tap an item to read it.</p>}
       {!readOnly && <AddItem content={content} onAdd={actions.addItem} />}
     </>
   );
@@ -570,7 +570,7 @@ function Spells({
           ))}
         </ul>
       )}
-      {spells.length > 0 && <p className="muted small">Tap a spell to read what it does.</p>}
+      {spells.length > 0 && <p className="muted small hint">Tap a spell to read what it does.</p>}
       {!readOnly && <AddSpell content={content} character={character} onAdd={(sp) => set('spells', [...character.spells, sp])} />}
     </>
   );

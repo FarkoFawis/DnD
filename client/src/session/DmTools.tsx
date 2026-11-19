@@ -43,8 +43,8 @@ export function DmFight({ game, session, prep }: { game: Game; session: SessionS
         <div className="fight-idle">
           <p className="muted">No fight right now.</p>
           <button className="primary fight-button" onClick={() => setSetup(true)}>⚔ Initiate fight</button>
-          <p className="muted small center">
-            You pick the opponents, then every phone pulses red and buzzes and the players' Fight page opens.
+          <p className="muted small center hint">
+            You pick the opponents, then every phone shows the fight alert and buzzes, and the players' Fight page opens.
           </p>
         </div>
       )}
@@ -129,7 +129,7 @@ function FightSetup(props: {
     <div className="info-backdrop" onClick={props.onCancel}>
       <div className="info-sheet fight-setup" role="dialog" aria-modal aria-label="Start a fight" onClick={(e) => e.stopPropagation()}>
         <h2 className="info-title">{adding ? 'Add to the fight' : 'Who is fighting?'}</h2>
-        <p className="muted small mb">
+        <p className={`muted small mb ${adding && missing.length > 0 ? '' : 'hint'}`}>
           {adding
             ? missing.length > 0
               ? `${missing.map((p) => p.character.name).join(', ')} joined late and will be added too.`
@@ -172,7 +172,7 @@ function FightSetup(props: {
         >
           {adding ? 'Add to the fight' : `⚔ Start the fight${total > 0 ? ` (${total} ${total === 1 ? 'opponent' : 'opponents'})` : ''}`}
         </button>
-        {!adding && <p className="muted small center mt">Everyone's phone pulses red and buzzes.</p>}
+        {!adding && <p className="muted small center mt hint">Everyone's phone shows the fight alert and buzzes.</p>}
         <button className="ghost" onClick={props.onCancel}>Cancel</button>
       </div>
     </div>
@@ -210,7 +210,7 @@ function CombatTracker(props: {
           </button>
         )}
       </div>
-      <p className="muted small">Or type each initiative in. Tap a name for more.</p>
+      <p className="muted small hint">Or type each initiative in. Tap a name for more.</p>
       {combat.combatants.length === 0 && <p className="muted mt">Nobody is in this fight yet.</p>}
       <ol className="turn-list">
         {combat.combatants.map((c) => (

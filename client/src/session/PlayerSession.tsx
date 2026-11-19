@@ -157,10 +157,14 @@ function FightPage({ combat, myCharacterId }: { combat: Combat; myCharacterId: s
             : rolled
               ? 'The DM is about to start the first turn.'
               : 'Roll for initiative!'}
-        <span className="muted small block">
-          {active ? `Round ${combat.round}` : 'Your DM rolls for everyone, or asks you for your roll.'}
-          {next && !isMe(active) && (isMe(next) ? ' · You are next' : ` · Next: ${next.name}`)}
-        </span>
+        {active ? (
+          <span className="muted small block">
+            Round {combat.round}
+            {next && !isMe(active) && (isMe(next) ? ' · You are next' : ` · Next: ${next.name}`)}
+          </span>
+        ) : (
+          <span className="muted small block hint">Your DM rolls for everyone, or asks you for your roll.</span>
+        )}
       </p>
       <h3 className="section-label">Turn order</h3>
       <ol className="turn-list">

@@ -72,7 +72,7 @@ export function SessionLog({ game, campaign, active }: { game: Game; campaign: {
   const previous = buildRecap(log.previous);
   return (
     <>
-      <p className="muted small">
+      <p className="muted small hint">
         Damage, healing, loot, fights and handouts are written down automatically while a session runs.
       </p>
       {log.current.length > 0 && (

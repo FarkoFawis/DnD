@@ -123,12 +123,13 @@ export function Lobby({ game, session, myId }: { game: Game; session: SessionSta
         })}
       </div>
 
-      {me && (
-        <p className="muted small center mt">
-          {me.ready ? 'Waiting for the DM to start the session.' : 'Tap Ready when you are set.'}
-        </p>
-      )}
-      {isHost && total === 0 && <p className="muted small center mt">Tell your players the code. They pick a character and sit down here.</p>}
+      {me &&
+        (me.ready ? (
+          <p className="muted small center mt">Waiting for the DM to start the session.</p>
+        ) : (
+          <p className="muted small center mt hint">Tap Ready when you are set.</p>
+        ))}
+      {isHost && total === 0 && <p className="muted small center mt hint">Tell your players the code. They pick a character and sit down here.</p>}
       {isHost && <Recap game={game} campaign={session.campaign} />}
 
       <div className="lobby-bar">
@@ -141,7 +142,7 @@ export function Lobby({ game, session, myId }: { game: Game; session: SessionSta
           me && (
             <button type="button" className={`primary lobby-go ${me.ready ? 'is-ready' : ''}`} aria-pressed={me.ready} onClick={() => void game.setReady(!me.ready)}>
               {me.ready ? 'Ready ✓' : 'Ready'}
-              {me.ready && <span className="lobby-go-sub">tap to undo</span>}
+              {me.ready && <span className="lobby-go-sub hint">tap to undo</span>}
             </button>
           )
         )}

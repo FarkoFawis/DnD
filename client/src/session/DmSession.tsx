@@ -45,7 +45,7 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
             <p className="drawer-campaign">{session.campaign.name}</p>
             <p className="muted small drawer-label">Session code</p>
             <p className="drawer-code" aria-label="Session code">{session.code}</p>
-            <p className="muted small">Late players can still join with this code.</p>
+            <p className="muted small hint">Late players can still join with this code.</p>
             <div className="drawer-spacer" />
             <button
               className="ghost danger"
