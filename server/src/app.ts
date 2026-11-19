@@ -888,13 +888,14 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     socket.on('character:hitDice', (input, ack) => {
       const t = usable(input?.characterId);
       if (!t.ok) return ack(t);
-      if (!t.isDm && t.ch.inSession && !t.ch.data.resting) {
-        return ack({ ok: false, error: 'Hit Dice are spent on a Short Rest. Your DM decides when the party rests.' });
-      }
+      // Ending a rest is always fine, also one that has just ended by itself (full HP, no dice left).
       if (input?.action === 'done') {
         const character = store.updateCharacter(t.ch.id, { resting: false });
         ack({ ok: true, character });
         return afterChange(character);
+      }
+      if (!t.isDm && t.ch.inSession && !t.ch.data.resting) {
+        return ack({ ok: false, error: 'Hit Dice are spent on a Short Rest. Your DM decides when the party rests.' });
       }
       if (input?.action !== 'spend') return ack({ ok: false, error: 'Invalid action.' });
       try {

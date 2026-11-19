@@ -3,10 +3,38 @@ import { StatusPill } from '../StatusPill.tsx';
 import type { Game } from '../useGame.ts';
 
 /**
+ * The sidebar that slides in from the left: about a third of the screen,
+ * wider on phones. It holds what would otherwise sit in a bar at the top
+ * (app title, connection status) and whatever the screen adds below.
+ * Used on the home screen and, through SessionDrawer, during a session.
+ */
+export function Drawer(props: { game: Game; open: boolean; onClose: () => void; children: ReactNode }) {
+  const { open, onClose } = props;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+  return (
+    <>
+      <div className={`drawer-backdrop ${open ? 'open' : ''}`} onClick={onClose} aria-hidden />
+      <aside className={`drawer ${open ? 'open' : ''}`} aria-hidden={!open} inert={!open}>
+        <div className="drawer-head">
+          <h1>DnD Table</h1>
+          <button className="drawer-close" aria-label="Close menu" onClick={onClose}>✕</button>
+        </div>
+        <StatusPill status={props.game.status} />
+        {props.children}
+      </aside>
+    </>
+  );
+}
+
+/**
  * During a running session the screen belongs to the game. Everything else
- * (app title, connection status, session info, leaving) lives in a drawer
- * that slides in from the left: about a third of the screen, wider on phones.
- * Used by the DM and by players.
+ * (app title, connection status, session info, leaving) lives in the drawer,
+ * opened with the menu button at the top left. Used by the DM and by players.
  */
 export function SessionDrawer(props: {
   game: Game;
@@ -18,12 +46,7 @@ export function SessionDrawer(props: {
   children: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  const close = () => setOpen(false);
   return (
     <>
       <div className="dm-topbar">
@@ -33,15 +56,9 @@ export function SessionDrawer(props: {
         </button>
         <span className="dm-topbar-title">{props.title}</span>
       </div>
-      <div className={`drawer-backdrop ${open ? 'open' : ''}`} onClick={() => setOpen(false)} aria-hidden />
-      <aside className={`drawer ${open ? 'open' : ''}`} aria-hidden={!open} inert={!open}>
-        <div className="drawer-head">
-          <h1>DnD Table</h1>
-          <button className="drawer-close" aria-label="Close menu" onClick={() => setOpen(false)}>✕</button>
-        </div>
-        <StatusPill status={props.game.status} />
-        {props.children(() => setOpen(false))}
-      </aside>
+      <Drawer game={props.game} open={open} onClose={close}>
+        {props.children(close)}
+      </Drawer>
     </>
   );
 }

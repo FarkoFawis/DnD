@@ -211,10 +211,6 @@ textarea { resize: vertical; }
 .dm-sheet .hp-row button { width: 40px; }
 
 /* ---- home menu, characters, lobby ---- */
-.home-menu { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
-.menu-button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 22px 20px; border-radius: 16px; border: 1px solid var(--edge); background: none; color: var(--text); font-size: 1.4rem; font-weight: 700; text-align: left; }
-.menu-button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.menu-button .small { font-weight: 400; opacity: 0.8; font-size: 0.9rem; }
 .back { background: none; border: 0; color: var(--muted); font-size: 1rem; padding: 0; margin-bottom: 8px; min-height: 36px; }
 .notice { background: none; border: 1px solid var(--gold-dim); color: var(--gold); padding: 10px 12px; border-radius: 10px; margin: 0 0 12px; font-size: 0.9rem; }
 .notice.good { border-color: var(--ok-dim); color: var(--ok-text); margin-top: 12px; }
@@ -412,9 +408,6 @@ fieldset.sheet-body:disabled select { appearance: none; }
 .mt { margin-top: 12px; }
 .wide { width: 100%; }
 .tabs.tabs3 { grid-template-columns: repeat(3, 1fr); }
-.campaign-row { display: flex; gap: 8px; align-items: stretch; }
-.campaign-row .list-button { flex: 1; min-width: 0; }
-.configure-button { flex: none; padding: 8px 12px; font-size: 0.85rem; border-radius: 12px; }
 .field-label { display: block; font-size: 0.9rem; color: var(--muted); margin-bottom: 6px; }
 .prep-row { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--edge); border-radius: 12px; padding: 4px 8px 4px 4px; }
 .prep-row.showing, .prep-row.picked { border-color: var(--gold); }
@@ -757,20 +750,25 @@ button.party-card { cursor: pointer; }
 /* ---- settings ---- */
 /* Helper texts ("Tap a player to open their sheet…") carry the `hint` class; Settings can switch them all off. */
 :root[data-hints='off'] .hint { display: none !important; }
-.setting-row { flex-direction: row; align-items: center; gap: 14px; color: var(--text); font-size: 1rem; }
+.setting-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 14px; color: var(--text); font-size: 1rem; }
+.setting-name { font-weight: 600; }
+.setting-row .switch { grid-column: 2; grid-row: 1; }
+.setting-about { grid-column: 1 / -1; }
 .switch { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 52px; height: 30px; padding: 0; border-radius: 999px; border: 1px solid var(--edge-strong); background: none; cursor: pointer; transition: border-color 0.15s; }
 .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--faint); transition: transform 0.15s, background 0.15s; }
 .switch:checked { border-color: var(--ok); }
 .switch:checked::after { transform: translateX(22px); background: var(--ok); }
 @media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
-.theme-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.theme-option { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; padding: 8px 6px 10px; text-align: center; background: none; color: var(--text); border: 2px solid var(--edge); border-radius: 12px; }
-.theme-option.on { border-color: var(--gold); }
-.theme-preview { display: flex; flex-direction: column; gap: 6px; width: 100%; aspect-ratio: 3 / 4; padding: 10px 8px; margin-bottom: 4px; border-radius: 8px; background: var(--bg); border: 1px solid var(--edge-strong); }
-.theme-preview-title { width: 60%; height: 7px; border-radius: 4px; background: var(--gold); }
-.theme-preview-line { height: 14px; border-radius: 5px; border: 1px solid var(--edge-strong); }
+.theme-options { display: flex; flex-direction: column; border-top: 1px solid var(--rule); }
+.theme-option { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 2px; text-align: left; background: none; color: var(--text); border: 0; border-bottom: 1px solid var(--rule); }
+.theme-option.on strong { color: var(--gold); }
+.theme-check { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--edge-strong); }
+.theme-option.on .theme-check { border-color: var(--gold); background: var(--gold); box-shadow: inset 0 0 0 4px var(--bg); }
+.theme-preview { display: flex; flex-direction: column; gap: 4px; flex: none; width: 54px; aspect-ratio: 3 / 4; padding: 7px 6px; border-radius: 6px; background: var(--bg); border: 1px solid var(--edge-strong); }
+.theme-preview-title { width: 60%; height: 5px; border-radius: 3px; background: var(--gold); }
+.theme-preview-line { height: 9px; border-radius: 3px; border: 1px solid var(--edge-strong); }
 .theme-preview-line.short { width: 70%; }
-.theme-preview-button { margin-top: auto; height: 14px; border-radius: 5px; background: var(--accent); }
+.theme-preview-button { margin-top: auto; height: 9px; border-radius: 3px; background: var(--accent); }
 
 /* ---- hit dice ---- */
 .hitdice-box { border: 1px solid var(--edge); border-radius: 12px; padding: 10px 12px; margin: 0 0 12px; }
@@ -828,3 +826,76 @@ button.link.rollable { text-decoration: none; padding: 0; min-height: 0; }
 .tabs.tabs4 button { padding: 11px 2px; font-size: 0.9rem; }
 .backup p { margin: 0 0 10px; }
 .load-backup .notice { margin-top: 12px; }
+
+/* ---- home screen ---- */
+/* Home and the panels fill the phone from top to bottom; a panel never grows past it (its body scrolls). */
+.app-full { min-height: 100dvh; display: flex; flex-direction: column; }
+.app:has(> .panel) { height: 100dvh; display: flex; flex-direction: column; }
+.offline-note { margin: 0 0 8px; }
+.home { position: relative; isolation: isolate; flex: 1; display: flex; flex-direction: column; }
+/* The picture of the screen: one of your characters, fading into the page towards the menu and the bottom.
+   (The colours in the masks are only "see-through" and "solid", not colours of the page.) */
+.home-hero {
+  position: absolute; z-index: -1; top: 0; right: -16px; bottom: 92px; width: 88%; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 14%, #000 72%), linear-gradient(to bottom, transparent 0, #000 16%, #000 62%, transparent 98%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent 14%, #000 72%), linear-gradient(to bottom, transparent 0, #000 16%, #000 62%, transparent 98%);
+  mask-composite: intersect;
+}
+.home-hero-art { width: 100%; height: 100%; background: none; }
+.home-hero-art .portrait-img { object-position: 50% 20%; }
+.home-hero-die { display: block; width: 78%; height: 100%; margin-left: auto; fill: none; stroke: var(--edge-strong); stroke-width: 1.4; stroke-linejoin: round; }
+.home-hero-die text { fill: var(--faint); stroke: none; font-size: 40px; font-weight: 800; font-family: Georgia, serif; }
+.home-user { align-self: flex-start; display: flex; align-items: center; gap: 10px; max-width: 100%; padding: 0; background: none; border: 0; color: var(--text); }
+.home-avatar { position: relative; flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--gold-dim); background: var(--bg); color: var(--gold); font-size: 1.25rem; font-weight: 800; }
+.home-status { position: absolute; right: -2px; bottom: -2px; width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--bg); background: currentColor; }
+.home-username { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; text-shadow: 0 0 6px var(--bg); }
+.home-nav { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; margin-top: 40px; }
+.home-item { display: flex; align-items: center; gap: 14px; padding: 0; background: none; border: 0; color: var(--text); text-align: left; }
+.home-icon { flex: none; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--gold-dim); background: var(--bg); box-shadow: inset 0 0 0 3px var(--bg), inset 0 0 0 4px var(--edge-strong); }
+.home-icon svg { width: 30px; height: 30px; fill: none; stroke: var(--gold); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.home-label { display: flex; flex-direction: column; gap: 2px; font-size: 1.2rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; text-shadow: 0 0 8px var(--bg), 0 0 3px var(--bg); }
+.home-sub { font-size: 0.8rem; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.home-item:active .home-icon, .home-user:active .home-avatar { border-color: var(--gold); }
+.home-bottom { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 24px 0 6px; }
+.home-hero-tag { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 2px 0 2px 10px; background: none; border: 0; border-left: 2px solid var(--gold-dim); border-radius: 0; color: var(--text); text-align: left; }
+.home-hero-tag strong, .home-hero-tag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Play: the one filled button of the screen, pointing right. */
+.home-play {
+  flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  min-width: 184px; height: 68px; padding: 0 40px 0 26px; margin-right: -4px;
+  background: var(--accent); color: var(--on-accent); border: 0; border-radius: 12px 0 0 12px;
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 50%, calc(100% - 22px) 100%, 0 100%);
+  font-size: 1.5rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.home-play-sub { font-size: 0.72rem; font-weight: 400; letter-spacing: 0.02em; text-transform: none; opacity: 0.85; }
+.home-play:active { filter: brightness(0.9); }
+
+/* ---- panel: Play, Characters, Settings ---- */
+/* One frame: the sections as tabs down the left, the chosen one on the right, ✕ on the corner, Done at the bottom right. */
+.panel { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: 92px minmax(0, 1fr); margin: 14px 0 2px; border: 1px solid var(--edge-strong); border-radius: 14px; }
+.panel-close { position: absolute; z-index: 1; top: -14px; right: -9px; width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 2px solid var(--gold-dim); background: var(--bg); color: var(--gold); font-size: 1.05rem; }
+.panel-tabs { display: flex; flex-direction: column; padding-top: 58px; border-right: 1px solid var(--edge); }
+.panel-tabs button { position: relative; min-height: 60px; padding: 8px 4px; background: none; border: 0; border-top: 1px solid transparent; border-bottom: 1px solid var(--rule); color: var(--muted); font-size: 0.76rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.panel-tabs button:first-child { border-top-color: var(--rule); }
+/* The chosen tab opens into its section: gold writing, a gold edge, no line between it and the content. */
+.panel-tabs button[aria-selected='true'] { margin-right: -1px; border-top-color: var(--edge); border-bottom-color: var(--edge); border-right: 1px solid var(--bg); color: var(--gold); box-shadow: inset 3px 0 0 var(--gold); }
+.panel-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 0 14px; }
+.panel-title { margin: 0; padding: 20px 0 15px; text-align: center; font-size: 1.1rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); border-bottom: 1px solid var(--edge); }
+.panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 0; }
+.panel-foot { display: flex; justify-content: flex-end; padding: 12px 0 14px; border-top: 1px solid var(--edge); }
+.panel-done { min-width: 112px; padding: 12px 22px; letter-spacing: 0.08em; text-transform: uppercase; }
+/* Done is the filled button of the panel, unless its section has a main button of its own. */
+.panel:has(.panel-body .primary) .panel-done { background: none; color: var(--text); border: 1px solid var(--edge-strong); }
+.panel-heading { margin: 0 0 8px; font-size: 1rem; }
+/* Lists inside a panel are rows between thin lines, not boxes. */
+.rows { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--rule); }
+.rows li { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--rule); }
+.row-button { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 2px; background: none; border: 0; color: var(--text); text-align: left; }
+.row-button .badge { display: inline-block; margin-top: 5px; }
+.round-button { flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 1px solid var(--edge-strong); background: none; color: var(--muted); }
+/* The cogwheel's teeth are a thick dashed ring. */
+.gear-teeth { stroke-width: 3 !important; stroke-dasharray: 3.14 3.14; stroke-linecap: butt !important; }
+.round-button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.new-campaign { margin-top: 20px; }
+.new-campaign .secondary { align-self: flex-end; }

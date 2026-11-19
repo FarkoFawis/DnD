@@ -23,8 +23,9 @@ Digital D&D character sheets for our in-person sessions. Everyone uses their pho
 
 - **The server owns the state, not the DM's phone.** If the DM's battery dies or the browser crashes, nothing is lost. Everyone just reconnects.
 - Characters belong to players and keep their progress wherever they play.
+- **Home screen like a game menu:** your name top left (tap it for the sidebar with the connection status and Log out), Characters and Settings down the left, one of your characters as the picture, and a big Play button bottom right. Play, Characters, Settings and Configure open as one panel with its sections as tabs down the left side, a round ✕ and Done.
 - Each phone remembers its login and current session and automatically gets back in after a reload, screen lock or dropped Wi-Fi.
-- **The DM plans ahead with Configure** (next to each campaign): handouts (pictures and text to put on the players' phones), NPCs and opponents. In the session the DM starts fights (every phone pulses red and, on Android, vibrates), rolls or enters initiative and runs the turn order.
+- **The DM plans ahead with Configure** (the gear next to each campaign): handouts (pictures and text to put on the players' phones), NPCs and opponents. In the session the DM starts fights (every phone pulses red and, on Android, vibrates), rolls or enters initiative and runs the turn order.
 - **Short Rests:** when the DM calls one, hurt players spend Hit Dice on their own phone: throw the die, type in the number, tap Heal. A Long Rest brings all Hit Dice back.
 - **Dice roller, if you want it:** real dice are the normal way. Whoever switches the roller on in Settings can tap an ability, save, skill or attack on their sheet to roll it with the right bonus (with Advantage or Disadvantage), and the DM sees the result.
 - **Backups:** in Configure → Backup the DM saves the whole campaign (handouts, NPCs, log, characters) as one file. Play → Host → "Load a backup file" brings it back, for example on a new computer. Create the players' accounts first, so their characters find their way home.

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Panel } from './Panel.tsx';
 import { changeSettings, useSettings, type Theme } from './settings.ts';
 
 const THEME_OPTIONS: Array<{ id: Theme; name: string; about: string }> = [
@@ -7,27 +8,23 @@ const THEME_OPTIONS: Array<{ id: Theme; name: string; about: string }> = [
   { id: 'black', name: 'Black', about: 'Pure black and white.' },
 ];
 
+const TABS = [
+  { id: 'general', label: 'General' },
+  { id: 'theme', label: 'Theme' },
+] as const;
+
 /** Home → Settings. Everything here is remembered on this phone. */
 export function SettingsScreen({ onBack }: { onBack: () => void }) {
   const settings = useSettings();
   const [tab, setTab] = useState<'general' | 'theme'>('general');
   return (
-    <>
-      <button className="back" onClick={onBack}>‹ Home</button>
-      <section className="card">
-        <h2 className="card-title">Settings</h2>
-        <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'general'} onClick={() => setTab('general')}>General</button>
-          <button role="tab" aria-selected={tab === 'theme'} onClick={() => setTab('theme')}>Theme</button>
-        </div>
+    <Panel title="Settings" tabs={TABS} tab={tab} onTab={setTab} onClose={onBack}>
         {tab === 'general' ? (
           <div className="setting-list">
             <label className="setting-row">
-              <span className="grow">
-                Show helper texts
-                <span className="muted small block">
-                  The small grey explanations under buttons and lists, like “Tap a player to open their sheet”. Switch them off once you know your way around.
-                </span>
+              <span className="setting-name">Show helper texts</span>
+              <span className="setting-about muted small">
+                The small grey explanations under buttons and lists, like “Tap a player to open their sheet”. Switch them off once you know your way around.
               </span>
               <input
                 type="checkbox"
@@ -38,11 +35,9 @@ export function SettingsScreen({ onBack }: { onBack: () => void }) {
               />
             </label>
             <label className="setting-row">
-              <span className="grow">
-                Dice roller
-                <span className="muted small block">
-                  Tap an ability, save, skill or attack on your sheet to roll it with the right bonus. Your DM sees the result. Leave it off if you roll real dice.
-                </span>
+              <span className="setting-name">Dice roller</span>
+              <span className="setting-about muted small">
+                Tap an ability, save, skill or attack on your sheet to roll it with the right bonus. Your DM sees the result. Leave it off if you roll real dice.
               </span>
               <input
                 type="checkbox"
@@ -71,14 +66,16 @@ export function SettingsScreen({ onBack }: { onBack: () => void }) {
                   <span className="theme-preview-line short" />
                   <span className="theme-preview-button" />
                 </span>
-                <strong>{t.name}</strong>
-                <span className="muted small">{t.about}</span>
+                <span className="grow">
+                  <strong>{t.name}</strong>
+                  <span className="muted small block">{t.about}</span>
+                </span>
+                <span className="theme-check" aria-hidden />
               </button>
             ))}
           </div>
         )}
-        <p className="muted small mt">Settings are saved on this phone.</p>
-      </section>
-    </>
+        <p className="muted small mt hint">Settings are saved on this phone.</p>
+    </Panel>
   );
 }

@@ -4,7 +4,14 @@ import type { CampaignSummary, CharacterSummary, ImportSummary } from '@dnd/shar
 import { uploadBackup } from './api.ts';
 import { CampaignConfig } from './prep/CampaignConfig.tsx';
 import { CharacterLine } from './Characters.tsx';
+import { GearIcon } from './icons.tsx';
+import { Panel } from './Panel.tsx';
 import type { Game } from './useGame.ts';
+
+const TABS = [
+  { id: 'join', label: 'Join' },
+  { id: 'host', label: 'Host' },
+] as const;
 
 /** Play: join a session with a code, or host one of your campaigns. */
 export function Play({ game, onBack, onCharacters }: { game: Game; onBack: () => void; onCharacters: () => void }) {
@@ -13,23 +20,12 @@ export function Play({ game, onBack, onCharacters }: { game: Game; onBack: () =>
   /** The campaign the DM is planning ("Configure"). */
   const [configuring, setConfiguring] = useState<CampaignSummary | null>(null);
   if (configuring) {
-    return <CampaignConfig game={game} campaign={configuring} backLabel="Campaigns" onBack={() => setConfiguring(null)} />;
+    return <CampaignConfig game={game} campaign={configuring} onBack={() => setConfiguring(null)} />;
   }
   return (
-    <>
-    <button className="back" onClick={onBack}>‹ Home</button>
-    <section className="card">
-      <div className="tabs" role="tablist">
-        <button role="tab" aria-selected={mode === 'join'} onClick={() => setMode('join')}>
-          Join a session
-        </button>
-        <button role="tab" aria-selected={mode === 'host'} onClick={() => setMode('host')}>
-          Host (DM)
-        </button>
-      </div>
+    <Panel title="Play" tabs={TABS} tab={mode} onTab={setMode} onClose={onBack}>
       {mode === 'join' ? <Join game={game} onCharacters={onCharacters} /> : <Host game={game} onConfigure={setConfiguring} />}
-    </section>
-    </>
+    </Panel>
   );
 }
 
@@ -52,18 +48,17 @@ function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) 
   if (choice) {
     return (
       <>
-        <p className="muted">
-          Joining <strong>{choice.campaign}</strong>. Who are you playing tonight?
-        </p>
+        <h3 className="panel-heading">Who are you playing tonight?</h3>
+        <p className="muted small">Joining <strong>{choice.campaign}</strong>.</p>
         {choice.characters.length === 0 ? (
           <p className="notice">
             You have no free characters. Create one first (characters already in another session can't join).
           </p>
         ) : (
-          <ul className="list">
+          <ul className="rows">
             {choice.characters.map((c) => (
               <li key={c.id}>
-                <button className="list-button" disabled={busy} onClick={async () => {
+                <button className="row-button" disabled={busy} onClick={async () => {
                   setBusy(true);
                   await game.join(choice.code, c.id);
                   setBusy(false);
@@ -85,6 +80,7 @@ function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) 
 
   return (
     <form onSubmit={submit}>
+      <h3 className="panel-heading">Join a session</h3>
       <label>
         Code from the DM's phone
         <input
@@ -117,32 +113,33 @@ function Host({ game, onConfigure }: { game: Game; onConfigure: (c: CampaignSumm
   };
   return (
     <>
-      <p className="muted hint">Pick the campaign you're running tonight, or configure it ahead: handouts, NPCs and opponents.</p>
+      <h3 className="panel-heading">Host as the DM</h3>
+      <p className="muted small hint">Tap a campaign to open its lobby. The gear is for preparing it: handouts, NPCs, log and backup.</p>
       {game.campaigns === null ? (
         <p className="muted">Loading campaigns…</p>
       ) : game.campaigns.length === 0 ? (
         <p className="muted">No campaigns yet. Create your first one below.</p>
       ) : (
-        <ul className="list">
+        <ul className="rows">
           {game.campaigns.map((c) => (
             <li key={c.id} className="campaign-row">
-              <button className="list-button" onClick={() => void game.host(c.id)} disabled={game.status !== 'online'}>
-                <span>
+              <button className="row-button" onClick={() => void game.host(c.id)} disabled={game.status !== 'online'}>
+                <span className="grow">
                   <strong>{c.name}</strong>
                   <span className="muted small block">
                     {c.lastPlayedAt ? `Last played ${formatDate(c.lastPlayedAt)}` : 'Not played yet'}
                   </span>
+                  {c.liveCode && <span className="badge">Live · {c.liveCode}</span>}
                 </span>
-                {c.liveCode ? <span className="badge">Live · {c.liveCode}</span> : <span className="chev">›</span>}
               </button>
-              <button className="secondary configure-button" onClick={() => onConfigure(c)} disabled={game.status !== 'online'}>
-                ⚙ Configure
+              <button className="round-button" aria-label={`Configure ${c.name}`} title="Configure" onClick={() => onConfigure(c)} disabled={game.status !== 'online'}>
+                <GearIcon />
               </button>
             </li>
           ))}
         </ul>
       )}
-      <form onSubmit={create} className="inline-form">
+      <form onSubmit={create} className="new-campaign">
         <label>
           New campaign
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lost Mine" required />

@@ -110,14 +110,15 @@ describe('Hit Dice on a Short Rest', () => {
     const id = character.id;
     expect(await mira.emitWithAck('character:hitDice', { characterId: id, action: 'spend', roll: 5 })).toMatchObject({ ok: false, error: expect.stringMatching(/DM decides/) });
 
-    ok(await dm.emitWithAck('character:adjustHp', { characterId: id, delta: -20 }));
+    // 3 of 28 HP: two dice can never fill them up, so the rest stays open until Mira ends it.
+    ok(await dm.emitWithAck('character:adjustHp', { characterId: id, delta: -25 }));
     const resting = nextState(mira, (s) => s.players[0]!.character.resting);
     ok(await dm.emitWithAck('session:rest', { kind: 'short' }));
     await resting;
 
     const first = ok(await mira.emitWithAck('character:hitDice', { characterId: id, action: 'spend', roll: 7 }));
     expect(first.spent).toEqual({ die: 10, roll: 7, modifier: 2, healed: 9 });
-    expect(first.character.data).toMatchObject({ hpCurrent: 17, used: { hitDice: 1 }, resting: true });
+    expect(first.character.data).toMatchObject({ hpCurrent: 12, used: { hitDice: 1 }, resting: true });
     expect(await mira.emitWithAck('character:hitDice', { characterId: id, action: 'spend', roll: 11 })).toMatchObject({ ok: false });
 
     // Without a roll of their own, the server throws the d10.
@@ -128,10 +129,11 @@ describe('Hit Dice on a Short Rest', () => {
 
     expect(ok(await mira.emitWithAck('character:hitDice', { characterId: id, action: 'done' })).character.data.resting).toBe(false);
     expect(await mira.emitWithAck('character:hitDice', { characterId: id, action: 'spend', roll: 3 })).toMatchObject({ ok: false });
+    // Tapping Done twice does no harm.
+    expect(ok(await mira.emitWithAck('character:hitDice', { characterId: id, action: 'done' })).character.data.resting).toBe(false);
 
     // The DM can still spend one for them, and a Long Rest brings every die back.
-    const hp = second.character.data.hpCurrent;
-    if (hp < 28) ok(await dm.emitWithAck('character:hitDice', { characterId: id, action: 'spend', roll: 1 }));
+    ok(await dm.emitWithAck('character:hitDice', { characterId: id, action: 'spend', roll: 1 }));
     const after = ok(await dm.emitWithAck('character:rest', { characterId: id, kind: 'long' }));
     expect(after.character.data).toMatchObject({ hpCurrent: 28, used: {}, resting: false });
 
