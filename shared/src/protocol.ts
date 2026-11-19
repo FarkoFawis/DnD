@@ -18,9 +18,11 @@ export interface AccountStatus {
   exists: boolean;
   /** false = pre-made account that still needs its owner to choose a password. */
   hasPassword: boolean;
+  /** Choosing that first password needs the invite code of this server (set where the app is hosted online). */
+  needsInvite?: boolean;
 }
 
-/** POST /api/auth/login { username, password } -> LoginResult (200) or { error } (4xx) */
+/** POST /api/auth/login { username, password, invite? } -> LoginResult (200) or { error } (4xx) */
 export interface LoginResult {
   token: string;
   user: PublicUser;
