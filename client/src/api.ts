@@ -1,4 +1,4 @@
-import type { AccountStatus, LoginResult, PublicUser } from '@dnd/shared';
+import type { AccountStatus, ImportSummary, LoginResult, PublicUser } from '@dnd/shared';
 
 const TOKEN_KEY = 'dnd.token';
 const CODE_KEY = 'dnd.sessionCode';
@@ -72,3 +72,46 @@ async function portraitCall(characterId: string, init: RequestInit): Promise<voi
 export const uploadPortrait = (characterId: string, image: Blob) =>
   portraitCall(characterId, { method: 'PUT', headers: { 'content-type': image.type }, body: image });
 export const removePortrait = (characterId: string) => portraitCall(characterId, { method: 'DELETE' });
+
+// ---------- campaign backup ----------
+
+/** Fetches the campaign's backup file and hands it to the browser to save. Returns the file name. */
+export async function downloadBackup(campaignId: string): Promise<string> {
+  const res = await fetch(`/api/campaigns/${campaignId}/export`, { headers: { authorization: `Bearer ${savedToken() ?? ''}` } });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? 'Could not make the backup.');
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'campaign.dnd-backup.json';
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return name;
+}
+
+export type ImportResult =
+  | { ok: true; summary: ImportSummary }
+  /** `missingPlayers`: these players have no account here; ask whether to load the file without their characters. */
+  | { ok: false; error: string; missingPlayers?: string[] };
+
+/** Loads a backup file as a new campaign of the logged-in user. */
+export async function uploadBackup(file: Blob, skipMissing = false): Promise<ImportResult> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/campaigns/import${skipMissing ? '?skipMissing=1' : ''}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${savedToken() ?? ''}` },
+      body: file,
+    });
+  } catch {
+    return { ok: false, error: 'Not connected. Check your internet.' };
+  }
+  const data = (await res.json().catch(() => ({}))) as { summary?: ImportSummary; error?: string; missingPlayers?: string[] };
+  if (res.ok && data.summary) return { ok: true, summary: data.summary };
+  return { ok: false, error: data.error ?? 'That file could not be loaded.', missingPlayers: data.missingPlayers };
+}

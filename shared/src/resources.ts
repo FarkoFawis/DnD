@@ -9,6 +9,7 @@
  */
 import type { CharacterData, Concentration, LastAction } from './protocol.ts';
 import { abilityModifier, proficiencyBonus } from './rules.ts';
+import { applyDamageOrHealing, isDead } from './status.ts';
 
 /** How a rest refreshes something. `shortOne`: one use back on a Short Rest, all on a Long Rest. */
 export type ResetOn = 'short' | 'shortOne' | 'long';
@@ -249,8 +250,9 @@ export function applyUse(
 
 /**
  * What a rest changes. Short Rest: Pact Magic slots and short-rest features
- * come back (one use of `shortOne` features). Long Rest: everything comes back,
- * HP goes to max, temporary HP goes away, one Exhaustion level is removed and
+ * come back (one use of `shortOne` features); Hit Dice are spent separately
+ * (spendHitDie). Long Rest: everything comes back, all Hit Dice too, HP goes to
+ * max, temporary HP goes away, one Exhaustion level is removed and
  * concentration ends (2024 rules).
  */
 export function applyRest(c: CharacterData, kind: 'short' | 'long'): Partial<CharacterData> {
@@ -263,6 +265,7 @@ export function applyRest(c: CharacterData, kind: 'short' | 'long'): Partial<Cha
       exhaustion: Math.max(0, c.exhaustion - 1),
       concentration: null,
       deathSaves: { successes: 0, failures: 0 },
+      resting: false,
     };
   }
   const next = { ...c.used };
@@ -274,6 +277,53 @@ export function applyRest(c: CharacterData, kind: 'short' | 'long'): Partial<Cha
   for (const k of Object.keys(next)) if (!next[k]) delete next[k];
   return { used: next };
 }
+
+// ---------- Hit Dice (2024: Hit Point Dice) ----------
+
+/** Key in CharacterData.used for spent Hit Dice. */
+export const HIT_DICE_ID = 'hitDice';
+
+/** The classes in the content, as far as Hit Dice need them (a Content fits). */
+interface ClassDice {
+  classes: { name: string; hitDie: number }[];
+}
+
+/**
+ * Size of the character's Hit Die: the one set on the sheet (homebrew classes),
+ * else the class's from the content, else a d8.
+ */
+export function hitDieSize(c: Pick<CharacterData, 'className' | 'hitDie'>, content?: ClassDice | null): number {
+  if (c.hitDie) return c.hitDie;
+  return content?.classes.find((x) => norm(x.name) === norm(c.className))?.hitDie ?? 8;
+}
+
+/** One Hit Die per level; a Long Rest brings all of them back. */
+export const hitDiceLeft = (c: Pick<CharacterData, 'level' | 'used'>) => Math.max(0, clampLevel(c.level) - used(c, HIT_DICE_ID));
+
+/**
+ * Spends one Hit Die on a Short Rest: heals the roll plus the Constitution
+ * modifier, at least 1 HP. Throws an Error with a friendly message when it
+ * isn't possible. A rest that has nothing more to give ends by itself.
+ */
+export function spendHitDie(c: CharacterData, die: number, roll: number): { patch: Partial<CharacterData>; healed: number; modifier: number } {
+  if (isDead(c)) throw new Error('This character is dead.');
+  if (hitDiceLeft(c) <= 0) throw new Error('No Hit Dice left. They come back after a Long Rest.');
+  if (c.hpCurrent >= c.hpMax) throw new Error('Already at full HP.');
+  if (!Number.isInteger(roll) || roll < 1 || roll > die) throw new Error(`A d${die} roll is between 1 and ${die}.`);
+  const modifier = abilityModifier(c.abilities.con);
+  const heal = applyDamageOrHealing(c, Math.max(1, roll + modifier));
+  const usedNow = { ...c.used, [HIT_DICE_ID]: used(c, HIT_DICE_ID) + 1 };
+  const after = { ...c, ...heal, used: usedNow };
+  return {
+    patch: { ...heal, used: usedNow, ...(c.resting && !canSpendHitDice(after) ? { resting: false } : {}) },
+    healed: after.hpCurrent - c.hpCurrent,
+    modifier,
+  };
+}
+
+/** Whether spending a Hit Die would do anything right now. */
+export const canSpendHitDice = (c: Pick<CharacterData, 'level' | 'used' | 'hpCurrent' | 'hpMax' | 'deathSaves' | 'exhaustion'>) =>
+  !isDead(c) && hitDiceLeft(c) > 0 && c.hpCurrent < c.hpMax;
 
 export const RESET_LABEL: Record<ResetOn, string> = {
   short: 'Back after a Short or Long Rest',

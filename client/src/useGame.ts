@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Ack, CampaignSummary, CharacterData, CharacterSummary, Item, DeathSaveResult, LevelUpChoices, SessionState, UseRequest } from '@dnd/shared';
+import type { Ack, CampaignSummary, CharacterData, CharacterSummary, DiceRoll, HitDieSpent, Item, DeathSaveResult, LevelUpChoices, RollMode, RollRequest, SessionState, UseRequest } from '@dnd/shared';
 import { saveCode, savedCode } from './api.ts';
 import { createSocket, type AppSocket } from './socket.ts';
 
@@ -20,6 +20,8 @@ export function useGame(token: string, onUnauthorized: () => void) {
   const [error, setError] = useState<string | null>(null);
   /** Counts "Initiate fight" alerts from the DM; each one pulses the screen (see FightAlert). */
   const [fightAlerts, setFightAlerts] = useState(0);
+  /** DM: the latest rolls the players made with the dice roller, oldest first. */
+  const [rolls, setRolls] = useState<DiceRoll[]>([]);
 
   const call = useCallback(<T,>(fn: (s: AppSocket, done: (res: Ack<T>) => void) => void) => {
     return new Promise<Ack<T>>((resolve) => {
@@ -66,6 +68,7 @@ export function useGame(token: string, onUnauthorized: () => void) {
     s.on('session:alert', (alert) => {
       if (alert.kind === 'fight') setFightAlerts((n) => n + 1);
     });
+    s.on('session:roll', (roll) => setRolls((list) => [...list.slice(-19), roll]));
     s.on('session:ended', () => {
       saveCode(null);
       setSession(null);
@@ -102,6 +105,7 @@ export function useGame(token: string, onUnauthorized: () => void) {
     /** For features that talk to the server themselves (campaign prep, fights, log). */
     call,
     fightAlerts,
+    rolls,
     status,
     session,
     campaigns,
@@ -158,6 +162,33 @@ export function useGame(token: string, onUnauthorized: () => void) {
       charCall((s, done) => s.emit('character:restore', { characterId, id }, done)),
     rest: (characterId: string, kind: 'short' | 'long') =>
       charCall((s, done) => s.emit('character:rest', { characterId, kind }, done)),
+    /** Spend one Hit Die: with the roll of a real die, or without one so the server rolls. */
+    spendHitDie: async (characterId: string, roll?: number): Promise<HitDieSpent | null> => {
+      const res = await call<{ character: CharacterSummary; spent?: HitDieSpent }>((s, done) =>
+        s.emit('character:hitDice', { characterId, action: 'spend', roll }, done),
+      );
+      if (!res.ok) {
+        setError(res.error);
+        return null;
+      }
+      setCharacters((list) => list && list.map((c) => (c.id === res.character.id ? res.character : c)));
+      return res.spent ?? null;
+    },
+    /** Player: done spending Hit Dice on this Short Rest. */
+    endRest: (characterId: string) =>
+      charCall((s, done) => s.emit('character:hitDice', { characterId, action: 'done' }, done)),
+    /** The dice roller: the server rolls and shows the DM. */
+    roll: async (characterId: string, roll: RollRequest, mode: RollMode): Promise<DiceRoll | null> => {
+      const res = await call<{ result: DiceRoll; character: CharacterSummary }>((s, done) =>
+        s.emit('character:roll', { characterId, roll, mode }, done),
+      );
+      if (!res.ok) {
+        setError(res.error);
+        return null;
+      }
+      setCharacters((list) => list && list.map((c) => (c.id === res.character.id ? res.character : c)));
+      return res.result;
+    },
     /** DM: the whole party rests. */
     partyRest: async (kind: 'short' | 'long') => {
       const res = await call<object>((s, done) => s.emit('session:rest', { kind }, done));

@@ -21,21 +21,38 @@ export function SettingsScreen({ onBack }: { onBack: () => void }) {
           <button role="tab" aria-selected={tab === 'theme'} onClick={() => setTab('theme')}>Theme</button>
         </div>
         {tab === 'general' ? (
-          <label className="setting-row">
-            <span className="grow">
-              Show helper texts
-              <span className="muted small block">
-                The small grey explanations under buttons and lists, like “Tap a player to open their sheet”. Switch them off once you know your way around.
+          <div className="setting-list">
+            <label className="setting-row">
+              <span className="grow">
+                Show helper texts
+                <span className="muted small block">
+                  The small grey explanations under buttons and lists, like “Tap a player to open their sheet”. Switch them off once you know your way around.
+                </span>
               </span>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              className="switch"
-              checked={settings.hints}
-              onChange={(e) => changeSettings({ hints: e.target.checked })}
-            />
-          </label>
+              <input
+                type="checkbox"
+                role="switch"
+                className="switch"
+                checked={settings.hints}
+                onChange={(e) => changeSettings({ hints: e.target.checked })}
+              />
+            </label>
+            <label className="setting-row">
+              <span className="grow">
+                Dice roller
+                <span className="muted small block">
+                  Tap an ability, save, skill or attack on your sheet to roll it with the right bonus. Your DM sees the result. Leave it off if you roll real dice.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                className="switch"
+                checked={settings.dice}
+                onChange={(e) => changeSettings({ dice: e.target.checked })}
+              />
+            </label>
+          </div>
         ) : (
           <div className="theme-options" role="radiogroup" aria-label="Theme">
             {THEME_OPTIONS.map((t) => (

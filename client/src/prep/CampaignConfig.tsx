@@ -10,13 +10,14 @@ import {
   type Npc,
   type SessionState,
 } from '@dnd/shared';
+import { downloadBackup } from '../api.ts';
 import type { Game } from '../useGame.ts';
 import { uploadImage } from './image.ts';
 import { NumberField } from './NumberField.tsx';
 import { SessionLog } from './SessionLog.tsx';
 import { usePrep, type Prep } from './usePrep.ts';
 
-export type ConfigTab = 'handouts' | 'npcs' | 'log';
+export type ConfigTab = 'handouts' | 'npcs' | 'log' | 'backup';
 
 /**
  * "Configure": the DM plans a campaign ahead. Handouts (pictures and text to
@@ -43,8 +44,8 @@ export function CampaignConfig(props: {
 }
 
 /**
- * The three tabs of the campaign prep. Also sits on the DM's Tools page
- * during a session, where handouts get a "Show" button.
+ * The tabs of the campaign prep. Also sits on the DM's Tools page during a
+ * session, where handouts get a "Show" button.
  */
 export function ConfigTabs(props: {
   game: Game;
@@ -59,15 +60,18 @@ export function ConfigTabs(props: {
   const [tab, setTab] = useState<ConfigTab>('handouts');
   return (
     <>
-      <div className="tabs tabs3" role="tablist">
+      <div className="tabs tabs4" role="tablist">
         <button role="tab" aria-selected={tab === 'handouts'} onClick={() => setTab('handouts')}>Handouts</button>
         <button role="tab" aria-selected={tab === 'npcs'} onClick={() => setTab('npcs')}>NPCs</button>
         <button role="tab" aria-selected={tab === 'log'} onClick={() => setTab('log')}>Log</button>
+        <button role="tab" aria-selected={tab === 'backup'} onClick={() => setTab('backup')}>Backup</button>
       </div>
       {prep.error && (
         <p className="error" role="alert" onClick={() => prep.setError(null)}>{prep.error}</p>
       )}
-      {tab === 'log' ? (
+      {tab === 'backup' ? (
+        <Backup campaign={campaign} />
+      ) : tab === 'log' ? (
         <SessionLog game={game} campaign={campaign} active={props.active} />
       ) : prep.prep === null ? (
         <p className="muted">Loading…</p>
@@ -77,6 +81,39 @@ export function ConfigTabs(props: {
         <Npcs prep={prep} npcs={prep.prep.npcs} />
       )}
     </>
+  );
+}
+
+// ---------- backup ----------
+
+/** Saves the whole campaign as one file on this device. Loading one is in Play → Host. */
+function Backup({ campaign }: { campaign: { id: string; name: string } }) {
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setSaved(await downloadBackup(campaign.id));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="backup">
+      <p>
+        A backup is one file with everything in <strong>{campaign.name}</strong>: handouts with their pictures, NPCs, the session log and
+        the characters who played in it, with their portraits.
+      </p>
+      <p className="muted small">
+        Keep it somewhere else than this computer. If the database is ever lost, load the file with <strong>Play → Host → Load a backup</strong>.
+      </p>
+      <button className="primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save a backup file'}</button>
+      {saved && <p className="notice good" role="status">Saved as {saved}. Look in your downloads.</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+    </div>
   );
 }
 

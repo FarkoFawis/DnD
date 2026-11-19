@@ -21,7 +21,7 @@ import {
 import { Info } from './Info.tsx';
 import { newId } from './SheetContent.tsx';
 
-function Pips({ max, spent, onRestore, label }: { max: number; spent: number; onRestore?: () => void; label: string }) {
+export function Pips({ max, spent, onRestore, label }: { max: number; spent: number; onRestore?: () => void; label: string }) {
   const left = Math.max(0, max - spent);
   return (
     <span className="pips" role="img" aria-label={`${label}: ${left} of ${max} left`}>

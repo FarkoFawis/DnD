@@ -3,24 +3,27 @@
  * session runs, and turned into a "Last time on ..." recap for the DM.
  */
 
-export type LogKind =
-  | 'start' // session started; `what` = who is playing
-  | 'end'
-  | 'join' // a player joined late
-  | 'damage' // a player character took `amount` damage
-  | 'heal'
-  | 'down' // a player character dropped to 0 HP
-  | 'deathSave' // `what` = how it went
-  | 'loot' // got an item / coins; `what` = "2× Rope"
-  | 'lost' // gave away / used up / paid
-  | 'used' // cast a spell or used an ability; `what` = its name
-  | 'rest' // `what` = 'short' | 'long'; who '' = the whole party
-  | 'level' // reached level `amount`
-  | 'fight' // a fight started; `what` = the opponents
-  | 'hit' // an opponent took `amount` damage
-  | 'defeated' // an opponent dropped to 0 HP or was removed at 0
-  | 'fightEnd' // `amount` = rounds
-  | 'handout'; // the DM showed a handout; `what` = its title
+export const LOG_KINDS = [
+  'start', // session started; `what` = who is playing
+  'end',
+  'join', // a player joined late
+  'damage', // a player character took `amount` damage
+  'heal',
+  'down', // a player character dropped to 0 HP
+  'deathSave', // `what` = how it went
+  'loot', // got an item / coins; `what` = "2× Rope"
+  'lost', // gave away / used up / paid
+  'used', // cast a spell or used an ability; `what` = its name
+  'roll', // a roll of the dice roller; `what` = "Stealth check: 19 (14 + 5)"
+  'rest', // `what` = 'short' | 'long'; who '' = the whole party
+  'level', // reached level `amount`
+  'fight', // a fight started; `what` = the opponents
+  'hit', // an opponent took `amount` damage
+  'defeated', // an opponent dropped to 0 HP or was removed at 0
+  'fightEnd', // `amount` = rounds
+  'handout', // the DM showed a handout; `what` = its title
+] as const;
+export type LogKind = (typeof LOG_KINDS)[number];
 
 export interface LogEvent {
   kind: LogKind;
@@ -52,6 +55,7 @@ export function describeLogEntry(e: LogEvent): string {
     case 'loot': return `${e.who} got ${e.what}.`;
     case 'lost': return `${e.who} lost ${e.what}.`;
     case 'used': return `${e.who} used ${e.what}.`;
+    case 'roll': return `${e.who} rolled ${e.what}.`;
     case 'rest': return `${e.who || 'The party'} took a ${e.what} rest.`;
     case 'level': return `${e.who} reached level ${n}.`;
     case 'fight': return e.what ? `A fight broke out against ${e.what}.` : 'A fight broke out.';

@@ -97,6 +97,7 @@ function sanitizeLastAction(v: unknown): LastAction | null {
   return {
     name: text(v.name, 'action name', 80),
     ...(v.detail ? { detail: text(v.detail, 'action detail', 80) } : {}),
+    ...(v.roll === true ? { roll: true } : {}),
     at: text(v.at, 'action time', 40),
   };
 }
@@ -110,6 +111,10 @@ const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
   subspecies: (v) => text(v, 'subspecies'),
   background: (v) => text(v, 'background'),
   level: (v) => int(v, 'level', 1, 20),
+  hitDie: (v) => {
+    if (v !== 0 && v !== 6 && v !== 8 && v !== 10 && v !== 12) throw new Invalid('A Hit Die is a d6, d8, d10 or d12.');
+    return v;
+  },
   hpCurrent: (v) => int(v, 'current HP', 0, 9999),
   hpMax: (v) => int(v, 'max HP', 1, 9999),
   hpTemp: (v) => int(v, 'temp HP', 0, 9999),
@@ -137,6 +142,10 @@ const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
   },
   levelUpReady: (v) => {
     if (typeof v !== 'boolean') throw new Invalid('Invalid level-up flag.');
+    return v;
+  },
+  resting: (v) => {
+    if (typeof v !== 'boolean') throw new Invalid('Invalid rest flag.');
     return v;
   },
   used: (v) => {

@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { ROOM_CODE_LENGTH } from '@dnd/shared';
-import type { CampaignSummary, CharacterSummary } from '@dnd/shared';
+import type { CampaignSummary, CharacterSummary, ImportSummary } from '@dnd/shared';
+import { uploadBackup } from './api.ts';
 import { CampaignConfig } from './prep/CampaignConfig.tsx';
 import { CharacterLine } from './Characters.tsx';
 import type { Game } from './useGame.ts';
@@ -150,7 +151,64 @@ function Host({ game, onConfigure }: { game: Game; onConfigure: (c: CampaignSumm
           Create
         </button>
       </form>
+      <LoadBackup game={game} />
     </>
+  );
+}
+
+/** Brings a campaign back from a backup file (made in Configure → Backup). */
+function LoadBackup({ game }: { game: Game }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<ImportSummary | null>(null);
+
+  const load = async (file: File) => {
+    setBusy(true);
+    setDone(null);
+    let res = await uploadBackup(file);
+    if (!res.ok && res.missingPlayers?.length) {
+      const names = res.missingPlayers.join(', ');
+      if (window.confirm(`These players have no account here: ${names}.\n\nLoad the backup without their characters? To keep them, cancel, add the accounts first (npm run users -- add ${res.missingPlayers.join(' ')}) and load the file again.`)) {
+        res = await uploadBackup(file, true);
+      } else {
+        setBusy(false);
+        return;
+      }
+    }
+    setBusy(false);
+    if (!res.ok) return game.setError(res.error);
+    setDone(res.summary);
+    void game.refreshCampaigns();
+    void game.refreshCharacters();
+  };
+
+  const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  return (
+    <div className="load-backup">
+      <input
+        ref={input}
+        type="file"
+        accept=".json,application/json"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (file) void load(file);
+        }}
+      />
+      <button className="ghost" disabled={busy || game.status !== 'online'} onClick={() => input.current?.click()}>
+        {busy ? 'Loading the backup…' : 'Load a backup file'}
+      </button>
+      {done && (
+        <div className="notice good" role="status">
+          <strong>{done.campaign.name}</strong> is back: {count(done.handouts, 'handout')}, {count(done.npcs, 'NPC')}, the log of {count(done.sessions, 'session')} and {count(done.characters.length, 'character')}
+          {done.characters.length > 0 && ` (${done.characters.join(', ')})`}.
+          {done.existing.length > 0 && <span className="block">Still here and left as they are: {done.existing.join(', ')}.</span>}
+          {done.withoutAccount.length > 0 && <span className="block">Left out, no account: {done.withoutAccount.join(', ')}.</span>}
+          {done.skipped > 0 && <span className="block">{count(done.skipped, 'entry', 'entries')} could not be read and were left out.</span>}
+        </div>
+      )}
+    </div>
   );
 }
 

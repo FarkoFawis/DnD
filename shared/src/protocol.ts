@@ -36,6 +36,7 @@ import type { CampaignPrep, Handout, Npc } from './prep.ts';
 import type { LogEntry } from './log.ts';
 import type { UseRequest } from './resources.ts';
 import type { DeathSaveResult } from './status.ts';
+import type { DiceRoll, RollMode, RollRequest } from './dice.ts';
 import type { LevelUpChoices } from './levelup.ts';
 
 export interface Item {
@@ -82,8 +83,10 @@ export interface CustomResource {
 /** The last thing a player used, shown to the DM next to their name. */
 export interface LastAction {
   name: string;
-  /** e.g. "3rd-level slot", "cantrip", "attack". */
+  /** e.g. "3rd-level slot", "cantrip", "attack"; for a dice roll its total, "17". */
   detail?: string;
+  /** A roll of the dice roller ("Stealth check" · "17"), not something that was used up. */
+  roll?: boolean;
   /** ISO time. */
   at: string;
 }
@@ -118,6 +121,11 @@ export interface CharacterData {
   subspecies: string;
   background: string;
   level: number;
+  /**
+   * Size of the class's Hit Die (6, 8, 10 or 12). 0 = look it up from the class
+   * in the content (hitDieSize() in resources.ts); set for homebrew classes.
+   */
+  hitDie: number;
   hpCurrent: number;
   hpMax: number;
   hpTemp: number;
@@ -146,8 +154,15 @@ export interface CharacterData {
    */
   levelUpReady: boolean;
   /**
+   * The DM called a Short Rest during a session: the player may now spend Hit
+   * Dice on their own phone, until they say they are done (or HP is full, the
+   * dice run out, a fight starts or a Long Rest follows).
+   */
+  resting: boolean;
+  /**
    * How many of each limited thing are spent: spell slots ("slot1".."slot9",
-   * "pact") and features (ids from limitedUses() in resources.ts). Missing = 0.
+   * "pact"), Hit Dice ("hitDice") and features (ids from limitedUses() in
+   * resources.ts). Missing = 0.
    * Changed through character:use and rests, never sent as a whole.
    */
   used: Record<string, number>;
@@ -183,6 +198,7 @@ export const DEFAULT_CHARACTER: CharacterData = {
   subspecies: '',
   background: '',
   level: 1,
+  hitDie: 0,
   hpCurrent: 10,
   hpMax: 10,
   hpTemp: 0,
@@ -200,6 +216,7 @@ export const DEFAULT_CHARACTER: CharacterData = {
   coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
   hpItemsUnlocked: false,
   levelUpReady: false,
+  resting: false,
   used: {},
   customResources: [],
   lastAction: null,
@@ -225,7 +242,7 @@ export interface CharacterSummary {
 /** Fields a player may only change while the DM has unlocked them (hpItemsUnlocked). */
 export const DM_LOCKED_FIELDS = ['hpCurrent', 'hpTemp', 'coins', 'inventory'] as const satisfies readonly (keyof CharacterData)[];
 /** Fields only the DM may ever change. */
-export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'levelUpReady', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves', 'portrait'] as const satisfies readonly (keyof CharacterData)[];
+export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'levelUpReady', 'resting', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves', 'portrait'] as const satisfies readonly (keyof CharacterData)[];
 
 // ---------- Campaigns & live sessions (socket) ----------
 
@@ -261,6 +278,16 @@ export interface SessionState {
 /** Something that should grab everyone's attention for a moment. */
 export interface SessionAlert {
   kind: 'fight';
+}
+
+/** What spending one Hit Die did. */
+export interface HitDieSpent {
+  /** Size of the die: 6, 8, 10 or 12. */
+  die: number;
+  roll: number;
+  /** Constitution modifier. */
+  modifier: number;
+  healed: number;
 }
 
 export type Ack<T> = ({ ok: true } & T) | { ok: false; error: string };
@@ -301,6 +328,25 @@ export interface ClientToServerEvents {
   'character:restore': (input: { characterId: string; id: string }, ack: CharAck) => void;
   /** Short or Long Rest for one character: the DM in a session, or its owner outside one. */
   'character:rest': (input: { characterId: string; kind: 'short' | 'long' }, ack: CharAck) => void;
+  /**
+   * Hit Dice on a Short Rest. "spend" heals one die + Constitution modifier:
+   * `roll` is the die the player threw at the table, without it the server
+   * rolls. "done" ends the player's rest. Allowed for the DM, for the owner
+   * outside sessions, and for the owner in a session while the DM's Short Rest
+   * is open (CharacterData.resting).
+   */
+  'character:hitDice': (
+    input: { characterId: string; action: 'spend' | 'done'; roll?: number },
+    ack: (res: Ack<{ character: CharacterSummary; spent?: HitDieSpent }>) => void,
+  ) => void;
+  /**
+   * The optional dice roller: the server rolls a check, save or attack with the
+   * sheet's bonus and shows the DM the result. Owner or DM.
+   */
+  'character:roll': (
+    input: { characterId: string; roll: RollRequest; mode?: RollMode },
+    ack: (res: Ack<{ result: DiceRoll; character: CharacterSummary }>) => void,
+  ) => void;
 
   // --- campaigns & sessions ---
   'campaign:list': (ack: (res: Ack<{ campaigns: CampaignSummary[] }>) => void) => void;
@@ -388,6 +434,8 @@ export interface ServerToClientEvents {
   'session:state': (session: SessionState) => void;
   'session:ended': () => void;
   'session:alert': (alert: SessionAlert) => void;
+  /** A player used the dice roller. Sent to the DM only. */
+  'session:roll': (roll: DiceRoll) => void;
 }
 
 export const LIMITS = {

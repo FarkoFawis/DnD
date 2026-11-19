@@ -771,3 +771,60 @@ button.party-card { cursor: pointer; }
 .theme-preview-line { height: 14px; border-radius: 5px; border: 1px solid var(--edge-strong); }
 .theme-preview-line.short { width: 70%; }
 .theme-preview-button { margin-top: auto; height: 14px; border-radius: 5px; background: var(--accent); }
+
+/* ---- hit dice ---- */
+.hitdice-box { border: 1px solid var(--edge); border-radius: 12px; padding: 10px 12px; margin: 0 0 12px; }
+.hitdice-head { display: flex; align-items: center; gap: 6px 10px; flex-wrap: wrap; }
+.hitdice p, .hitdice-box > p { margin: 6px 0 0; }
+.hitdice-spend { display: flex; flex-direction: row; gap: 8px; margin-top: 8px; }
+.hitdice-spend input { flex: 1; min-width: 0; margin: 0; }
+.hitdice-result { color: var(--ok-text); }
+.cs-stat.hitdice-stat { width: 50%; align-self: center; }
+.cs-stat.hitdice-stat small { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+/* The DM called a Short Rest: the box sits right under the player's HP until they are done. */
+.cs-rest { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--gold); border-radius: 12px; font-family: system-ui, sans-serif; }
+.cs-rest-title { color: var(--gold); font-size: 1.05rem; }
+
+/* ---- dice roller ---- */
+/* With the roller on, the numbers that can be rolled turn gold and become buttons. */
+button.rollable { font: inherit; color: inherit; cursor: pointer; }
+button.cs-check { width: 100%; min-height: 30px; background: none; border: 0; border-radius: 6px; padding: 1px 0; text-align: left; }
+button.cs-ability { display: block; width: 100%; }
+button.cs-check .cs-bonus, button.cs-ability .cs-ability-mod, button.cs-stat .cs-big, button.link.rollable strong { color: var(--gold); }
+button.rollable:active { border-color: var(--gold); }
+button.cs-check:active { outline: 1px solid var(--gold); }
+button.link.rollable { text-decoration: none; padding: 0; min-height: 0; }
+.roll-initiative { width: 100%; margin: 0 0 10px; }
+.roll-sheet { text-align: center; }
+.roll-formula { margin: 6px 0 2px; font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.roll-parts { margin: 0; }
+.roll-modes { display: grid; grid-template-columns: 1fr 1.1fr 1fr; gap: 8px; margin: 16px 0 8px; }
+.roll-modes button { margin: 0; padding: 12px 4px; font-size: 0.95rem; }
+.roll-note { margin: 8px 0 0; }
+.roll-earlier { margin: 8px 0 0; }
+.roll-total { margin: 10px 0 4px; font-size: 4.2rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; animation: roll-pop 0.3s ease-out; }
+.roll-total.high, .roll-natural.high { color: var(--gold); }
+.roll-total.low, .roll-natural.low { color: var(--bad-text); }
+.roll-unit { font-size: 1rem; font-weight: 600; color: var(--muted); }
+.roll-breakdown { margin: 0; font-variant-numeric: tabular-nums; }
+.roll-natural { margin: 6px 0 0; font-weight: 700; }
+.roll-next { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 4px; }
+.roll-next button { margin: 0; }
+@keyframes roll-pop { from { transform: scale(0.6); opacity: 0; } }
+/* DM: the players' rolls, on top of whatever page is open. */
+.roll-toasts { position: fixed; z-index: 45; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(calc(100% - 24px), 456px); display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.roll-toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--gold-dim); border-radius: 12px; padding: 8px 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); animation: roll-toast-in 0.25s ease-out; }
+.roll-toast.high { border-color: var(--gold); }
+.roll-toast.low { border-color: var(--bad-dim); }
+.roll-toast-total { flex: none; min-width: 46px; text-align: center; font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.roll-toast.high .roll-toast-total { color: var(--gold); }
+.roll-toast.low .roll-toast-total { color: var(--bad-text); }
+@keyframes roll-toast-in { from { transform: translateY(-12px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .roll-total, .roll-toast { animation: none; } }
+
+/* ---- settings list, campaign backup ---- */
+.setting-list { display: flex; flex-direction: column; gap: 18px; }
+.tabs.tabs4 { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tabs.tabs4 button { padding: 11px 2px; font-size: 0.9rem; }
+.backup p { margin: 0 0 10px; }
+.load-backup .notice { margin-top: 12px; }

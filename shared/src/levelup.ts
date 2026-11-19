@@ -78,7 +78,7 @@ export function levelUpPlan(c: CharacterData, content: Content): LevelUpPlan | n
   if (c.level >= MAX_LEVEL) return null;
   const newLevel = c.level + 1;
   const cls = content.classes.find((x) => norm(x.name) === norm(c.className)) ?? null;
-  const hitDie = cls?.hitDie ?? 8;
+  const hitDie = c.hitDie || (cls?.hitDie ?? 8);
   const subclass = cls ? (content.subclassesOf(cls.id).find((s) => norm(s.name) === norm(c.subclass)) ?? null) : null;
   const needsSubclass = !!cls && newLevel >= cls.subclassLevel && !c.subclass.trim();
   const feat: LevelUpPlan['feat'] = newLevel === 19 ? 'epic-boon' : featLevels(cls?.id ?? '').includes(newLevel) ? 'general' : null;
