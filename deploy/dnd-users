@@ -1,0 +1,5 @@
+#!/bin/sh
+# Manage the accounts on the hosted server: dnd-users list | add <names> | reset-password <names> | remove <names>
+# A console on the host does not always get the app's settings, so the database path is repeated here.
+export DB_PATH="${DB_PATH:-/data/dnd.sqlite}"
+cd /app && exec node_modules/.bin/tsx --disable-warning=ExperimentalWarning server/src/users.ts "$@"
