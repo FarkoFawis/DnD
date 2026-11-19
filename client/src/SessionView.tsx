@@ -9,6 +9,7 @@ import { DmTools } from './session/DmTools.tsx';
 import { FightAlert } from './session/FightAlert.tsx';
 import { PlayerExtras } from './session/PlayerExtras.tsx';
 import type { Game } from './useGame.ts';
+import { RestButtons } from './Uses.tsx';
 
 export function SessionView({ game, session, myId }: { game: Game; session: SessionState; myId: string }) {
   const isHost = session.host.id === myId;
@@ -188,6 +189,9 @@ function InSession({ game, session, isHost, me, myId }: ViewProps) {
             ))}
           </ul>
         )}
+        {isHost && session.players.length > 0 && (
+          <RestButtons who="the whole party" onRest={(k) => void game.partyRest(k)} />
+        )}
         {!isHost && <LeaveOrEnd game={game} isHost={false} />}
       </section>
     </>
@@ -259,6 +263,12 @@ function PartySummary({ player, isMe }: { player: SessionPlayer; isMe: boolean }
       <span className="grow">
         <strong>{c.name || player.user.username}</strong>
         {isMe && <span className="muted small"> (you)</span>}
+        {c.lastAction && (
+          <span className="action-chip" title={c.lastAction.detail}>
+            {c.lastAction.name}
+            {c.lastAction.detail && <span className="action-detail"> · {c.lastAction.detail}</span>}
+          </span>
+        )}
         <span className="muted small block">
           {[c.species, c.className, `Lv ${c.level}`].filter(Boolean).join(' · ')} · AC {c.armorClass} · {player.user.username}
         </span>

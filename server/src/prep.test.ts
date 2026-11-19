@@ -184,7 +184,9 @@ describe('DM tools in a session', () => {
     ok(await dm.emitWithAck('character:adjustHp', { characterId: character.id, delta: -4 }));
     ok(await dm.emitWithAck('character:adjustHp', { characterId: character.id, delta: 2 }));
     ok(await dm.emitWithAck('combat:action', { type: 'hp', id: goblin.id, delta: -20 }));
+    ok(await mira.emitWithAck('character:use', { characterId: character.id, use: { kind: 'attack', name: 'Dagger' } }));
     ok(await dm.emitWithAck('combat:end'));
+    ok(await dm.emitWithAck('session:rest', { kind: 'short' }));
     ok(await dm.emitWithAck('item:add', { characterId: character.id, item: { name: 'Rope', qty: 2 } }));
     ok(await dm.emitWithAck('character:update', { characterId: character.id, patch: { coins: { cp: 0, sp: 0, ep: 0, gp: 15, pp: 0 } } }));
 
@@ -199,7 +201,9 @@ describe('DM tools in a session', () => {
       ['heal', 'Elowen', 2],
       ['hit', goblin.name, 7],
       ['defeated', goblin.name, undefined],
+      ['used', 'Elowen', 'Dagger (attack)'],
       ['fightEnd', '', 1],
+      ['rest', '', 'short'],
       ['loot', 'Elowen', '2× Rope'],
       ['loot', 'Elowen', '15 gp'],
     ]);

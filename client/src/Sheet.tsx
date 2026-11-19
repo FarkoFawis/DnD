@@ -11,11 +11,14 @@ import {
   type CharacterData,
   type Item,
   type Skill,
+  spellSlots,
+  type UseRequest,
 } from '@dnd/shared';
 import type { Content } from '@dnd/shared';
 import { Info } from './Info.tsx';
 import { AddItem, AddSpell, Features, itemEntry, spellEntry, spellGlance } from './SheetContent.tsx';
 import { useContent } from './content/useContent.ts';
+import { CustomUsesEditor, RestButtons, SlotTracker, UsesList } from './Uses.tsx';
 import type { Game } from './useGame.ts';
 
 /** Edits one character (by id). The server decides who may: owner outside sessions, DM inside. */
@@ -25,6 +28,9 @@ export interface SheetActions {
   addItem: (item: { name: string; qty?: number; notes?: string; ref?: string }) => Promise<boolean>;
   updateItem: (itemId: string, patch: Partial<Omit<Item, 'id'>>) => Promise<boolean>;
   removeItem: (itemId: string) => Promise<boolean>;
+  use: (req: UseRequest) => Promise<boolean>;
+  restore: (id: string) => Promise<boolean>;
+  rest: (kind: 'short' | 'long') => Promise<boolean>;
 }
 
 export function sheetActions(game: Game, characterId: string): SheetActions {
@@ -34,6 +40,9 @@ export function sheetActions(game: Game, characterId: string): SheetActions {
     addItem: (item) => game.addItem(characterId, item),
     updateItem: (id, patch) => game.updateItem(characterId, id, patch),
     removeItem: (id) => game.removeItem(characterId, id),
+    use: (req) => game.use(characterId, req),
+    restore: (id) => game.restore(characterId, id),
+    rest: (kind) => game.rest(characterId, kind),
   };
 }
 
@@ -222,9 +231,32 @@ export function Sheet({
         </fieldset>
       )}
 
-      {tab === 'Spells' && <Spells character={draft} stats={stats} set={set} readOnly={readOnly} content={content} />}
+      {tab === 'Spells' && (
+        <>
+          <Spells character={draft} stats={stats} set={set} readOnly={readOnly} content={content} />
+          {spellSlots(character).length > 0 && (
+            <>
+              <h3 className="section-label">Spell slots</h3>
+              <SlotTracker character={character} onRestore={readOnly ? undefined : (id) => void actions.restore(id)} />
+            </>
+          )}
+        </>
+      )}
 
-      {tab === 'Features' && <Features character={draft} content={content} readOnly={readOnly} onChange={(f) => set('features', f)} />}
+      {tab === 'Features' && (
+        <>
+          <h3 className="section-label">Limited uses</h3>
+          <UsesList
+            character={character}
+            content={content}
+            onUse={readOnly ? undefined : actions.use}
+            onRestore={readOnly ? undefined : (id) => void actions.restore(id)}
+          />
+          <CustomUsesEditor list={draft.customResources} readOnly={readOnly} onChange={(l) => set('customResources', l)} />
+          {!readOnly && <RestButtons who={character.name || 'this character'} onRest={(k) => void actions.rest(k)} />}
+          <Features character={draft} content={content} readOnly={readOnly} onChange={(f) => set('features', f)} />
+        </>
+      )}
 
       {tab === 'Features' && (
         <label>

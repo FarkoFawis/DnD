@@ -7,3 +7,4 @@ export * from './creation.ts';
 export * from './prep.ts';
 export * from './combat.ts';
 export * from './log.ts';
+export * from './resources.ts';

@@ -13,6 +13,7 @@ export type LogKind =
   | 'loot' // got an item / coins; `what` = "2× Rope"
   | 'lost' // gave away / used up / paid
   | 'used' // cast a spell or used an ability; `what` = its name
+  | 'rest' // `what` = 'short' | 'long'; who '' = the whole party
   | 'level' // reached level `amount`
   | 'fight' // a fight started; `what` = the opponents
   | 'hit' // an opponent took `amount` damage
@@ -49,6 +50,7 @@ export function describeLogEntry(e: LogEvent): string {
     case 'loot': return `${e.who} got ${e.what}.`;
     case 'lost': return `${e.who} lost ${e.what}.`;
     case 'used': return `${e.who} used ${e.what}.`;
+    case 'rest': return `${e.who || 'The party'} took a ${e.what} rest.`;
     case 'level': return `${e.who} reached level ${n}.`;
     case 'fight': return e.what ? `A fight broke out against ${e.what}.` : 'A fight broke out.';
     case 'hit': return `${e.who} took ${n} damage.`;
@@ -67,6 +69,8 @@ export interface Recap {
   /** Per character: totals over the session. */
   characters: { who: string; damage: number; healed: number; downs: number; loot: string[]; lost: string[]; used: string[]; level: number | null }[];
   handouts: string[];
+  /** Rests of the whole party, in order: 'short' | 'long'. */
+  rests: string[];
 }
 
 /** "Fire Bolt ×3, Shield" */
@@ -79,7 +83,7 @@ function tally(names: string[]): string[] {
 /** Sums up one session's entries (all with the same `session`). */
 export function buildRecap(entries: LogEntry[]): Recap | null {
   if (entries.length === 0) return null;
-  const recap: Recap = { session: entries[0]!.session, at: entries[0]!.at, players: '', fights: [], characters: [], handouts: [] };
+  const recap: Recap = { session: entries[0]!.session, at: entries[0]!.at, players: '', fights: [], characters: [], handouts: [], rests: [] };
   const used = new Map<string, string[]>();
   const of = (who: string) => {
     let c = recap.characters.find((x) => x.who === who);
@@ -100,6 +104,7 @@ export function buildRecap(entries: LogEntry[]): Recap | null {
       case 'fight': recap.fights.push((fight = { opponents: e.what ?? '', rounds: null, defeated: [] })); break;
       case 'defeated': fight?.defeated.push(e.who); break;
       case 'fightEnd': if (fight) fight.rounds = e.amount ?? null; fight = null; break;
+      case 'rest': if (e.who === '' && e.what) recap.rests.push(e.what); break;
       case 'handout': if (e.what && !recap.handouts.includes(e.what)) recap.handouts.push(e.what); break;
       default: break;
     }
@@ -129,6 +134,7 @@ export function recapLines(r: Recap): string[] {
     if (c.lost.length) parts.push(`lost ${c.lost.join(', ')}`);
     if (parts.length) lines.push(`${c.who} ${parts.join('; ')}.`);
   }
+  if (r.rests.length) lines.push(`The party rested: ${tally(r.rests.map((k) => `${k} rest`)).join(', ')}.`);
   if (r.handouts.length) lines.push(`Handouts shown: ${r.handouts.join(', ')}.`);
   return lines;
 }

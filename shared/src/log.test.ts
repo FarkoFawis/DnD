@@ -27,6 +27,7 @@ describe('session log', () => {
         { kind: 'defeated', who: 'Goblin 2' },
         { kind: 'fightEnd', who: '', amount: 3 },
         { kind: 'loot', who: 'Elowen', what: '15 gp' },
+        { kind: 'rest', who: '', what: 'short' },
         { kind: 'end', who: '' },
       ]),
     )!;
@@ -38,6 +39,7 @@ describe('session log', () => {
       'Fight against 2× Goblin, 3 rounds. Defeated: Goblin 1, Goblin 2.',
       'Elowen used Fire Bolt ×2; got 15 gp.',
       'Brom took 13 damage; regained 6 HP; dropped to 0 HP once.',
+      'The party rested: short rest.',
       'Handouts shown: Old map.',
     ]);
   });
