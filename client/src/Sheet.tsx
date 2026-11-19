@@ -13,8 +13,13 @@ import {
   type Skill,
   spellSlots,
   type DeathSaveResult,
+  type DiceRoll,
+  type HitDieSpent,
   type LevelUpChoices,
+  type RollMode,
+  type RollRequest,
   type UseRequest,
+  hitDieSize,
 } from '@dnd/shared';
 import type { Content } from '@dnd/shared';
 import { Info } from './Info.tsx';
@@ -23,6 +28,8 @@ import { useContent } from './content/useContent.ts';
 import { ConcentrationBanner, ConditionBadges, ConditionEditor, DeathSaves } from './Status.tsx';
 import { LevelUp } from './creator/LevelUp.tsx';
 import { CustomUsesEditor, RestButtons, SlotTracker, UsesList } from './Uses.tsx';
+import { HitDice } from './HitDice.tsx';
+import { useSettings } from './settings.ts';
 import type { Game } from './useGame.ts';
 
 /** Edits one character (by id). The server decides who may: owner outside sessions, DM inside. */
@@ -38,6 +45,11 @@ export interface SheetActions {
   concentration: (action: 'end' | 'kept') => Promise<boolean>;
   deathSave: (result: DeathSaveResult) => Promise<boolean>;
   levelUp: (choices: LevelUpChoices) => Promise<boolean>;
+  /** One Hit Die: `roll` from a real die, or none so the server rolls. Null when refused. */
+  spendHitDie: (roll?: number) => Promise<HitDieSpent | null>;
+  endRest: () => Promise<boolean>;
+  /** The dice roller. Null when refused. */
+  roll: (req: RollRequest, mode: RollMode) => Promise<DiceRoll | null>;
 }
 
 export function sheetActions(game: Game, characterId: string): SheetActions {
@@ -53,6 +65,9 @@ export function sheetActions(game: Game, characterId: string): SheetActions {
     concentration: (action) => game.concentration(characterId, action),
     deathSave: (result) => game.deathSave(characterId, result),
     levelUp: (choices) => game.levelUp(characterId, choices),
+    spendHitDie: (roll) => game.spendHitDie(characterId, roll),
+    endRest: () => game.endRest(characterId),
+    roll: (req, mode) => game.roll(characterId, req, mode),
   };
 }
 
@@ -112,6 +127,7 @@ export function Sheet({
   const [draft, setDraft] = useDraft(character);
   const stats = deriveStats(draft);
   const content = useContent();
+  const { dice } = useSettings();
 
   /** Set + save immediately (toggles, numbers, selects). */
   const set = <K extends keyof CharacterData>(key: K, value: CharacterData[K]) => {
@@ -164,6 +180,19 @@ export function Sheet({
           <HpBox character={draft} onHp={actions.adjustHp} onTemp={(v) => set('hpTemp', v)} readOnly={readOnly || hpItemsLocked} />
           <DeathSaves character={character} onRoll={readOnly ? undefined : (r) => void actions.deathSave(r)} />
           <ConcentrationBanner character={character} content={content} onAction={readOnly ? undefined : (a) => void actions.concentration(a)} />
+          {/* The DM spends them for a player, or gives one back; players do it themselves outside sessions. */}
+          <div className="hitdice-box">
+            <HitDice
+              character={character}
+              content={content}
+              canRoll={dice}
+              onSpend={readOnly ? undefined : actions.spendHitDie}
+              onRestore={readOnly ? undefined : () => void actions.restore('hitDice')}
+            />
+            {dmUnlock && character.resting && (
+              <p className="muted small">{character.name || 'The player'} is spending Hit Dice on their phone.</p>
+            )}
+          </div>
           {dmUnlock ? (
             <>
               <h3 className="section-label">Conditions</h3>
@@ -197,6 +226,13 @@ export function Sheet({
             <label>Level<NumInput value={draft.level} onChange={(v) => { const n = num(v, 1, 20); if (n !== null) set('level', n); }} /></label>
             <label>Max HP<NumInput value={draft.hpMax} onChange={(v) => { const n = num(v, 1, 9999); if (n !== null) set('hpMax', n); }} /></label>
             <label>Extra initiative<NumInput value={draft.initiativeBonus} onChange={(v) => { const n = num(v, -20, 20); if (n !== null) set('initiativeBonus', n); }} /></label>
+            <label>
+              Hit Die
+              <select value={draft.hitDie} onChange={(e) => set('hitDie', Number(e.target.value))}>
+                <option value={0}>From the class (d{hitDieSize({ className: draft.className, hitDie: 0 }, content)})</option>
+                {[6, 8, 10, 12].map((d) => <option key={d} value={d}>d{d}</option>)}
+              </select>
+            </label>
           </div>
           {/* Levelling up is done by the player on their own phone; in a session the DM only says when. */}
           {dmUnlock && character.level < 20 && (

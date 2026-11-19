@@ -43,6 +43,7 @@ function PartyCard({ player, isMe, selected, onClick }: { player: SessionPlayer;
           </span>
         </span>
         {c.levelUpReady && <span className="action-chip party-action">⬆ Can level up</span>}
+        {c.resting && <span className="action-chip party-action">Short rest · spending Hit Dice</span>}
         {action && <span className="action-chip party-action">{action}</span>}
         <StatusChips character={c} />
       </span>

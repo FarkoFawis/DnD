@@ -10,3 +10,5 @@ export * from './log.ts';
 export * from './resources.ts';
 export * from './status.ts';
 export * from './levelup.ts';
+export * from './dice.ts';
+export * from './backup.ts';

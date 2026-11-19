@@ -16,12 +16,17 @@ export interface Settings {
    * their sheet…"). Anything marked with the `hint` class disappears when off.
    */
   hints: boolean;
+  /**
+   * The dice roller: tapping a skill, save or attack on your sheet rolls it and
+   * shows the DM the result. Off by default, real dice stay the normal way.
+   */
+  dice: boolean;
   /** The colours of the app: styles.css defines a set of colour tokens per theme. */
   theme: Theme;
 }
 
 const KEY = 'dnd.settings';
-const DEFAULTS: Settings = { hints: true, theme: 'default' };
+const DEFAULTS: Settings = { hints: true, dice: false, theme: 'default' };
 const listeners = new Set<(s: Settings) => void>();
 
 function load(): Settings {
@@ -30,6 +35,7 @@ function load(): Settings {
     const saved = raw && typeof raw === 'object' ? (raw as Partial<Settings>) : {};
     return {
       hints: typeof saved.hints === 'boolean' ? saved.hints : DEFAULTS.hints,
+      dice: typeof saved.dice === 'boolean' ? saved.dice : DEFAULTS.dice,
       theme: THEMES.includes(saved.theme as Theme) ? (saved.theme as Theme) : DEFAULTS.theme,
     };
   } catch {

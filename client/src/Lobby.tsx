@@ -55,7 +55,7 @@ export function Lobby({ game, session, myId }: { game: Game; session: SessionSta
   /** DM: planning the campaign from the lobby. */
   const [configuring, setConfiguring] = useState(false);
   if (isHost && configuring) {
-    return <CampaignConfig game={game} campaign={session.campaign} backLabel="Lobby" onBack={() => setConfiguring(false)} />;
+    return <CampaignConfig game={game} campaign={session.campaign} onBack={() => setConfiguring(false)} />;
   }
 
   // Around the DM: four seats in two rows, or seven in three once the fifth player joins.

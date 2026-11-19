@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, unlink, writeFileSync } from 'node:fs';
+import { randomInt, randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, unlink, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { createServer, type Server as HttpServer } from 'node:http';
 import express from 'express';
@@ -38,7 +38,26 @@ import {
   PORTRAIT_TYPES,
   applyRest,
   applyUse,
+  canSpendHitDice,
+  hitDieSize,
+  spendHitDie,
   type UseRequest,
+  ROLL_MODES,
+  describeRoll,
+  planRoll,
+  rollPlan,
+  type DiceRoll,
+  type RollMode,
+  type RollRequest,
+  BACKUP_FORMAT,
+  BACKUP_LIMITS,
+  BACKUP_VERSION,
+  HANDOUT_IMAGE_TYPES,
+  backupFileName,
+  parseBackup,
+  type BackupImage,
+  type CampaignBackup,
+  type ImportSummary,
   sanitizeCharacterPatch,
   sanitizeItem,
   type CharacterData,
@@ -111,7 +130,9 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
   io: IoServer;
 } {
   const app = express();
-  app.use(express.json({ limit: '32kb' }));
+  const smallJson = express.json({ limit: '32kb' });
+  // A campaign backup is a big file with pictures in it; its route brings its own parser.
+  app.use((req, res, next) => (req.path === '/api/campaigns/import' ? next() : smallJson(req, res, next)));
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
@@ -222,6 +243,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
     if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
     if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+    if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return 'image/gif';
     return null;
   };
 
@@ -255,7 +277,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       if (!ch) return;
       const body: unknown = req.body;
       const mime = body instanceof Uint8Array && body.length > 12 ? sniff(body) : null;
-      if (!(body instanceof Uint8Array) || !mime) {
+      if (!(body instanceof Uint8Array) || !mime || !(PORTRAIT_TYPES as readonly string[]).includes(mime)) {
         res.status(400).json({ error: 'Send a JPEG, PNG or WebP picture.' });
         return;
       }
@@ -285,6 +307,137 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     res.end(Buffer.from(p.data));
   });
 
+  // ---------- campaign backup ----------
+
+  /** A picture from a backup file, if it really is one of the allowed kinds. */
+  const decodeImage = (img: BackupImage | undefined, types: readonly string[]): { mime: string; data: Buffer } | undefined => {
+    if (!img) return undefined;
+    const data = Buffer.from(img.data, 'base64');
+    const mime = data.length > 12 ? sniff(data) : null;
+    return mime && types.includes(mime) ? { mime, data } : undefined;
+  };
+
+  // Everything the campaign needs to be rebuilt elsewhere, as one file for the DM to keep.
+  app.get('/api/campaigns/:id/export', (req, res) => {
+    const token = bearer(req.headers.authorization);
+    const user = token ? store.userForToken(token) : undefined;
+    const campaign = store.getCampaign(String(req.params.id));
+    if (!user || !campaign || campaign.ownerId !== user.id) {
+      res.status(403).json({ error: 'Only the DM of this campaign can save a backup of it.' });
+      return;
+    }
+    const readImage = (url: string | null): BackupImage | undefined => {
+      if (!uploadsDir || !url || !IMAGE_URL_PATTERN.test(url)) return undefined;
+      try {
+        const data = readFileSync(join(uploadsDir, basename(url)));
+        const mime = sniff(data);
+        return mime ? { mime, data: data.toString('base64') } : undefined;
+      } catch {
+        return undefined; // the file is gone; the handout keeps its text
+      }
+    };
+    const backup: CampaignBackup = {
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      campaign: { id: campaign.id, name: campaign.name },
+      handouts: store.listPrep<Handout>(campaign.id, 'handout').map((h) => {
+        const image = readImage(h.imageUrl);
+        return { title: h.title, text: h.text, ...(image ? { image } : {}) };
+      }),
+      npcs: store.listPrep<Npc>(campaign.id, 'npc').map(({ id: _id, ...npc }) => npc),
+      log: store.allLog(campaign.id),
+      characters: store.campaignCharacters(campaign.id).map((c) => {
+        const p = store.getPortrait(c.id);
+        return { ...c, ...(p ? { portrait: { mime: p.mime, data: Buffer.from(p.data).toString('base64') } } : {}) };
+      }),
+    };
+    res.setHeader('Content-Disposition', `attachment; filename="${backupFileName(campaign.name, new Date())}"`);
+    res.json(backup);
+  });
+
+  // Loads a backup file as a new campaign of whoever sends it. Nothing that is
+  // already in the database is changed: characters that still exist are left alone.
+  app.post('/api/campaigns/import', express.json({ limit: BACKUP_LIMITS.maxBytes }), (req, res) => {
+    const token = bearer(req.headers.authorization);
+    const user = token ? store.userForToken(token) : undefined;
+    if (!user) {
+      res.status(401).json({ error: 'Not logged in.' });
+      return;
+    }
+    let parsed;
+    try {
+      parsed = parseBackup(req.body);
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+      return;
+    }
+    const { backup } = parsed;
+    let skipped = parsed.skipped;
+
+    // Characters go back to their players, found by username.
+    const owners = new Map<string, string | undefined>();
+    for (const c of backup.characters) {
+      const key = c.owner.toLowerCase();
+      if (!owners.has(key)) owners.set(key, store.userIdByName(c.owner));
+    }
+    const fresh = backup.characters.filter((c) => !store.characterExists(c.id));
+    const missingPlayers = [...new Set(fresh.filter((c) => !owners.get(c.owner.toLowerCase())).map((c) => c.owner))];
+    if (missingPlayers.length > 0 && req.query.skipMissing !== '1') {
+      res.status(409).json({
+        error: `No account here for: ${missingPlayers.join(', ')}. Add them first (npm run users -- add ${missingPlayers.join(' ')}), or load the backup without their characters.`,
+        missingPlayers,
+      });
+      return;
+    }
+
+    const label = (c: { owner: string; data: CharacterData }) => `${c.data.name} (${c.owner})`;
+    const handouts: Omit<Handout, 'id'>[] = [];
+    for (const h of backup.handouts) {
+      const img = uploadsDir ? decodeImage(h.image, HANDOUT_IMAGE_TYPES) : undefined;
+      let imageUrl: string | null = null;
+      if (img) {
+        mkdirSync(uploadsDir!, { recursive: true });
+        const name = `${randomUUID()}.${IMAGE_TYPES[img.mime]}`;
+        writeFileSync(join(uploadsDir!, name), img.data);
+        imageUrl = `/api/images/${name}`;
+      }
+      if (imageUrl || h.text) handouts.push({ title: h.title, text: h.text, imageUrl });
+      else skipped += 1;
+    }
+    const names = new Set(store.listCampaigns(user.id).map((c) => c.name.toLowerCase()));
+    let name = backup.campaign.name;
+    for (let n = 2; names.has(name.toLowerCase()); n++) {
+      const suffix = n === 2 ? ' (restored)' : ` (restored ${n - 1})`;
+      name = `${backup.campaign.name.slice(0, LIMITS.campaignNameMaxLength - suffix.length)}${suffix}`;
+    }
+    const id = backup.campaign.id && !store.getCampaign(backup.campaign.id) ? backup.campaign.id : randomUUID();
+    const restored = fresh.flatMap((c) => {
+      const userId = owners.get(c.owner.toLowerCase());
+      if (!userId) return [];
+      const portrait = decodeImage(c.portrait, PORTRAIT_TYPES);
+      return [{ ...c, userId, portrait, data: { ...c.data, portrait: portrait ? Date.now().toString(36) : '' } }];
+    });
+    try {
+      store.restoreCampaign({ id, name, ownerId: user.id, handouts, npcs: backup.npcs, log: backup.log, characters: restored });
+    } catch (e) {
+      for (const h of handouts) removeImage(h.imageUrl);
+      res.status(500).json({ error: `The backup could not be loaded: ${(e as Error).message}` });
+      return;
+    }
+    const summary: ImportSummary = {
+      campaign: { id, name },
+      handouts: handouts.length,
+      npcs: backup.npcs.length,
+      sessions: new Set(backup.log.map((e) => e.session)).size,
+      characters: restored.map(label),
+      existing: backup.characters.filter((c) => !fresh.includes(c)).map(label),
+      withoutAccount: fresh.filter((c) => !owners.get(c.owner.toLowerCase())).map(label),
+      skipped,
+    };
+    res.json({ summary });
+  });
+
   app.post('/api/auth/logout', (req, res) => {
     const token = bearer(req.headers.authorization);
     if (token) store.logout(token);
@@ -298,6 +451,15 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       res.sendFile('index.html', { root: clientDist });
     });
   }
+
+  // Bodies that are too big or not what they say (a backup that isn't JSON).
+  app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const e = err as { type?: string; status?: number };
+    if (res.headersSent || !e?.type) return next(err);
+    res
+      .status(e.status ?? 400)
+      .json({ error: e.type === 'entity.too.large' ? 'That file is too big.' : 'That file could not be read.' });
+  });
 
   // ---------- realtime ----------
 
@@ -711,10 +873,84 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const t = restable(input?.characterId);
       if (!t.ok) return ack(t);
       if (input?.kind !== 'short' && input?.kind !== 'long') return ack({ ok: false, error: 'Short or long rest?' });
-      const character = store.updateCharacter(t.ch.id, applyRest(t.ch.data, input.kind));
+      const character = store.updateCharacter(t.ch.id, restPatch(t.ch, input.kind));
       ack({ ok: true, character });
       logFor(character, { kind: 'rest', what: input.kind });
       afterChange(character);
+    });
+
+    /** A Short Rest in a session also lets the player spend Hit Dice on their own phone. */
+    const restPatch = (ch: CharacterSummary, kind: 'short' | 'long'): Partial<CharacterData> => ({
+      ...applyRest(ch.data, kind),
+      ...(kind === 'short' && ch.inSession ? { resting: canSpendHitDice(ch.data) } : {}),
+    });
+
+    socket.on('character:hitDice', (input, ack) => {
+      const t = usable(input?.characterId);
+      if (!t.ok) return ack(t);
+      // Ending a rest is always fine, also one that has just ended by itself (full HP, no dice left).
+      if (input?.action === 'done') {
+        const character = store.updateCharacter(t.ch.id, { resting: false });
+        ack({ ok: true, character });
+        return afterChange(character);
+      }
+      if (!t.isDm && t.ch.inSession && !t.ch.data.resting) {
+        return ack({ ok: false, error: 'Hit Dice are spent on a Short Rest. Your DM decides when the party rests.' });
+      }
+      if (input?.action !== 'spend') return ack({ ok: false, error: 'Invalid action.' });
+      try {
+        const die = hitDieSize(t.ch.data, gameContent());
+        // The player's own die from the table, or ours when they have none at hand.
+        const roll = typeof input.roll === 'number' ? input.roll : randomInt(1, die + 1);
+        const r = spendHitDie(t.ch.data, die, roll);
+        const character = store.updateCharacter(t.ch.id, {
+          ...r.patch,
+          lastAction: { name: 'Hit Die', detail: `+${r.healed} HP`, at: new Date().toISOString() },
+        });
+        ack({ ok: true, character, spent: { die, roll, modifier: r.modifier, healed: r.healed } });
+        logFor(character, { kind: 'heal', amount: r.healed, what: `Hit Die, ${character.data.hpCurrent}/${character.data.hpMax} HP` });
+        afterChange(character);
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
+    });
+
+    // ---------- dice roller ----------
+
+    socket.on('character:roll', (input, ack) => {
+      const t = usable(input?.characterId);
+      if (!t.ok) return ack(t);
+      const mode: RollMode = ROLL_MODES.includes(input?.mode as RollMode) ? (input.mode as RollMode) : 'normal';
+      try {
+        const plan = planRoll(t.ch.data, input?.roll as RollRequest, gameContent());
+        const result: DiceRoll = {
+          ...rollPlan(plan, mode, (sides) => randomInt(1, sides + 1)),
+          id: randomUUID(),
+          at: new Date().toISOString(),
+          characterId: t.ch.id,
+          who: t.ch.data.name,
+        };
+        const extra = result.natural ? ` · natural ${result.natural}` : result.note ? ` ${result.note.toLowerCase()}` : '';
+        const character = store.updateCharacter(t.ch.id, {
+          lastAction: { name: result.label, detail: `${result.total}${extra}`, roll: true, at: result.at },
+        });
+        ack({ ok: true, result, character });
+        logFor(character, { kind: 'roll', what: describeRoll(result) });
+        const live = character.inSession ? store.getSession(character.inSession) : undefined;
+        if (live) {
+          // A rolled initiative goes straight into the turn order, unless the DM already set one.
+          const me = plan.kind === 'initiative' ? live.combat?.combatants.find((c) => c.kind === 'player' && c.ref === t.ch.id) : undefined;
+          if (live.combat && me && me.initiative === null) {
+            store.setCombat(live.code, applyCombatAction(live.combat, { type: 'set', id: me.id, value: result.total }));
+          }
+          for (const s of io.sockets.sockets.values()) {
+            if (s.data.code === live.code && s.data.isHost) s.emit('session:roll', result);
+          }
+        }
+        afterChange(character);
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
     });
 
     // ---------- campaigns & sessions ----------
@@ -901,6 +1137,10 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       if (!live) return ack(NOT_RUNNING);
       if (live.combat) log(live, { kind: 'fightEnd', who: '', amount: live.combat.round });
       const npcs = npcCombatants(live.campaignId, input?.npcs, []);
+      // A fight ends any Short Rest that is still open.
+      for (const p of store.sessionPlayers(live.code)) {
+        if (store.getCharacter(p.characterId)?.data.resting) store.updateCharacter(p.characterId, { resting: false });
+      }
       store.setCombat(live.code, newCombat([...playerCombatants(live.code), ...npcs]));
       log(live, { kind: 'fight', who: '', what: opponentList(npcs) });
       ack({ ok: true });
@@ -1060,7 +1300,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       if (input?.kind !== 'short' && input?.kind !== 'long') return ack({ ok: false, error: 'Short or long rest?' });
       for (const p of store.sessionPlayers(code)) {
         const ch = store.getCharacter(p.characterId);
-        if (ch) store.updateCharacter(ch.id, applyRest(ch.data, input.kind));
+        if (ch) store.updateCharacter(ch.id, { ...applyRest(ch.data, input.kind), ...(input.kind === 'short' ? { resting: canSpendHitDice(ch.data) } : {}) });
       }
       const live = store.getSession(code);
       if (live?.started && live.sessionNo) store.addLog(live.campaignId, live.sessionNo, { kind: 'rest', who: '', what: input.kind });

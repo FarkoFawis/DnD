@@ -14,10 +14,16 @@ import {
   SKILL_KEYS,
   deriveStats,
   formatModifier,
+  hitDiceLeft,
+  hitDieSize,
   limitedUses,
   weaponAttacks,
   type CharacterData,
+  type RollRequest,
 } from '@dnd/shared';
+import { RollSheet } from './Dice.tsx';
+import { HitDice } from './HitDice.tsx';
+import { useSettings } from './settings.ts';
 import { Info } from './Info.tsx';
 import { LevelUp } from './creator/LevelUp.tsx';
 import { HpBox, Items, type SheetActions } from './Sheet.tsx';
@@ -31,16 +37,22 @@ export function ClassicSheet({
   actions,
   playerName,
   portrait,
+  inSession = true,
 }: {
   character: CharacterData;
   actions: SheetActions;
   playerName: string;
   /** The character's picture, shown next to the name. */
   portrait?: ReactNode;
+  /** A DM is watching: rolls of the dice roller are shown to them. */
+  inSession?: boolean;
 }) {
   const content = useContent();
+  /** The dice roller (Settings): abilities, saves, skills and attacks become buttons that roll. */
+  const { dice } = useSettings();
+  const [rolling, setRolling] = useState<RollRequest | null>(null);
+  const roller = dice ? setRolling : undefined;
   const stats = deriveStats(c);
-  const cls = content?.classes.find((x) => x.name.toLowerCase() === c.className.trim().toLowerCase());
   const attacks = content ? weaponAttacks(c, content) : [];
   const unlocked = c.hpItemsUnlocked;
   const spellsByLevel = [...c.spells].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
@@ -57,6 +69,8 @@ export function ClassicSheet({
   useEffect(() => {
     if (lastAt === seenAt) return;
     setSeenAt(lastAt);
+    // A roll of the dice roller has its own result sheet.
+    if (c.lastAction?.roll) return;
     setFlash(actionText(c.lastAction));
     const t = setTimeout(() => setFlash(null), 2500);
     return () => clearTimeout(t);
@@ -73,6 +87,9 @@ export function ClassicSheet({
           </span>
           <span aria-hidden>⬆</span>
         </button>
+      )}
+      {rolling && (
+        <RollSheet character={c} content={content} request={rolling} roll={actions.roll} shared={inSession} onClose={() => setRolling(null)} />
       )}
       {levelling && canLevelUp && (
         <LevelUp
@@ -120,26 +137,48 @@ export function ClassicSheet({
         )}
       </section>
 
+      {c.resting && (
+        <section className="cs-rest" aria-label="Short rest">
+          <strong className="cs-rest-title">Short rest</strong>
+          <HitDice character={c} content={content} canRoll={dice} onSpend={actions.spendHitDie} />
+          <button type="button" className="secondary" onClick={() => void actions.endRest()}>Done resting</button>
+        </section>
+      )}
+
       <DeathSaves character={c} onRoll={(r) => void actions.deathSave(r)} />
       <ConcentrationBanner character={c} content={content} onAction={(a) => void actions.concentration(a)} />
       <ConditionBadges character={c} content={content} />
 
+      {roller && <p className="cs-hint hint">Dice roller: tap an ability, a save, a skill, Initiative or an attack to roll it.</p>}
       <div className="cs-cols">
         <div className="cs-abilities">
-          {ABILITIES.map((a) => (
-            <div key={a} className="cs-ability">
-              <span className="cs-label">{ABILITY_NAMES[a]}</span>
-              <span className="cs-ability-mod">{formatModifier(stats.modifiers[a])}</span>
-              <span className="cs-ability-score">{c.abilities[a]}</span>
-            </div>
-          ))}
+          {ABILITIES.map((a) => {
+            const body = (
+              <>
+                <span className="cs-label">{ABILITY_NAMES[a]}</span>
+                <span className="cs-ability-mod">{formatModifier(stats.modifiers[a])}</span>
+                <span className="cs-ability-score">{c.abilities[a]}</span>
+              </>
+            );
+            return roller ? (
+              <button key={a} type="button" className="cs-ability rollable" aria-label={`Roll a ${ABILITY_NAMES[a]} check`} onClick={() => roller({ kind: 'ability', ability: a })}>{body}</button>
+            ) : (
+              <div key={a} className="cs-ability">{body}</div>
+            );
+          })}
         </div>
         <div className="cs-right">
           <div className="cs-pill"><span className="cs-pill-value">{formatModifier(stats.proficiencyBonus)}</span><span className="cs-label">Proficiency bonus</span></div>
           <Box label="Saving throws">
             <ul className="cs-checks">
               {ABILITIES.map((a) => (
-                <Check key={a} level={c.saveProficiencies.includes(a) ? 1 : 0} bonus={stats.saves[a]} name={ABILITY_NAMES[a]} />
+                <Check
+                  key={a}
+                  level={c.saveProficiencies.includes(a) ? 1 : 0}
+                  bonus={stats.saves[a]}
+                  name={ABILITY_NAMES[a]}
+                  onRoll={roller && (() => roller({ kind: 'save', ability: a }))}
+                />
               ))}
             </ul>
           </Box>
@@ -152,6 +191,7 @@ export function ClassicSheet({
                   bonus={stats.skills[s]}
                   name={SKILLS[s].name}
                   hint={SKILLS[s].ability.slice(0, 1).toUpperCase() + SKILLS[s].ability.slice(1)}
+                  onRoll={roller && (() => roller({ kind: 'skill', skill: s }))}
                 />
               ))}
             </ul>
@@ -163,12 +203,19 @@ export function ClassicSheet({
       <section className="cs-combat">
         <div className="cs-trio">
           <div className="cs-shield"><span className="cs-big">{c.armorClass}</span><span className="cs-label">Armor class</span></div>
-          <div className="cs-stat"><span className="cs-big">{formatModifier(stats.initiative)}</span><span className="cs-label">Initiative</span></div>
+          {roller ? (
+            <button type="button" className="cs-stat rollable" aria-label="Roll Initiative" onClick={() => roller({ kind: 'initiative' })}>
+              <span className="cs-big">{formatModifier(stats.initiative)}</span><span className="cs-label">Initiative</span>
+            </button>
+          ) : (
+            <div className="cs-stat"><span className="cs-big">{formatModifier(stats.initiative)}</span><span className="cs-label">Initiative</span></div>
+          )}
           <div className="cs-stat"><span className="cs-big">{Math.max(0, c.speed - 5 * c.exhaustion)}<small> ft</small></span><span className="cs-label">Speed{c.exhaustion > 0 ? ' (exhausted)' : ''}</span></div>
         </div>
-        {cls && (
-          <div className="cs-stat hitdice"><span className="cs-mid">{c.level}d{cls.hitDie}</span><span className="cs-label">Hit dice</span></div>
-        )}
+        <div className="cs-stat hitdice-stat">
+          <span className="cs-mid">{hitDiceLeft(c)} / {c.level} <small>d{hitDieSize(c, content)}</small></span>
+          <span className="cs-label">Hit dice</span>
+        </div>
       </section>
 
       <Box label="Attacks & spellcasting">
@@ -187,7 +234,13 @@ export function ClassicSheet({
                     <td className="num">{formatModifier(a.toHit)}</td>
                     <td>{a.damage}</td>
                     <td className="use-cell">
-                      <button type="button" className="use-button" onClick={() => void actions.use({ kind: 'attack', name: a.name })}>Attack</button>
+                      <button
+                        type="button"
+                        className="use-button"
+                        onClick={() => (roller ? roller({ kind: 'attack', itemId: a.itemId }) : void actions.use({ kind: 'attack', name: a.name }))}
+                      >
+                        {roller ? 'Roll' : 'Attack'}
+                      </button>
                     </td>
                   </tr>
                 );
@@ -197,7 +250,15 @@ export function ClassicSheet({
         )}
         {stats.spellSaveDc !== null && (
           <p className="cs-spellline">
-            Spell save DC <strong>{stats.spellSaveDc}</strong> · Spell attack <strong>{formatModifier(stats.spellAttack!)}</strong> · {ABILITY_NAMES[c.spellcastingAbility!]}
+            Spell save DC <strong>{stats.spellSaveDc}</strong> ·{' '}
+            {roller ? (
+              <button type="button" className="link rollable" onClick={() => roller({ kind: 'spellAttack' })}>
+                Spell attack <strong>{formatModifier(stats.spellAttack!)}</strong>
+              </button>
+            ) : (
+              <>Spell attack <strong>{formatModifier(stats.spellAttack!)}</strong></>
+            )}{' '}
+            · {ABILITY_NAMES[c.spellcastingAbility!]}
           </p>
         )}
         <SlotTracker character={c} />
@@ -292,12 +353,17 @@ function Box({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Check({ level, bonus, name, hint }: { level: 0 | 1 | 2; bonus: number; name: string; hint?: string }) {
-  return (
-    <li className="cs-check">
+function Check({ level, bonus, name, hint, onRoll }: { level: 0 | 1 | 2; bonus: number; name: string; hint?: string; onRoll?: () => void }) {
+  const body = (
+    <>
       <span className={`cs-dot lvl${level}`} aria-label={['not proficient', 'proficient', 'expertise'][level]} />
       <span className="cs-bonus">{formatModifier(bonus)}</span>
       <span className="grow">{name}{hint && <span className="cs-hintab"> ({hint})</span>}</span>
-    </li>
+    </>
+  );
+  return onRoll ? (
+    <li><button type="button" className="cs-check rollable" onClick={onRoll}>{body}</button></li>
+  ) : (
+    <li className="cs-check">{body}</li>
   );
 }

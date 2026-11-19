@@ -81,6 +81,11 @@ function loadDraft(): { choices: CreationChoices; step: number } | null {
     return null;
   }
 }
+/** Has a character been started in the creator and not finished? */
+export function hasCreatorDraft(): boolean {
+  const d = loadDraft();
+  return !!d && (d.step > 0 || !!d.choices.classId);
+}
 function saveDraft(d: { choices: CreationChoices; step: number } | null) {
   try {
     if (d) localStorage.setItem(DRAFT_KEY, JSON.stringify(d));

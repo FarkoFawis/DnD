@@ -1,13 +1,20 @@
 import { useState } from 'react';
 import type { CharacterSummary } from '@dnd/shared';
 import { uploadPortrait } from './api.ts';
-import { CharacterCreator } from './creator/CharacterCreator.tsx';
+import { CharacterCreator, hasCreatorDraft } from './creator/CharacterCreator.tsx';
+import { Panel } from './Panel.tsx';
 import { Portrait, PortraitPicker } from './Portrait.tsx';
 import { Sheet, sheetActions } from './Sheet.tsx';
 import type { Game } from './useGame.ts';
 
+const TABS = [
+  { id: 'roster', label: 'Roster' },
+  { id: 'create', label: 'Create' },
+] as const;
+
 /** Your characters, made outside sessions. Any of them can join any campaign. */
 export function Characters({ game, onBack }: { game: Game; onBack: () => void }) {
+  const [tab, setTab] = useState<'roster' | 'create'>('roster');
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const open = game.characters?.find((c) => c.id === openId);
@@ -58,39 +65,58 @@ export function Characters({ game, onBack }: { game: Game; onBack: () => void })
             await uploadPortrait(created.id, picture).then(() => game.refreshCharacters(), () => game.setError('The character was created, but the picture could not be saved. Add it on the sheet.'));
           }
           setCreating(false);
+          setTab('roster');
           setOpenId(created.id);
         }}
       />
     );
   }
 
+  const draft = tab === 'create' && hasCreatorDraft();
   return (
-    <>
-      <button className="back" onClick={onBack}>‹ Home</button>
-      <section className="card">
-        <h2 className="card-title">Your characters</h2>
-        {game.characters === null ? (
-          <p className="muted">Loading…</p>
-        ) : game.characters.length === 0 ? (
-          <p className="muted">No characters yet. Create your first one below.</p>
-        ) : (
-          <ul className="list">
-            {game.characters.map((c) => (
-              <li key={c.id}>
-                <button className="list-button" onClick={() => setOpenId(c.id)}>
-                  <Portrait characterId={c.id} character={c.data} className="thumb" />
-                  <span className="grow"><CharacterLine character={c} /></span>
-                  {c.inSession ? <span className="badge">In session</span> : <span className="chev">›</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <button className="primary block-button" onClick={() => setCreating(true)} disabled={game.status !== 'online'}>
-          + New character
-        </button>
-      </section>
-    </>
+    <Panel title="Characters" tabs={TABS} tab={tab} onTab={setTab} onClose={onBack}>
+      {tab === 'roster' ? (
+        <>
+          <h3 className="panel-heading">Your characters</h3>
+          {game.characters === null ? (
+            <p className="muted">Loading…</p>
+          ) : game.characters.length === 0 ? (
+            <>
+              <p className="muted">No characters yet.</p>
+              <button className="secondary block-button" onClick={() => setTab('create')}>Create your first one</button>
+            </>
+          ) : (
+            <>
+              <p className="muted small hint">Tap a character to open its sheet.</p>
+              <ul className="rows">
+                {game.characters.map((c) => (
+                  <li key={c.id}>
+                    <button className="row-button" onClick={() => setOpenId(c.id)}>
+                      <Portrait characterId={c.id} character={c.data} className="thumb" />
+                      <span className="grow">
+                        <CharacterLine character={c} />
+                        {c.inSession && <span className="badge">In session</span>}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <h3 className="panel-heading">New character</h3>
+          <p className="muted small">
+            Step by step: class, background, species, ability scores, equipment and spells. Every choice comes with its rules text, and you can leave and pick up where you stopped.
+          </p>
+          <button className="primary block-button" onClick={() => setCreating(true)} disabled={game.status !== 'online'}>
+            {draft ? 'Continue your character' : 'Start'}
+          </button>
+          {draft && <p className="muted small mt">You started a character and have not finished it yet.</p>}
+        </>
+      )}
+    </Panel>
   );
 }
 

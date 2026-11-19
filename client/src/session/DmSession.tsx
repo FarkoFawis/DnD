@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { SessionState } from '@dnd/shared';
+import { RollToasts } from '../Dice.tsx';
 import { DmParty } from '../PartyGrid.tsx';
 import { usePrep } from '../prep/usePrep.ts';
 import type { Game } from '../useGame.ts';
@@ -62,6 +63,8 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
       <div className="dm-page">
         <DmParty game={game} session={session} myId={myId} />
       </div>
+      {/* Rolls from the players' dice roller, whatever page is open. */}
+      <RollToasts rolls={game.rolls} />
 
       <Page side="left" shown={-fightAt} dragging={dragging} open={page === -1}>
         <div className="party-panel-head">

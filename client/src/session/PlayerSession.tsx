@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Combat, SessionPlayer, SessionState } from '@dnd/shared';
 import { ClassicSheet } from '../ClassicSheet.tsx';
+import { RollSheet } from '../Dice.tsx';
+import { useContent } from '../content/useContent.ts';
+import { useSettings } from '../settings.ts';
 import { PartyGrid } from '../PartyGrid.tsx';
 import { Portrait } from '../Portrait.tsx';
 import { sheetActions } from '../Sheet.tsx';
@@ -98,7 +101,7 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
             <h2 className="party-title grow">Fight</h2>
             <button type="button" className="link back-link" onClick={() => setPage(0)}>My sheet ›</button>
           </div>
-          <FightPage combat={combat} myCharacterId={me.characterId} />
+          <FightPage combat={combat} me={me} game={game} />
         </Page>
       )}
       <Page side="right" shown={partyAt} dragging={dragging} open={page === 1}>
@@ -140,13 +143,20 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
 }
 
 /** Everything about the fight, for a player: whose turn it is and the order of everyone in it. */
-function FightPage({ combat, myCharacterId }: { combat: Combat; myCharacterId: string }) {
+function FightPage({ combat, me, game }: { combat: Combat; me: SessionPlayer; game: Game }) {
+  const myCharacterId = me.characterId;
   const order = combat.combatants;
   const rolled = order.some((c) => c.initiative !== null);
   const i = order.findIndex((c) => c.id === combat.activeId);
   const active = i >= 0 ? order[i] : undefined;
   const next = i >= 0 && order.length > 1 ? order[(i + 1) % order.length] : undefined;
   const isMe = (c: { kind: string; ref: string } | undefined) => !!c && c.kind === 'player' && c.ref === myCharacterId;
+  // With the dice roller on, players can roll their own initiative; it goes straight into the order.
+  const { dice } = useSettings();
+  const content = useContent();
+  const [rolling, setRolling] = useState(false);
+  const mine = order.find(isMe);
+  const canRoll = dice && !!mine && mine.initiative === null;
   return (
     <div className="fight-page">
       <p className={`fight-status ${isMe(active) ? 'mine' : ''}`} role="status">
@@ -166,6 +176,21 @@ function FightPage({ combat, myCharacterId }: { combat: Combat; myCharacterId: s
           <span className="muted small block hint">Your DM rolls for everyone, or asks you for your roll.</span>
         )}
       </p>
+      {(canRoll || rolling) && (
+        <button type="button" className="primary roll-initiative" disabled={!canRoll} onClick={() => setRolling(true)}>
+          Roll my initiative
+        </button>
+      )}
+      {rolling && (
+        <RollSheet
+          character={me.character}
+          content={content}
+          request={{ kind: 'initiative' }}
+          roll={(req, mode) => game.roll(myCharacterId, req, mode)}
+          shared
+          onClose={() => setRolling(false)}
+        />
+      )}
       <h3 className="section-label">Turn order</h3>
       <ol className="turn-list">
         {order.map((c) => (

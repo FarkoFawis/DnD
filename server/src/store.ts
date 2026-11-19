@@ -6,6 +6,7 @@ import {
   DEFAULT_CHARACTER,
   generateRoomCode,
   normalizeCharacter,
+  type BackupLogEntry,
   type CampaignSummary,
   type Combat,
   type Handout,
@@ -162,6 +163,73 @@ export class Store {
         .prepare('SELECT coalesce(max(session_no), 0) AS n FROM session_log WHERE campaign_id = ? AND session_no < ?')
         .get(campaignId, before ?? Number.MAX_SAFE_INTEGER) as { n: number }
     ).n;
+  }
+
+  /** Every entry of the campaign, oldest first, for a backup. */
+  allLog(campaignId: string): BackupLogEntry[] {
+    return (
+      this.db
+        .prepare('SELECT session_no AS session, at, data FROM session_log WHERE campaign_id = ? ORDER BY id')
+        .all(campaignId) as { session: number; at: string; data: string }[]
+    ).map((r) => ({ ...(JSON.parse(r.data) as LogEvent), session: r.session, at: r.at }));
+  }
+
+  // ---------- campaign backup ----------
+
+  /** The characters that last played in the campaign, with their players' usernames. */
+  campaignCharacters(campaignId: string): { id: string; owner: string; data: CharacterData }[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT ch.id, u.username AS owner, ch.data FROM characters ch JOIN users u ON u.id = ch.user_id
+           WHERE ch.campaign_id = ? ORDER BY ch.created_at, ch.rowid`,
+        )
+        .all(campaignId) as { id: string; owner: string; data: string }[]
+    ).map((r) => ({ id: r.id, owner: r.owner, data: normalizeCharacter(JSON.parse(r.data)) }));
+  }
+
+  userIdByName(username: string): string | undefined {
+    return this.findUser(username)?.id;
+  }
+
+  characterExists(id: string): boolean {
+    return this.db.prepare('SELECT 1 FROM characters WHERE id = ?').get(id) !== undefined;
+  }
+
+  /**
+   * Writes a checked backup (see parseBackup) as a new campaign of `ownerId`,
+   * all or nothing. Characters keep their ids and get this campaign as their
+   * last one; the caller leaves out those that still exist.
+   */
+  restoreCampaign(input: {
+    id: string;
+    name: string;
+    ownerId: string;
+    handouts: Omit<Handout, 'id'>[];
+    npcs: Omit<Npc, 'id'>[];
+    log: BackupLogEntry[];
+    characters: { id: string; userId: string; data: CharacterData; portrait?: { mime: string; data: Uint8Array } }[];
+  }): void {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('INSERT INTO campaigns (id, name, owner_id) VALUES (?, ?, ?)').run(input.id, input.name, input.ownerId);
+      const prep = this.db.prepare('INSERT INTO prep_entries (id, campaign_id, kind, data) VALUES (?, ?, ?, ?)');
+      for (const h of input.handouts) prep.run(randomUUID(), input.id, 'handout', JSON.stringify(h));
+      for (const n of input.npcs) prep.run(randomUUID(), input.id, 'npc', JSON.stringify(n));
+      const log = this.db.prepare('INSERT INTO session_log (campaign_id, session_no, at, data) VALUES (?, ?, ?, ?)');
+      for (const { session, at, ...event } of input.log) log.run(input.id, session, at, JSON.stringify(event));
+      const last = input.log.at(-1);
+      if (last) this.db.prepare('UPDATE campaigns SET last_played_at = ? WHERE id = ?').run(last.at, input.id);
+      const character = this.db.prepare('INSERT INTO characters (id, user_id, campaign_id, data) VALUES (?, ?, ?, ?)');
+      for (const c of input.characters) {
+        character.run(c.id, c.userId, input.id, JSON.stringify(c.data));
+        if (c.portrait) this.setPortrait(c.id, c.portrait.mime, c.portrait.data);
+      }
+      this.db.exec('COMMIT');
+    } catch (e) {
+      this.db.exec('ROLLBACK');
+      throw e;
+    }
   }
 
   // ---------- campaign prep ----------

@@ -461,6 +461,8 @@ export function buildCharacter(c: CreationChoices, content: Content, newId: IdFn
     subspecies: subOpt?.name ?? '',
     background: bg?.name ?? '',
     level,
+    // A homebrew class isn't in the content, so the sheet remembers its Hit Die.
+    hitDie: c.classId === CUSTOM && cls ? cls.hitDie : 0,
     hpMax,
     hpCurrent: hpMax,
     hpTemp: 0,

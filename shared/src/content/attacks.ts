@@ -12,6 +12,15 @@ export interface WeaponAttack {
   /** Versatile two-handed damage, range, mastery... */
   notes: string;
   ref: string;
+  /** The parts of `damage`, for the dice roller: "1d8", the ability modifier, "Slashing". */
+  dice: string;
+  /** Damage dice when a Versatile weapon is held in two hands, e.g. "1d10". */
+  versatileDice?: string;
+  modifier: number;
+  damageType: string;
+  /** Which ability the attack uses and whether the proficiency bonus is in `toHit`. */
+  ability: Ability;
+  proficient: boolean;
 }
 
 /**
@@ -52,6 +61,12 @@ export function weaponAttacks(c: CharacterData, content: Content): WeaponAttack[
         .filter(Boolean)
         .join(' · '),
       ref: def.id,
+      dice: w.damage,
+      ...(w.versatile ? { versatileDice: w.versatile } : {}),
+      modifier: m,
+      damageType: w.damageType,
+      ability,
+      proficient,
     });
   }
   return out;

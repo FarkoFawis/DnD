@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CHARACTER, type CharacterData } from './protocol.ts';
-import { applyRest, applyUse, castOptions, limitedUses, spellSlots } from './resources.ts';
+import { HIT_DICE_ID, applyRest, applyUse, canSpendHitDice, castOptions, hitDiceLeft, hitDieSize, limitedUses, spellSlots, spendHitDie } from './resources.ts';
 
 const char = (p: Partial<CharacterData>): CharacterData => ({ ...structuredClone(DEFAULT_CHARACTER), ...p });
 const slots = (p: Partial<CharacterData>) => spellSlots(char(p)).map((s) => s.max);
@@ -102,5 +102,59 @@ describe('rests', () => {
   it('a long rest restores everything and HP', () => {
     const c = char({ className: 'Wizard', level: 3, hpMax: 20, hpCurrent: 3, hpTemp: 4, used: { slot1: 2 } });
     expect(applyRest({ ...c, exhaustion: 2 }, 'long')).toMatchObject({ used: {}, hpCurrent: 20, hpTemp: 0, exhaustion: 1, concentration: null });
+  });
+});
+
+describe('Hit Dice (2024)', () => {
+  const classes = { classes: [{ name: 'Fighter', hitDie: 10 }, { name: 'Wizard', hitDie: 6 }] };
+  const hurt = (p: Partial<CharacterData> = {}) =>
+    char({ className: 'Fighter', level: 3, hpMax: 28, hpCurrent: 10, abilities: { ...DEFAULT_CHARACTER.abilities, con: 14 }, ...p });
+
+  it('the die comes from the class, a homebrew class sets its own, unknown classes get a d8', () => {
+    expect(hitDieSize(char({ className: 'fighter ' }), classes)).toBe(10);
+    expect(hitDieSize(char({ className: 'Wizard' }), classes)).toBe(6);
+    expect(hitDieSize(char({ className: 'Blood Hunter' }), classes)).toBe(8);
+    expect(hitDieSize(char({ className: 'Blood Hunter', hitDie: 12 }), classes)).toBe(12);
+    expect(hitDieSize(char({ className: 'Fighter' }), null)).toBe(8);
+  });
+  it('there is one per level', () => {
+    expect(hitDiceLeft(hurt())).toBe(3);
+    expect(hitDiceLeft(hurt({ used: { [HIT_DICE_ID]: 2 } }))).toBe(1);
+    expect(hitDiceLeft(hurt({ used: { [HIT_DICE_ID]: 9 } }))).toBe(0);
+  });
+  it('spending one heals the roll plus the Constitution modifier', () => {
+    const r = spendHitDie(hurt(), 10, 7);
+    expect(r).toMatchObject({ healed: 9, modifier: 2 });
+    expect(r.patch).toMatchObject({ hpCurrent: 19, used: { [HIT_DICE_ID]: 1 } });
+  });
+  it('heals at least 1 HP and never above the maximum', () => {
+    const frail = hurt({ abilities: { ...DEFAULT_CHARACTER.abilities, con: 3 } });
+    expect(spendHitDie(frail, 10, 2).healed).toBe(1);
+    expect(spendHitDie(hurt({ hpCurrent: 26 }), 10, 10)).toMatchObject({ healed: 2, patch: { hpCurrent: 28 } });
+  });
+  it('refuses when no dice are left, at full HP, for the dead and for impossible rolls', () => {
+    expect(() => spendHitDie(hurt({ used: { [HIT_DICE_ID]: 3 } }), 10, 5)).toThrow(/No Hit Dice left/);
+    expect(() => spendHitDie(hurt({ hpCurrent: 28 }), 10, 5)).toThrow(/full HP/);
+    expect(() => spendHitDie(hurt({ hpCurrent: 0, deathSaves: { successes: 0, failures: 3 } }), 10, 5)).toThrow(/dead/);
+    expect(() => spendHitDie(hurt(), 10, 11)).toThrow(/between 1 and 10/);
+    expect(() => spendHitDie(hurt(), 10, 2.5)).toThrow(/between 1 and 10/);
+  });
+  it('a rest that has nothing more to give ends by itself', () => {
+    expect(spendHitDie(hurt({ resting: true }), 10, 4).patch.resting).toBeUndefined();
+    expect(spendHitDie(hurt({ resting: true, used: { [HIT_DICE_ID]: 2 } }), 10, 4).patch.resting).toBe(false);
+    expect(spendHitDie(hurt({ resting: true, hpCurrent: 27 }), 10, 4).patch.resting).toBe(false);
+    expect(canSpendHitDice(hurt())).toBe(true);
+    expect(canSpendHitDice(hurt({ hpCurrent: 28 }))).toBe(false);
+  });
+  it('waking someone at 0 HP clears their death saves', () => {
+    expect(spendHitDie(hurt({ hpCurrent: 0, deathSaves: { successes: 3, failures: 1 } }), 10, 1).patch).toMatchObject({
+      hpCurrent: 3,
+      deathSaves: { successes: 0, failures: 0 },
+    });
+  });
+  it('a Short Rest leaves spent Hit Dice spent, a Long Rest brings all back and ends the rest', () => {
+    const spent = hurt({ used: { [HIT_DICE_ID]: 2, 'second-wind': 1 }, resting: true });
+    expect(applyRest(spent, 'short').used).toEqual({ [HIT_DICE_ID]: 2 });
+    expect(applyRest(spent, 'long')).toMatchObject({ used: {}, hpCurrent: 28, resting: false });
   });
 });
