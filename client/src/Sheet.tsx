@@ -93,6 +93,7 @@ export function Sheet({
   hpItemsLocked = false,
   dmUnlock = false,
   note,
+  portrait,
 }: {
   character: CharacterData;
   actions: SheetActions;
@@ -103,6 +104,8 @@ export function Sheet({
   /** DM view: show the switch that lets the player change their own HP and items. */
   dmUnlock?: boolean;
   note?: ReactNode;
+  /** Portrait (with its upload buttons for the owner), shown on the Main tab. */
+  portrait?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>('Main');
   const [levelling, setLevelling] = useState(false);
@@ -153,6 +156,7 @@ export function Sheet({
       {hpItemsLocked && !readOnly && (tab === 'Main' || tab === 'Items') && (
         <p className="notice">Your DM manages your HP, items and coins. Ask them to unlock it if you need to change them.</p>
       )}
+      {tab === 'Main' && portrait}
       <fieldset className="sheet-body" disabled={readOnly}>
 
       {tab === 'Main' && (

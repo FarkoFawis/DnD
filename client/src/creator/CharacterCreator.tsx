@@ -45,6 +45,7 @@ import {
   type Step,
 } from '@dnd/shared';
 import { Info } from '../Info.tsx';
+import { NewPortraitInput } from '../Portrait.tsx';
 import { MultiPicker, Picker, type PickerOption } from '../Picker.tsx';
 import { useContent } from '../content/useContent.ts';
 
@@ -102,7 +103,7 @@ export function CharacterCreator({
   onCancel,
 }: {
   /** Return false if saving failed, so the draft is kept. */
-  onDone: (data: Partial<CharacterData> & { name: string }) => Promise<boolean | void> | boolean | void;
+  onDone: (data: Partial<CharacterData> & { name: string }, portrait: Blob | null) => Promise<boolean | void> | boolean | void;
   onCancel: () => void;
 }) {
   const content = useContent();
@@ -111,6 +112,8 @@ export function CharacterCreator({
   const [stepIndex, setStepIndexRaw] = useState(initial?.step ?? 0);
   const [direction, setDirection] = useState<'fwd' | 'back'>('fwd');
   const [busy, setBusy] = useState(false);
+  /** Chosen picture; uploaded once the character exists. Not kept across reloads. */
+  const [portrait, setPortrait] = useState<Blob | null>(null);
   const set = (patch: Partial<CreationChoices>) => setC((prev) => ({ ...prev, ...patch }));
   const setStepIndex = (i: number) => {
     setDirection(i < stepIndex ? 'back' : 'fwd');
@@ -131,7 +134,7 @@ export function CharacterCreator({
   const finish = async () => {
     setBusy(true);
     try {
-      if ((await onDone(buildCharacter(c, content, newId))) !== false) saveDraft(null);
+      if ((await onDone(buildCharacter(c, content, newId), portrait)) !== false) saveDraft(null);
     } finally {
       setBusy(false);
     }
@@ -178,7 +181,7 @@ export function CharacterCreator({
       {step === 'abilities' && <AbilityStep c={c} set={set} content={content} />}
       {step === 'equipment' && <EquipmentStep c={c} set={set} content={content} />}
       {step === 'spells' && <SpellStep c={c} set={set} content={content} />}
-      {step === 'details' && <ReviewStep c={c} set={set} content={content} />}
+      {step === 'details' && <ReviewStep c={c} set={set} content={content} portrait={portrait} setPortrait={setPortrait} />}
 
       </div>
       {problems.length > 0 && (
@@ -623,12 +626,13 @@ function SpellStep({ c, set, content }: StepProps) {
 
 // ---------- 7. review ----------
 
-function ReviewStep({ c, set, content }: StepProps) {
+function ReviewStep({ c, set, content, portrait, setPortrait }: StepProps & { portrait: Blob | null; setPortrait: (p: Blob | null) => void }) {
   const preview = useMemo(() => buildCharacter(c, content, newId), [c, content]);
   const feats = originFeats(c, content).map((f) => content.feat(f)).filter((f) => !!f);
   return (
     <>
       <label>Character name<input value={c.name} maxLength={40} placeholder="e.g. Elara Moonwhisper" onChange={(e) => set({ name: e.target.value })} /></label>
+      <NewPortraitInput character={{ name: c.name, className: preview.className ?? '' }} value={portrait} onChange={setPortrait} />
       <div className="review">
         <Row k="Class">{preview.className}{preview.subclass ? ` (${preview.subclass})` : ''}, level {preview.level}</Row>
         <Row k="Species">{preview.species}{preview.subspecies ? ` (${preview.subspecies})` : ''}</Row>

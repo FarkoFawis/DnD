@@ -25,7 +25,18 @@ import { useContent } from './content/useContent.ts';
 import { ConcentrationBanner, ConditionBadges, DeathSaves } from './Status.tsx';
 import { CastButton, SlotTracker, UsesList, actionText } from './Uses.tsx';
 
-export function ClassicSheet({ character: c, actions, playerName }: { character: CharacterData; actions: SheetActions; playerName: string }) {
+export function ClassicSheet({
+  character: c,
+  actions,
+  playerName,
+  portrait,
+}: {
+  character: CharacterData;
+  actions: SheetActions;
+  playerName: string;
+  /** The character's picture, shown next to the name. */
+  portrait?: ReactNode;
+}) {
   const content = useContent();
   const stats = deriveStats(c);
   const cls = content?.classes.find((x) => x.name.toLowerCase() === c.className.trim().toLowerCase());
@@ -50,7 +61,8 @@ export function ClassicSheet({ character: c, actions, playerName }: { character:
   return (
     <article className="classic" aria-label={`${c.name}'s character sheet`}>
       {flash && <p className="use-flash" role="status">Used: {flash}</p>}
-      <header className="cs-banner">
+      <header className={`cs-banner ${portrait ? 'with-portrait' : ''}`}>
+        {portrait && <div className="cs-portrait">{portrait}</div>}
         <div className="cs-name">
           <span className="cs-name-value">{c.name || 'Unnamed'}</span>
           <span className="cs-label">Character name</span>
@@ -62,6 +74,27 @@ export function ClassicSheet({ character: c, actions, playerName }: { character:
           <Field label="Player" value={playerName} />
         </dl>
       </header>
+
+      <section className="cs-hpblock" aria-label="Hit points">
+        {unlocked ? (
+          <>
+            <HpBox character={c} onHp={actions.adjustHp} onTemp={(v) => void actions.update({ hpTemp: v })} />
+            <p className="cs-unlocked">Your DM lets you track your own HP and items.</p>
+          </>
+        ) : (
+          <div className="cs-hp">
+            <span className="cs-label">Hit points</span>
+            <span className="cs-hp-line">
+              <span className={`cs-hp-now ${c.hpCurrent === 0 ? 'down' : c.hpCurrent <= c.hpMax / 4 ? 'low' : ''}`}>{c.hpCurrent}</span>
+              {c.hpTemp > 0 && <span className="cs-hp-temp" aria-label={`plus ${c.hpTemp} temporary hit points`}>+{c.hpTemp}</span>}
+              <span className="cs-hp-max">/ {c.hpMax}</span>
+            </span>
+            <span className="hpbar" aria-hidden>
+              <span style={{ width: `${Math.max(0, Math.min(100, (c.hpCurrent / c.hpMax) * 100))}%` }} className={c.hpCurrent <= c.hpMax / 4 ? 'low' : ''} />
+            </span>
+          </div>
+        )}
+      </section>
 
       <DeathSaves character={c} onRoll={(r) => void actions.deathSave(r)} />
       <ConcentrationBanner character={c} content={content} onAction={(a) => void actions.concentration(a)} />
@@ -109,24 +142,6 @@ export function ClassicSheet({ character: c, actions, playerName }: { character:
           <div className="cs-stat"><span className="cs-big">{formatModifier(stats.initiative)}</span><span className="cs-label">Initiative</span></div>
           <div className="cs-stat"><span className="cs-big">{Math.max(0, c.speed - 5 * c.exhaustion)}<small> ft</small></span><span className="cs-label">Speed{c.exhaustion > 0 ? ' (exhausted)' : ''}</span></div>
         </div>
-        {unlocked ? (
-          <>
-            <p className="cs-unlocked">Your DM lets you track your own HP and items.</p>
-            <HpBox character={c} onHp={actions.adjustHp} onTemp={(v) => void actions.update({ hpTemp: v })} />
-          </>
-        ) : (
-          <>
-            <div className="cs-hp">
-              <span className="cs-hp-max">Hit point maximum <strong>{c.hpMax}</strong></span>
-              <span className={`cs-hp-now ${c.hpCurrent === 0 ? 'down' : c.hpCurrent <= c.hpMax / 4 ? 'low' : ''}`}>{c.hpCurrent}</span>
-              <span className="cs-label">Current hit points</span>
-            </div>
-            <div className="cs-hp temp">
-              <span className="cs-hp-now small">{c.hpTemp}</span>
-              <span className="cs-label">Temporary hit points</span>
-            </div>
-          </>
-        )}
         {cls && (
           <div className="cs-stat hitdice"><span className="cs-mid">{c.level}d{cls.hitDie}</span><span className="cs-label">Hit dice</span></div>
         )}

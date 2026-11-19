@@ -311,6 +311,33 @@ describe('campaign sessions', () => {
     });
   });
 
+  it('stores a portrait for a character, only for its owner', async () => {
+    const token = await login('Mira');
+    const mira = await client(token);
+    const { character } = ok(await mira.emitWithAck('character:create', { name: 'Elowen' }));
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    const put = (tok: string, body: Buffer, type = 'image/png') =>
+      fetch(`${url}/api/characters/${character.id}/portrait`, { method: 'PUT', headers: { authorization: `Bearer ${tok}`, 'content-type': type }, body: new Uint8Array(body) });
+
+    expect((await fetch(`${url}/api/portraits/${character.id}`)).status).toBe(404);
+    expect((await put(await login('Jonas'), png)).status).toBe(404);
+    expect((await put(token, Buffer.from('not a picture at all'))).status).toBe(400);
+    const res = await put(token, png);
+    expect(res.status).toBe(200);
+    const version = ((await res.json()) as { character: { data: { portrait: string } } }).character.data.portrait;
+    expect(version).not.toBe('');
+
+    const got = await fetch(`${url}/api/portraits/${character.id}?v=${version}`);
+    expect(got.headers.get('content-type')).toBe('image/png');
+    expect(Buffer.from(await got.arrayBuffer()).equals(png)).toBe(true);
+
+    // The version can't be set by hand, and deleting the picture clears it.
+    expect(await mira.emitWithAck('character:update', { characterId: character.id, patch: { portrait: 'x' } })).toMatchObject({ ok: false });
+    const del = await fetch(`${url}/api/characters/${character.id}/portrait`, { method: 'DELETE', headers: { authorization: `Bearer ${token}` } });
+    expect(((await del.json()) as { character: { data: { portrait: string } } }).character.data.portrait).toBe('');
+    expect((await fetch(`${url}/api/portraits/${character.id}`)).status).toBe(404);
+  });
+
   it('lets characters travel between campaigns, one session at a time', async () => {
     const { dm, session } = await hostCampaign('Campaign A');
     const { sock: mira, character } = await joinWithNewCharacter('Mira', session.code, 'Elowen');

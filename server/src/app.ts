@@ -34,6 +34,8 @@ import {
   DEATH_SAVE_LABEL,
   type DeathSaveResult,
   type LevelUpChoices,
+  PORTRAIT_MAX_BYTES,
+  PORTRAIT_TYPES,
   applyRest,
   applyUse,
   type UseRequest,
@@ -212,6 +214,76 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
   const removeImage = (url: string | null | undefined) => {
     if (uploadsDir && url && IMAGE_URL_PATTERN.test(url)) unlink(join(uploadsDir, basename(url)), () => undefined);
   };
+
+  // ---------- character portraits ----------
+
+  /** The image bytes must really be what the header says: check the magic numbers. */
+  const sniff = (b: Uint8Array): string | null => {
+    if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+    if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+    return null;
+  };
+
+  /** Only the character's owner changes its portrait (cosmetic, so in a session too). */
+  const ownCharacter = (req: express.Request, res: express.Response) => {
+    const token = bearer(req.headers.authorization);
+    const user = token ? store.userForToken(token) : undefined;
+    if (!user) {
+      res.status(401).json({ error: 'Not logged in.' });
+      return undefined;
+    }
+    const ch = store.getCharacter(String(req.params.id));
+    if (!ch || ch.userId !== user.id) {
+      res.status(404).json({ error: 'That is not one of your characters.' });
+      return undefined;
+    }
+    return ch;
+  };
+
+  const portraitChanged = (characterId: string, version: string) => {
+    const character = store.updateCharacter(characterId, { portrait: version });
+    if (character.inSession) broadcast(character.inSession);
+    return character;
+  };
+
+  app.put(
+    '/api/characters/:id/portrait',
+    express.raw({ type: PORTRAIT_TYPES as unknown as string[], limit: PORTRAIT_MAX_BYTES }),
+    (req, res) => {
+      const ch = ownCharacter(req, res);
+      if (!ch) return;
+      const body: unknown = req.body;
+      const mime = body instanceof Uint8Array && body.length > 12 ? sniff(body) : null;
+      if (!(body instanceof Uint8Array) || !mime) {
+        res.status(400).json({ error: 'Send a JPEG, PNG or WebP picture.' });
+        return;
+      }
+      store.setPortrait(ch.id, mime, body);
+      res.json({ character: portraitChanged(ch.id, Date.now().toString(36)) });
+    },
+  );
+
+  app.delete('/api/characters/:id/portrait', (req, res) => {
+    const ch = ownCharacter(req, res);
+    if (!ch) return;
+    store.deletePortrait(ch.id);
+    res.json({ character: portraitChanged(ch.id, '') });
+  });
+
+  /** Public by design: <img> can't send the login token, and character ids are unguessable. */
+  app.get('/api/portraits/:id', (req, res) => {
+    const p = store.getPortrait(String(req.params.id));
+    if (!p) {
+      res.status(404).end();
+      return;
+    }
+    res.setHeader('Content-Type', p.mime);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    // The client adds ?v=<version>, so a new upload gets a new URL.
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    res.end(Buffer.from(p.data));
+  });
 
   app.post('/api/auth/logout', (req, res) => {
     const token = bearer(req.headers.authorization);

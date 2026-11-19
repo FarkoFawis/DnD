@@ -123,6 +123,13 @@ export class Store {
         data        TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS session_log_campaign ON session_log(campaign_id, session_no);
+      -- Character portraits, kept out of the character JSON so sheets stay small.
+      CREATE TABLE IF NOT EXISTS portraits (
+        character_id TEXT PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE,
+        mime         TEXT NOT NULL,
+        data         BLOB NOT NULL,
+        updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+      );
     `);
     // Added after the first databases were created.
     const liveCols = (this.db.prepare(`SELECT name FROM pragma_table_info('live_sessions')`).all() as { name: string }[]).map((c) => c.name);
@@ -203,6 +210,27 @@ export class Store {
 
   setCombat(code: string, combat: Combat | null): void {
     this.db.prepare('UPDATE live_sessions SET combat = ? WHERE code = ?').run(combat && JSON.stringify(combat), code);
+  }
+
+  // ---------- portraits ----------
+
+  setPortrait(characterId: string, mime: string, data: Uint8Array): void {
+    this.db
+      .prepare(
+        `INSERT INTO portraits (character_id, mime, data) VALUES (?, ?, ?)
+         ON CONFLICT(character_id) DO UPDATE SET mime = excluded.mime, data = excluded.data, updated_at = datetime('now')`,
+      )
+      .run(characterId, mime, data);
+  }
+
+  getPortrait(characterId: string): { mime: string; data: Uint8Array } | undefined {
+    return this.db.prepare('SELECT mime, data FROM portraits WHERE character_id = ?').get(characterId) as
+      | { mime: string; data: Uint8Array }
+      | undefined;
+  }
+
+  deletePortrait(characterId: string): void {
+    this.db.prepare('DELETE FROM portraits WHERE character_id = ?').run(characterId);
   }
 
   /**
