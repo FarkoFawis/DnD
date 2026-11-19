@@ -8,3 +8,5 @@ export * from './prep.ts';
 export * from './combat.ts';
 export * from './log.ts';
 export * from './resources.ts';
+export * from './status.ts';
+export * from './levelup.ts';

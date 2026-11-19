@@ -11,7 +11,6 @@ import {
   LIMITS,
   PASSWORD_MIN_LENGTH,
   normalizeRoomCode,
-  applyHpChange,
   addCombatants,
   applyCombatAction,
   deriveStats,
@@ -26,6 +25,15 @@ import {
   type Handout,
   type LogEvent,
   type Npc,
+  Content,
+  afterConditionsSet,
+  afterHpSet,
+  applyDamageOrHealing,
+  applyDeathSave,
+  applyLevelUp,
+  DEATH_SAVE_LABEL,
+  type DeathSaveResult,
+  type LevelUpChoices,
   applyRest,
   applyUse,
   type UseRequest,
@@ -39,6 +47,7 @@ import {
   type ServerToClientEvents,
   type SessionState,
 } from '@dnd/shared';
+import { SRD } from '@dnd/shared/srd';
 import { loadContentPacks } from './content.ts';
 import type { Store } from './store.ts';
 
@@ -68,6 +77,23 @@ const IMAGE_TYPES: Record<string, string> = {
   'image/webp': 'webp',
   'image/gif': 'gif',
 };
+/** Brings untrusted level-up choices into shape; applyLevelUp() checks the values. */
+function cleanLevelUp(v: unknown): LevelUpChoices {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  const s = (x: unknown, max: number) => (typeof x === 'string' ? x.slice(0, max) : '');
+  const asiIn = (typeof o.asi === 'object' && o.asi !== null ? o.asi : {}) as Record<string, unknown>;
+  const asi: LevelUpChoices['asi'] = {};
+  for (const a of ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const) if (typeof asiIn[a] === 'number') asi[a] = asiIn[a];
+  return {
+    hpRoll: typeof o.hpRoll === 'number' ? o.hpRoll : null,
+    subclassId: s(o.subclassId, 80),
+    customSubclass: s(o.customSubclass, LIMITS.textFieldMaxLength),
+    featId: s(o.featId, 80),
+    customFeat: s(o.customFeat, 80),
+    asi,
+    spells: Array.isArray(o.spells) ? o.spells.slice(0, 40).map((x) => s(x, 80)) : [],
+  };
+}
 
 function cleanText(value: unknown, max: number): string | null {
   if (typeof value !== 'string') return null;
@@ -217,6 +243,15 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     socket.data.user = user;
     next();
   });
+
+  /** SRD plus the private packs, re-read at most every few seconds so edited packs show up. */
+  let cached: { at: number; content: Content } | undefined;
+  const gameContent = (): Content => {
+    if (!cached || Date.now() - cached.at > 5000) {
+      cached = { at: Date.now(), content: new Content([SRD, ...(contentDir ? loadContentPacks(contentDir).packs : [])]) };
+    }
+    return cached.content;
+  };
 
   /** "code:userId" -> number of that user's sockets in that session. */
   const presence = new Map<string, number>();
@@ -413,7 +448,12 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       }
       const t = editable(input?.characterId, Object.keys(patch));
       if (!t.ok) return ack(t);
-      const character = store.updateCharacter(t.ch.id, patch);
+      // Setting HP or conditions directly has the same side effects as damage would.
+      const extra = {
+        ...(patch.hpCurrent !== undefined ? afterHpSet(t.ch.data, patch.hpCurrent) : {}),
+        ...(patch.conditions !== undefined ? afterConditionsSet(t.ch.data, patch.conditions) : {}),
+      };
+      const character = store.updateCharacter(t.ch.id, { ...extra, ...patch });
       ack({ ok: true, character });
       logChanges(t.ch.data, character);
       if (patch.inventory) logInventory(t.ch.data.inventory, character);
@@ -428,7 +468,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
         return ack({ ok: false, error: 'Invalid amount.' });
       }
       // Read-modify-write is safe: node:sqlite is synchronous, so no other event runs in between.
-      const character = store.updateCharacter(t.ch.id, applyHpChange(t.ch.data, delta));
+      const character = store.updateCharacter(t.ch.id, applyDamageOrHealing(t.ch.data, delta));
       ack({ ok: true, character });
       logChanges(t.ch.data, character);
       afterChange(character);
@@ -505,13 +545,63 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
             : req.kind === 'feature'
               ? { kind: 'feature', useId: String(req.useId), amount: typeof req.amount === 'number' ? req.amount : undefined }
               : { kind: 'attack', name: String(req.name ?? '') };
-        const r = applyUse(t.ch.data, clean);
+        const spell = clean.kind === 'spell' ? t.ch.data.spells.find((x) => x.id === clean.spellId) : undefined;
+        const def = spell?.ref ? gameContent().spell(spell.ref) : undefined;
+        const r = applyUse(t.ch.data, clean, { concentration: def?.concentration === true });
         const character = store.updateCharacter(t.ch.id, {
           used: r.used,
           lastAction: { ...r.action, at: new Date().toISOString() },
+          ...(r.concentration ? { concentration: r.concentration } : {}),
         });
         ack({ ok: true, character });
         logFor(character, { kind: 'used', what: r.action.detail ? `${r.action.name} (${r.action.detail})` : r.action.name });
+        afterChange(character);
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
+    });
+
+    socket.on('character:concentration', (input, ack) => {
+      const t = usable(input?.characterId);
+      if (!t.ok) return ack(t);
+      const now = t.ch.data.concentration;
+      if (!now) return ack({ ok: false, error: 'Not concentrating on anything.' });
+      if (input?.action !== 'end' && input?.action !== 'kept') return ack({ ok: false, error: 'Invalid action.' });
+      const character = store.updateCharacter(t.ch.id, {
+        concentration: input.action === 'end' ? null : { ...now, saveDc: null },
+      });
+      ack({ ok: true, character });
+      afterChange(character);
+    });
+
+    socket.on('character:deathSave', (input, ack) => {
+      const t = usable(input?.characterId);
+      if (!t.ok) return ack(t);
+      try {
+        const result = input?.result as DeathSaveResult;
+        const character = store.updateCharacter(t.ch.id, {
+          ...applyDeathSave(t.ch.data, result),
+          lastAction: { name: 'Death save', detail: DEATH_SAVE_LABEL[result], at: new Date().toISOString() },
+        });
+        ack({ ok: true, character });
+        logFor(character, { kind: 'deathSave', what: DEATH_SAVE_LABEL[result] });
+        logChanges(t.ch.data, character);
+        afterChange(character);
+      } catch (e) {
+        ack({ ok: false, error: (e as Error).message });
+      }
+    });
+
+    socket.on('character:levelUp', (input, ack) => {
+      const t = editable(input?.characterId, ['level']);
+      if (!t.ok) return ack(t);
+      try {
+        const character = store.updateCharacter(
+          t.ch.id,
+          applyLevelUp(t.ch.data, cleanLevelUp(input?.choices), gameContent(), randomUUID),
+        );
+        ack({ ok: true, character });
+        logChanges(t.ch.data, character);
         afterChange(character);
       } catch (e) {
         ack({ ok: false, error: (e as Error).message });

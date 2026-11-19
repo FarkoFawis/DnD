@@ -331,6 +331,8 @@ const feats = load('Feats').map((f) => ({
   description: clean(f.description),
 }));
 
+const conditions = load('Conditions').map((c) => ({ id: c.index, name: c.name, description: clean(c.description) }));
+
 const languages = load('Languages').map((l) => ({ id: l.index, name: l.name, rare: l.is_rare || undefined }));
 
 // ---------- small fixes where the source data is incomplete ----------
@@ -356,6 +358,7 @@ const pack = {
   backgrounds,
   feats,
   languages,
+  conditions,
   spells,
   items,
 };

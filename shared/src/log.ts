@@ -10,6 +10,7 @@ export type LogKind =
   | 'damage' // a player character took `amount` damage
   | 'heal'
   | 'down' // a player character dropped to 0 HP
+  | 'deathSave' // `what` = how it went
   | 'loot' // got an item / coins; `what` = "2× Rope"
   | 'lost' // gave away / used up / paid
   | 'used' // cast a spell or used an ability; `what` = its name
@@ -47,6 +48,7 @@ export function describeLogEntry(e: LogEvent): string {
     case 'damage': return `${e.who} took ${n} damage${e.what ? ` (${e.what})` : ''}.`;
     case 'heal': return `${e.who} regained ${n} HP${e.what ? ` (${e.what})` : ''}.`;
     case 'down': return `${e.who} dropped to 0 HP.`;
+    case 'deathSave': return `${e.who} made a death save: ${e.what}.`;
     case 'loot': return `${e.who} got ${e.what}.`;
     case 'lost': return `${e.who} lost ${e.what}.`;
     case 'used': return `${e.who} used ${e.what}.`;

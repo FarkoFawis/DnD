@@ -2,6 +2,7 @@ import { ABILITIES, SKILL_KEYS } from '../rules.ts';
 import type {
   BackgroundDef,
   ClassDef,
+  ConditionDef,
   ContentPack,
   FeatDef,
   ItemDef,
@@ -13,7 +14,7 @@ import type {
 export * from './types.ts';
 export * from './info.ts';
 
-const KINDS = ['classes', 'subclasses', 'species', 'backgrounds', 'feats', 'languages', 'spells', 'items'] as const;
+const KINDS = ['classes', 'subclasses', 'species', 'backgrounds', 'feats', 'languages', 'conditions', 'spells', 'items'] as const;
 type Kind = (typeof KINDS)[number];
 type EntryOf<K extends Kind> = NonNullable<ContentPack[K]>[number];
 
@@ -48,6 +49,7 @@ export class Content {
   get backgrounds(): BackgroundDef[] { return this.all('backgrounds'); }
   get feats(): FeatDef[] { return this.all('feats'); }
   get languages() { return this.all('languages'); }
+  get conditions(): ConditionDef[] { return this.all('conditions'); }
   get spells(): SpellDef[] { return this.all('spells'); }
   get items(): ItemDef[] { return this.all('items'); }
 
@@ -56,6 +58,7 @@ export class Content {
   speciesById(id: string) { return this.maps.species.get(id); }
   background(id: string) { return this.maps.backgrounds.get(id); }
   feat(id: string) { return this.maps.feats.get(id); }
+  condition(id: string) { return this.maps.conditions.get(id); }
   spell(id: string) { return this.maps.spells.get(id); }
   item(id: string) { return this.maps.items.get(id); }
 
@@ -108,6 +111,7 @@ const CHECKS: { [K in Kind]: (e: Record<string, unknown>) => string | null } = {
         : null,
   feats: (e) => (['origin', 'general', 'fighting-style', 'epic-boon'].includes(e.category as string) ? null : 'category must be origin, general, fighting-style or epic-boon'),
   languages: () => null,
+  conditions: (e) => (str(e.description) ? null : 'description is required'),
   spells: (e) =>
     Number.isInteger(e.level) && (e.level as number) >= 0 && (e.level as number) <= 9 && Array.isArray(e.classes)
       ? null
@@ -123,6 +127,7 @@ const DEFAULTS: { [K in Kind]: Record<string, unknown> } = {
   backgrounds: { feat: '', tool: '', equipment: [] },
   feats: { description: '' },
   languages: {},
+  conditions: {},
   spells: { school: '', castingTime: '', range: '', components: '', duration: '', description: '' },
   items: { category: '', description: '' },
 };

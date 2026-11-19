@@ -22,6 +22,7 @@ import { Info } from './Info.tsx';
 import { HpBox, Items, type SheetActions } from './Sheet.tsx';
 import { featureEntry, itemEntry, spellEntry, spellGlance } from './SheetContent.tsx';
 import { useContent } from './content/useContent.ts';
+import { ConcentrationBanner, ConditionBadges, DeathSaves } from './Status.tsx';
 import { CastButton, SlotTracker, UsesList, actionText } from './Uses.tsx';
 
 export function ClassicSheet({ character: c, actions, playerName }: { character: CharacterData; actions: SheetActions; playerName: string }) {
@@ -61,6 +62,10 @@ export function ClassicSheet({ character: c, actions, playerName }: { character:
           <Field label="Player" value={playerName} />
         </dl>
       </header>
+
+      <DeathSaves character={c} onRoll={(r) => void actions.deathSave(r)} />
+      <ConcentrationBanner character={c} content={content} onAction={(a) => void actions.concentration(a)} />
+      <ConditionBadges character={c} content={content} />
 
       <div className="cs-cols">
         <div className="cs-abilities">
@@ -102,7 +107,7 @@ export function ClassicSheet({ character: c, actions, playerName }: { character:
         <div className="cs-trio">
           <div className="cs-shield"><span className="cs-big">{c.armorClass}</span><span className="cs-label">Armor class</span></div>
           <div className="cs-stat"><span className="cs-big">{formatModifier(stats.initiative)}</span><span className="cs-label">Initiative</span></div>
-          <div className="cs-stat"><span className="cs-big">{c.speed}<small> ft</small></span><span className="cs-label">Speed</span></div>
+          <div className="cs-stat"><span className="cs-big">{Math.max(0, c.speed - 5 * c.exhaustion)}<small> ft</small></span><span className="cs-label">Speed{c.exhaustion > 0 ? ' (exhausted)' : ''}</span></div>
         </div>
         {unlocked ? (
           <>

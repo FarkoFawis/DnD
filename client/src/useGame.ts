@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Ack, CampaignSummary, CharacterData, CharacterSummary, Item, SessionState, UseRequest } from '@dnd/shared';
+import type { Ack, CampaignSummary, CharacterData, CharacterSummary, Item, DeathSaveResult, LevelUpChoices, SessionState, UseRequest } from '@dnd/shared';
 import { saveCode, savedCode } from './api.ts';
 import { createSocket, type AppSocket } from './socket.ts';
 
@@ -147,6 +147,12 @@ export function useGame(token: string, onUnauthorized: () => void) {
     /** Cast a spell, use a limited feature or attack; spends a slot or use. */
     use: (characterId: string, use: UseRequest) =>
       charCall((s, done) => s.emit('character:use', { characterId, use }, done)),
+    concentration: (characterId: string, action: 'end' | 'kept') =>
+      charCall((s, done) => s.emit('character:concentration', { characterId, action }, done)),
+    deathSave: (characterId: string, result: DeathSaveResult) =>
+      charCall((s, done) => s.emit('character:deathSave', { characterId, result }, done)),
+    levelUp: (characterId: string, choices: LevelUpChoices) =>
+      charCall((s, done) => s.emit('character:levelUp', { characterId, choices }, done)),
     /** Give back one spent slot or use. */
     restore: (characterId: string, id: string) =>
       charCall((s, done) => s.emit('character:restore', { characterId, id }, done)),

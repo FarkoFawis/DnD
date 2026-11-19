@@ -461,3 +461,50 @@ button.pip { cursor: pointer; min-height: 0; }
 .use-flash { position: sticky; top: 8px; z-index: 5; margin: 0 0 10px; background: #14532d; color: #dcfce7; border-radius: 10px; padding: 10px 12px; font-weight: 600; text-align: center; box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
 .action-chip { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #3b2f12; color: var(--gold); font-size: 0.75rem; font-weight: 600; vertical-align: middle; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .action-detail { font-weight: 400; color: #e7d9a8; }
+
+/* ---- conditions, concentration, death saves ---- */
+.conditions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.condition-badge { display: inline-flex; align-items: center; gap: 6px; background: #7f1d1d; color: #fee2e2; border-radius: 999px; padding: 6px 12px; font-size: 0.9rem; font-weight: 600; }
+.condition-editor { margin-bottom: 12px; }
+.condition-toggle.on { background: #991b1b; color: #fee2e2; }
+.exhaustion-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; }
+.exhaustion-row button { width: 40px; min-height: 40px; border-radius: 10px; border: 1px solid #57534e; background: var(--bg); color: var(--text); font-size: 1.1rem; }
+.exhaustion-level { min-width: 1.5em; text-align: center; font-size: 1.2rem; }
+.concentration { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; }
+.concentration.alert { background: #3b2f12; border-color: var(--warn); }
+.concentration-line { display: flex; align-items: center; gap: 10px; }
+.concentration-save { margin: 8px 0 0; color: var(--gold); }
+.concentration .rest-buttons { margin: 10px 0 2px; }
+.death-saves { background: #2a1313; border: 2px solid var(--bad); border-radius: 12px; padding: 12px; margin: 0 0 10px; }
+.death-saves.dead { text-align: center; }
+.death-title { display: block; color: #fecaca; font-size: 1.05rem; margin-bottom: 6px; }
+.death-rows { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 6px; }
+.death-rows > span { display: inline-flex; align-items: center; gap: 8px; }
+.death-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
+.death-buttons button { padding: 12px 4px; }
+.pip.success { border-color: var(--ok); }
+.pip.success.on { background: var(--ok); }
+.pip.failure { border-color: var(--bad); }
+.pip.failure.on { background: var(--bad); }
+.status-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+.status-chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 8px; font-size: 0.72rem; font-weight: 600; }
+.status-chip.cond, .status-chip.bad { background: #7f1d1d; color: #fee2e2; }
+.status-chip.conc { background: #1e293b; color: #bfdbfe; }
+.status-chip.warn { background: #3b2f12; color: var(--gold); }
+.status-chip .pips { gap: 3px; }
+.status-chip .pip { width: 9px; height: 9px; border-width: 1.5px; }
+.classic .concentration, .classic .death-saves, .classic .conditions { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+
+/* ---- level-up wizard ---- */
+.levelup-overlay { position: fixed; inset: 0; z-index: 40; background: var(--bg); overflow-y: auto; padding: 12px max(12px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+.levelup { max-width: 560px; margin: 0 auto; }
+.levelup-button { width: 100%; margin-top: 14px; padding: 14px; color: var(--gold); }
+.choice-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.choice-card { display: flex; flex-direction: column; gap: 4px; text-align: left; background: var(--bg); color: var(--text); border: 2px solid #44403c; border-radius: 12px; padding: 14px 12px; }
+.choice-card.on { border-color: var(--gold); background: #2b2416; }
+.asi-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.asi-list li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #3a3532; }
+.asi-list button { width: 40px; min-height: 40px; border-radius: 10px; border: 1px solid #57534e; background: var(--bg); color: var(--text); font-size: 1.1rem; }
+.asi-list button:disabled { opacity: 0.35; }
+.asi-score { min-width: 2em; text-align: center; font-weight: 700; font-size: 1.1rem; }
+.asi-score.up { color: var(--gold); }

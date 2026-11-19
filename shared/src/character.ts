@@ -147,6 +147,21 @@ const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
   },
   customResources: (v) => list(v, 'limited uses', sanitizeCustomResource),
   lastAction: sanitizeLastAction,
+  conditions: (v) => unique(list(v, 'conditions', (x) => text(x, 'condition', 40))).filter(Boolean),
+  exhaustion: (v) => int(v, 'exhaustion', 0, 6),
+  concentration: (v) => {
+    if (v === null) return null;
+    if (!isObj(v)) throw new Invalid('Invalid concentration.');
+    return {
+      name: text(v.name, 'spell name', 80),
+      ...optionalRef(v.ref),
+      saveDc: v.saveDc === null || v.saveDc === undefined ? null : int(v.saveDc, 'save DC', 10, 30),
+    };
+  },
+  deathSaves: (v) => {
+    if (!isObj(v)) throw new Invalid('Invalid death saves.');
+    return { successes: int(v.successes, 'death save successes', 0, 3), failures: int(v.failures, 'death save failures', 0, 3) };
+  },
   notes: (v) => text(v, 'notes', LIMITS.notesMaxLength),
 };
 

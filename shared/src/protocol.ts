@@ -35,6 +35,8 @@ import type { Combat, CombatAction } from './combat.ts';
 import type { CampaignPrep, Handout, Npc } from './prep.ts';
 import type { LogEntry } from './log.ts';
 import type { UseRequest } from './resources.ts';
+import type { DeathSaveResult } from './status.ts';
+import type { LevelUpChoices } from './levelup.ts';
 
 export interface Item {
   id: string;
@@ -86,6 +88,20 @@ export interface LastAction {
   at: string;
 }
 
+/** The spell a character is concentrating on. */
+export interface Concentration {
+  name: string;
+  /** Spell ref in the content, for its description. */
+  ref?: string;
+  /** Set when the character took damage and still has to roll the Constitution save. */
+  saveDc: number | null;
+}
+
+export interface DeathSaves {
+  successes: number;
+  failures: number;
+}
+
 export const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'] as const;
 export type Coin = (typeof COINS)[number];
 
@@ -133,6 +149,13 @@ export interface CharacterData {
   /** Limited-use things added by hand. */
   customResources: CustomResource[];
   lastAction: LastAction | null;
+  /** Condition ids (content: "prone", "poisoned", ...). Exhaustion is a level, below. */
+  conditions: string[];
+  /** Exhaustion level 0-6. */
+  exhaustion: number;
+  concentration: Concentration | null;
+  /** Death saving throws, used while at 0 HP. 3 successes = stable, 3 failures = dead. */
+  deathSaves: DeathSaves;
   /** Feats, features, proficiencies, languages, anything else. */
   notes: string;
 }
@@ -164,6 +187,10 @@ export const DEFAULT_CHARACTER: CharacterData = {
   used: {},
   customResources: [],
   lastAction: null,
+  conditions: [],
+  exhaustion: 0,
+  concentration: null,
+  deathSaves: { successes: 0, failures: 0 },
   notes: '',
 };
 
@@ -181,7 +208,7 @@ export interface CharacterSummary {
 /** Fields a player may only change while the DM has unlocked them (hpItemsUnlocked). */
 export const DM_LOCKED_FIELDS = ['hpCurrent', 'hpTemp', 'coins', 'inventory'] as const satisfies readonly (keyof CharacterData)[];
 /** Fields only the DM may ever change. */
-export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'used', 'lastAction'] as const satisfies readonly (keyof CharacterData)[];
+export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves'] as const satisfies readonly (keyof CharacterData)[];
 
 // ---------- Campaigns & live sessions (socket) ----------
 
@@ -247,6 +274,12 @@ export interface ClientToServerEvents {
    * always do this, in a session too; so may the DM.
    */
   'character:use': (input: { characterId: string; use: UseRequest }, ack: CharAck) => void;
+  /** Concentration: "end" drops the spell, "kept" clears the pending save after a successful roll. Owner or DM. */
+  'character:concentration': (input: { characterId: string; action: 'end' | 'kept' }, ack: CharAck) => void;
+  /** Record a death saving throw at 0 HP (the die is rolled at the table). Owner or DM. */
+  'character:deathSave': (input: { characterId: string; result: DeathSaveResult }, ack: CharAck) => void;
+  /** Gain a level with the choices from the level-up wizard. The owner outside sessions, or the DM. */
+  'character:levelUp': (input: { characterId: string; choices: Partial<LevelUpChoices> }, ack: CharAck) => void;
   /** DM (or the owner outside a session): give back one spent slot or use. */
   'character:restore': (input: { characterId: string; id: string }, ack: CharAck) => void;
   /** Short or Long Rest for one character: the DM in a session, or its owner outside one. */

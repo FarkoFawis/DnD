@@ -119,6 +119,13 @@ export interface SpellDef {
   higherLevels?: string;
 }
 
+/** One of the 15 conditions (Blinded, Prone, ...) with its rules text. */
+export interface ConditionDef {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export type ItemKind = 'weapon' | 'armor' | 'gear' | 'tool' | 'magic';
 
 export interface ItemDef {
@@ -164,6 +171,7 @@ export interface ContentPack {
   backgrounds?: BackgroundDef[];
   feats?: FeatDef[];
   languages?: { id: string; name: string; rare?: boolean }[];
+  conditions?: ConditionDef[];
   spells?: SpellDef[];
   items?: ItemDef[];
 }

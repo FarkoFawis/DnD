@@ -374,7 +374,8 @@ export function buildCharacter(c: CreationChoices, content: Content, newId: IdFn
   // Hit points: max die at level 1, then the fixed average per level.
   const die = cls?.hitDie ?? 8;
   const con = mod('con');
-  const hpMax = Math.max(1, die + con) + (level - 1) * Math.max(1, die / 2 + 1 + con);
+  // Dwarven Toughness: +1 HP per level.
+  const hpMax = Math.max(1, die + con) + (level - 1) * Math.max(1, die / 2 + 1 + con) + (sp?.id === 'dwarf' ? level : 0);
 
   // Equipment
   const inventory: Item[] = [];

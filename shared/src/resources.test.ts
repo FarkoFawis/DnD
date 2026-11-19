@@ -101,6 +101,6 @@ describe('rests', () => {
   });
   it('a long rest restores everything and HP', () => {
     const c = char({ className: 'Wizard', level: 3, hpMax: 20, hpCurrent: 3, hpTemp: 4, used: { slot1: 2 } });
-    expect(applyRest(c, 'long')).toEqual({ used: {}, hpCurrent: 20, hpTemp: 0 });
+    expect(applyRest({ ...c, exhaustion: 2 }, 'long')).toMatchObject({ used: {}, hpCurrent: 20, hpTemp: 0, exhaustion: 1, concentration: null });
   });
 });
