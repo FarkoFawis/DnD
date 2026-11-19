@@ -26,6 +26,13 @@ export function spellEntry(content: Content | null, s: Spell): InfoEntry | null 
   return null;
 }
 
+/** One line to jog the memory without opening it: "Action · 120 feet · Concentration". */
+export function spellGlance(content: Content | null, s: Spell): string {
+  const def = content && (s.ref ? content.spell(s.ref) : undefined) || content?.findByName('spells', s.name);
+  if (!def) return '';
+  return [def.castingTime, def.range, def.concentration && 'Concentration', def.ritual && 'Ritual'].filter(Boolean).join(' · ');
+}
+
 export function itemEntry(content: Content | null, i: Item): InfoEntry | null {
   const def = content && (i.ref ? content.item(i.ref) : undefined) || content?.findByName('items', i.name);
   if (def) {
@@ -193,11 +200,11 @@ export function Features({
         <p className="muted small">None yet. Characters made with the guide get theirs automatically.</p>
       ) : (
         <>
-          <p className="muted small">Hold one (or hover with the mouse) to read it.</p>
+          <p className="muted small">Tap one to read it.</p>
           <ul className="items">
             {list.map((f) => (
               <li key={f.id}>
-                <Info entry={featureEntry(content, f)} className="grow">
+                <Info entry={featureEntry(content, f)} className="grow" tapToOpen>
                   <span className="block">{f.name}</span>
                   {f.source && <span className="muted small block">{f.source}</span>}
                 </Info>

@@ -266,3 +266,5 @@ fieldset.sheet-body:disabled select { appearance: none; }
 .add-feature { width: 100%; margin: 10px 0 16px; }
 .credit { margin: 14px 0 0; font-size: 0.7rem; color: #78716c; text-align: center; }
 .credit a { color: inherit; }
+.info-target.tappable { cursor: pointer; }
+.info-target.tappable:active { opacity: 0.7; }

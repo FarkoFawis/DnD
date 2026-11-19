@@ -14,7 +14,7 @@ import {
 } from '@dnd/shared';
 import type { Content } from '@dnd/shared';
 import { Info } from './Info.tsx';
-import { AddItem, AddSpell, Features, itemEntry, spellEntry } from './SheetContent.tsx';
+import { AddItem, AddSpell, Features, itemEntry, spellEntry, spellGlance } from './SheetContent.tsx';
 import { useContent } from './content/useContent.ts';
 import type { Game } from './useGame.ts';
 
@@ -368,7 +368,7 @@ function Items({
         <ul className="items">
           {character.inventory.map((item) => (
             <li key={item.id}>
-              <Info entry={itemEntry(content, item)} className="grow">
+              <Info entry={itemEntry(content, item)} className="grow" tapToOpen>
                 <span className="block">{item.name}</span>
                 {item.notes && <span className="muted small block">{item.notes}</span>}
               </Info>
@@ -386,7 +386,7 @@ function Items({
           ))}
         </ul>
       )}
-      {character.inventory.length > 0 && <p className="muted small">Hold an item (or hover with the mouse) to read it.</p>}
+      {character.inventory.length > 0 && <p className="muted small">Tap an item to read it.</p>}
       {!readOnly && <AddItem content={content} onAdd={actions.addItem} />}
     </>
   );
@@ -440,9 +440,12 @@ function Spells({
               >
                 {sp.prepared ? '●' : '○'}
               </button>
-              <Info entry={spellEntry(content, sp)} className="grow">
-                {sp.name}
-                <span className="muted small"> · {sp.level === 0 ? 'Cantrip' : `Level ${sp.level}`}</span>
+              <Info entry={spellEntry(content, sp)} className="grow" tapToOpen>
+                <span className="block">
+                  {sp.name}
+                  <span className="muted small"> · {sp.level === 0 ? 'Cantrip' : `Level ${sp.level}`}</span>
+                </span>
+                {spellGlance(content, sp) && <span className="muted small block">{spellGlance(content, sp)}</span>}
               </Info>
               {!readOnly && (
                 <button aria-label={`Remove ${sp.name}`} className="remove" onClick={() => set('spells', character.spells.filter((x) => x.id !== sp.id))}>✕</button>
@@ -451,7 +454,7 @@ function Spells({
           ))}
         </ul>
       )}
-      {spells.length > 0 && <p className="muted small">Hold a spell (or hover with the mouse) to read it.</p>}
+      {spells.length > 0 && <p className="muted small">Tap a spell to read what it does.</p>}
       {!readOnly && <AddSpell content={content} character={character} onAdd={(sp) => set('spells', [...character.spells, sp])} />}
     </>
   );

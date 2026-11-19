@@ -42,6 +42,16 @@ function clean(s) {
   return t;
 }
 
+/** Bold the run-in headings the source left plain, e.g. "Cantrip Upgrade. The damage..." */
+function boldHeadings(text) {
+  if (!text) return text;
+  const head = /^((?:[A-Z][\w'’()-]*)(?: (?:of|the|a|an|and|or|to|in|on|with|per|[A-Z0-9][\w'’()+-]*)){0,5})\. (?=[A-Z])/;
+  return text
+    .split('\n')
+    .map((line, i) => (i > 0 && !line.startsWith('**') ? line.replace(head, '**$1.** ') : line))
+    .join('\n');
+}
+
 const ABIL = { str: 'str', dex: 'dex', con: 'con', int: 'int', wis: 'wis', cha: 'cha' };
 const skillKey = (index) => {
   const s = index.replace(/^skill-/, '');
@@ -146,7 +156,7 @@ for (const m of load('Magic-Items')) {
     category: clean(header),
     rarity: clean(m.rarity?.name),
     attunement: m.attunement || undefined,
-    description: rest.join('\n').trim(),
+    description: boldHeadings(rest.join('\n').trim()),
   });
 }
 
@@ -163,7 +173,7 @@ const spells = load('Spells').map((s) => ({
   components: s.components.join(', ') + (s.material ? ` (${clean(s.material)})` : ''),
   duration: clean(s.duration),
   concentration: s.concentration || undefined,
-  description: clean(s.description),
+  description: boldHeadings(clean(s.description)),
   higherLevels: clean(s.higher_level),
 }));
 

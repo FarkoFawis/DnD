@@ -11,7 +11,18 @@ const HOVER_MS = 300;
  * description. A normal tap/click still does whatever the child does.
  * Works inside disabled (read-only) sheets too, since it is a plain span.
  */
-export function Info({ entry, children, className }: { entry: InfoEntry | null | undefined; children: ReactNode; className?: string }) {
+export function Info({
+  entry,
+  children,
+  className,
+  tapToOpen = false,
+}: {
+  entry: InfoEntry | null | undefined;
+  children: ReactNode;
+  className?: string;
+  /** Also open on a plain tap/click (for text that does nothing else when tapped). */
+  tapToOpen?: boolean;
+}) {
   const [open, setOpen] = useState<null | 'sheet' | 'hover'>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const start = useRef<{ x: number; y: number } | null>(null);
@@ -35,7 +46,7 @@ export function Info({ entry, children, className }: { entry: InfoEntry | null |
     <>
       <span
         ref={anchor}
-        className={`info-target ${className ?? ''}`}
+        className={`info-target ${tapToOpen ? 'tappable' : ''} ${className ?? ''}`}
         onPointerDown={(e) => {
           if (e.pointerType === 'mouse') return;
           fired.current = false;
@@ -73,6 +84,10 @@ export function Info({ entry, children, className }: { entry: InfoEntry | null |
             fired.current = false;
           }
         }}
+        onClick={tapToOpen ? () => setOpen('sheet') : undefined}
+        role={tapToOpen ? 'button' : undefined}
+        tabIndex={tapToOpen ? 0 : undefined}
+        onKeyDown={tapToOpen ? (e) => (e.key === 'Enter' || e.key === ' ') && setOpen('sheet') : undefined}
         onContextMenu={(e) => e.preventDefault()}
       >
         {children}
