@@ -79,6 +79,7 @@ All commands work on Windows, macOS and Linux. Set the `DB_PATH` environment var
 | `npm run typecheck` | TypeScript checks for all workspaces |
 | `npm run build` | Builds the client into `client/dist` |
 | `npm start` | Production server, also serves the built client |
+| `npm run host` | Game night from your own PC: builds if needed, starts the server and a Cloudflare Tunnel, restarts them if they stop (`docs/self-hosting.md`) |
 | `npm run users -- ...` | Manage accounts (see above) |
 
 ## Configuration (server)
@@ -88,11 +89,17 @@ All commands work on Windows, macOS and Linux. Set the `DB_PATH` environment var
 | `PORT` | `3001` | HTTP + WebSocket port |
 | `DB_PATH` | `server/data/dnd.sqlite` | SQLite file. Back this file up to back up every campaign. |
 | `UPLOADS_DIR` | `server/data/uploads` | Pictures the DM uploads for handouts. Back this folder up together with the database. |
+| `CONTENT_DIR` | `server/data/content` | Private content packs (see `docs/content-packs.md`) |
+| `INVITE_CODE` | unset | When set, choosing an account's first password needs this code. Set it on any server that is reachable from the internet. |
 | `CORS_ORIGIN` | unset | Comma-separated origins, only needed if the client is hosted elsewhere |
 
-## Playing at a friend's house
+## Playing at a friend's house: putting it online
 
-For real sessions the server should run somewhere that doesn't depend on any one phone: a small cloud host (Fly.io, Render, Railway, a cheap VPS) with a persistent disk for the SQLite file. Then players only need mobile data or the host's Wi-Fi. Deployment isn't set up yet.
+For real sessions the server should not depend on anyone's PC or phone. The repository is ready for **Fly.io**: `Dockerfile` and `fly.toml` run the app on one small machine with a permanent disk for the database and the uploaded pictures. **`docs/hosting.md` is the step-by-step guide** (Windows, no Docker needed): create the app, set an invite code, deploy, add the accounts, send your friends the link.
+
+**Or run it from your own PC:** `npm run host` starts the app and a free Cloudflare Tunnel, so friends reach your PC from anywhere without changes to the router. It costs nothing, but the app is only there while the PC is on and its internet works. **`docs/self-hosting.md` is the step-by-step guide** (Windows). `npm run host` makes up an invite code on its first start.
+
+Online, set `INVITE_CODE`: friends then need that code once, when they choose their password. Without it anyone who guesses the name of an account that has not logged in yet could take it.
 
 ## Licensing of game content
 

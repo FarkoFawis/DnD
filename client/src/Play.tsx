@@ -16,7 +16,7 @@ const TABS = [
 /** Play: join a session with a code, or host one of your campaigns. */
 export function Play({ game, onBack, onCharacters }: { game: Game; onBack: () => void; onCharacters: () => void }) {
   // People who run campaigns usually want to host; everyone else joins.
-  const [mode, setMode] = useState<'join' | 'host'>(game.campaigns?.length ? 'host' : 'join');
+  const [mode, setMode] = useState<'join' | 'host'>(game.campaigns?.length && !stuckCharacter(game) ? 'host' : 'join');
   /** The campaign the DM is planning ("Configure"). */
   const [configuring, setConfiguring] = useState<CampaignSummary | null>(null);
   if (configuring) {
@@ -29,9 +29,18 @@ export function Play({ game, onBack, onCharacters }: { game: Game; onBack: () =>
   );
 }
 
+/**
+ * A character of yours that is in a session while this phone is not: the app was
+ * opened under another address or the browser forgot. The session itself lives on the server.
+ */
+function stuckCharacter(game: Game): CharacterSummary | undefined {
+  return game.session ? undefined : game.characters?.find((c) => c.inSession);
+}
+
 function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const stuck = stuckCharacter(game);
   /** After a valid code: pick which character joins. */
   const [choice, setChoice] = useState<{ code: string; campaign: string; characters: CharacterSummary[] } | null>(null);
 
@@ -75,6 +84,32 @@ function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) 
           <button className="ghost" onClick={onCharacters}>Characters</button>
         </div>
       </>
+    );
+  }
+
+  if (stuck?.inSession) {
+    const sessionCode = stuck.inSession;
+    const act = async (what: () => Promise<unknown>) => {
+      setBusy(true);
+      await what();
+      // If the DM has ended that session meanwhile, this is what clears the notice.
+      void game.refreshCharacters();
+      setBusy(false);
+    };
+    return (
+      <div className="still-in-session">
+        <h3 className="panel-heading">You are still in a session</h3>
+        <p className="notice">
+          <strong>{stuck.data.name}</strong> is in session <strong>{sessionCode}</strong>
+          {stuck.campaign && <> ({stuck.campaign.name})</>}. Go back to it, or leave it to join another one.
+        </p>
+        <button className="primary" disabled={busy || game.status !== 'online'} onClick={() => void act(() => game.join(sessionCode))}>
+          Back to the session
+        </button>
+        <button className="ghost" disabled={busy || game.status !== 'online'} onClick={() => void act(() => game.leave())}>
+          Leave it
+        </button>
+      </div>
     );
   }
 

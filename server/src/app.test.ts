@@ -425,6 +425,30 @@ describe('campaign sessions', () => {
     expect(ok(await mira.emitWithAck('character:list')).characters[0]?.inSession).toBeNull();
   });
 
+  it('lets a player out of a session their phone has forgotten', async () => {
+    const first = await hostCampaign();
+    const { sock: mira } = await joinWithNewCharacter('Mira', first.session.code);
+    // The app is opened under a new address: logged in again, but no session code is remembered.
+    const elsewhere = await client(await login('Mira'));
+    const jonas = await client(await login('Jonas'));
+    const { campaign } = ok(await jonas.emitWithAck('campaign:create', { name: 'Second table' }));
+    const second = ok(await jonas.emitWithAck('session:host', { campaignId: campaign.id })).session;
+    const { character } = ok(await elsewhere.emitWithAck('character:create', { name: 'Spare' }));
+    expect(await elsewhere.emitWithAck('session:join', { code: second.code, characterId: character.id })).toEqual({
+      ok: false,
+      error: 'You are already in another session. Leave it first.',
+    });
+
+    const dmSeesLeave = nextState(first.dm, (s) => s.players.length === 0);
+    const kickedOut = new Promise<void>((resolve) => mira.once('session:ended', resolve));
+    ok(await elsewhere.emitWithAck('session:leave'));
+    await Promise.all([dmSeesLeave, kickedOut]);
+    expect(ok(await elsewhere.emitWithAck('character:list')).characters.every((c) => c.inSession === null)).toBe(true);
+    ok(await elsewhere.emitWithAck('session:join', { code: second.code, characterId: character.id }));
+    expect(await elsewhere.emitWithAck('session:leave')).toEqual({ ok: true });
+    expect(await elsewhere.emitWithAck('session:leave')).toMatchObject({ ok: false, error: 'You are not in a session.' });
+  });
+
   it('rejects unknown codes', async () => {
     const mira = await client(await login('Mira'));
     expect(await mira.emitWithAck('session:peek', { code: 'ZZZZZ' })).toMatchObject({ ok: false });
