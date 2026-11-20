@@ -1,7 +1,9 @@
 import {
+  ACTION_KINDS,
   COINS,
   DEFAULT_CHARACTER,
   LIMITS,
+  type ActionKind,
   type CharacterData,
   type CharacterFeature,
   type CustomResource,
@@ -98,6 +100,7 @@ function sanitizeLastAction(v: unknown): LastAction | null {
     name: text(v.name, 'action name', 80),
     ...(v.detail ? { detail: text(v.detail, 'action detail', 80) } : {}),
     ...(v.roll === true ? { roll: true } : {}),
+    ...(ACTION_KINDS.includes(v.kind as ActionKind) ? { kind: v.kind as ActionKind } : {}),
     at: text(v.at, 'action time', 40),
   };
 }

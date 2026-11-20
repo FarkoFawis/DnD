@@ -219,7 +219,7 @@ export function applyUse(
   if (req.kind === 'attack') {
     const name = req.name.trim().slice(0, 80);
     if (!name) throw new Error('Nothing to use.');
-    return { used: next, action: { name, detail: 'attack' } };
+    return { used: next, action: { name, detail: 'attack', kind: 'attack' } };
   }
   if (req.kind === 'spell') {
     const spell = c.spells.find((s) => s.id === req.spellId);
@@ -228,14 +228,14 @@ export function applyUse(
     const conc = spellInfo.concentration
       ? { concentration: { name: spell.name, ...(spell.ref ? { ref: spell.ref } : {}), saveDc: null } }
       : {};
-    if (spell.level === 0) return { used: next, action: { name: spell.name, detail: 'cantrip' }, ...conc };
-    if (req.ritual) return { used: next, action: { name: spell.name, detail: 'ritual' }, ...conc };
+    if (spell.level === 0) return { used: next, action: { name: spell.name, detail: 'cantrip', kind: 'spell' }, ...conc };
+    if (req.ritual) return { used: next, action: { name: spell.name, detail: 'ritual', kind: 'spell' }, ...conc };
     const slot = spellSlots(c).find((s) => s.id === (req.slot ?? castOptions(c, spell.level)[0]?.id));
     if (!slot) throw new Error(`No spell slots of level ${spell.level} or higher left.`);
     if (slot.level < spell.level) throw new Error(`${spell.name} needs a level ${spell.level} slot or higher.`);
     if (used(c, slot.id) >= slot.max) throw new Error(`No level ${slot.level} slots left.`);
     next[slot.id] = used(c, slot.id) + 1;
-    return { used: next, action: { name: spell.name, detail: `${ordinal(slot.level)}-level slot` }, ...conc };
+    return { used: next, action: { name: spell.name, detail: `${ordinal(slot.level)}-level slot`, kind: 'spell' }, ...conc };
   }
   const u = limitedUses(c).find((x) => x.id === req.useId);
   if (!u) throw new Error('That feature has no limited uses.');
@@ -245,7 +245,7 @@ export function applyUse(
   if (left <= 0) throw new Error(`No uses of ${u.name} left. It comes back after a ${u.resetOn === 'long' ? 'Long' : 'Short or Long'} Rest.`);
   if (amount > left) throw new Error(`Only ${left} left.`);
   next[u.id] = used(c, u.id) + amount;
-  return { used: next, action: { name: u.name.replace(/ \(.*\)$/, ''), detail: u.pool ? `${amount}` : undefined } };
+  return { used: next, action: { name: u.name.replace(/ \(.*\)$/, ''), detail: u.pool ? `${amount}` : undefined, kind: 'feature' } };
 }
 
 /**

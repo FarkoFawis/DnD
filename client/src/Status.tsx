@@ -16,6 +16,7 @@ import {
   type DeathSaveResult,
   type InfoEntry,
 } from '@dnd/shared';
+import { useFresh } from './fx/hooks.ts';
 import { Info } from './Info.tsx';
 
 function exhaustionEntry(content: Content | null, level: number): InfoEntry {
@@ -29,6 +30,8 @@ function exhaustionEntry(content: Content | null, level: number): InfoEntry {
 
 /** The conditions a character has, as badges. Tap one to read its rules. */
 export function ConditionBadges({ character: c, content }: { character: CharacterData; content: Content | null }) {
+  /** A condition the DM just set pops in; the ones already there don't. */
+  const fresh = useFresh(c.conditions);
   if (c.conditions.length === 0 && c.exhaustion === 0) return null;
   return (
     <div className="conditions" aria-label="Conditions">
@@ -36,7 +39,7 @@ export function ConditionBadges({ character: c, content }: { character: Characte
         const def = content?.condition(id);
         return (
           <Info key={id} entry={def ? conditionInfo(def) : null} tapToOpen>
-            <span className="condition-badge">{def?.name ?? conditionName(id)}</span>
+            <span className={`condition-badge ${fresh.has(id) ? 'fresh' : ''}`}>{def?.name ?? conditionName(id)}</span>
           </Info>
         );
       })}
@@ -152,7 +155,7 @@ export function DeathSaves({ character: c, onRoll }: { character: CharacterData;
   const dead = isDead(c);
   const stable = isStable(c);
   return (
-    <div className={`death-saves ${dead ? 'dead' : ''}`} role="status">
+    <div className={`death-saves ${dead ? 'dead' : stable ? '' : 'dying'}`} role="status">
       <strong className="death-title">{dead ? 'Dead' : stable ? 'Stable at 0 HP' : '0 HP: Unconscious and dying'}</strong>
       {!dead && (
         <div className="death-rows">

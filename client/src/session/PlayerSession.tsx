@@ -8,7 +8,10 @@ import { PartyGrid } from '../PartyGrid.tsx';
 import { Portrait } from '../Portrait.tsx';
 import { sheetActions } from '../Sheet.tsx';
 import type { Game } from '../useGame.ts';
+import { useClosing } from '../fx/hooks.ts';
+import { useCharacterFx } from '../fx/sheetFx.tsx';
 import { Page } from './Page.tsx';
+import { PagerPill } from './PagerPill.tsx';
 import { SessionDrawer } from './SessionDrawer.tsx';
 import { usePager } from './usePager.ts';
 
@@ -40,6 +43,10 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
   const handout = session.handout;
   const [closedAt, setClosedAt] = useState<number | null>(null);
   const handoutOpen = handout !== null && closedAt !== handout.shownAt;
+
+  // Being hit, healed, casting, levelling up: the effects for this player's own character.
+  const content = useContent();
+  useCharacterFx(me.character, content);
 
   const fightAt = Math.max(-1, Math.min(0, position)); // -1 = fight page fully shown
   const partyAt = Math.max(0, Math.min(1, position)); // 1 = party page fully shown
@@ -110,35 +117,38 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
           <h2 className="party-title grow">Party</h2>
           <span className="muted small">{session.campaign.name}</span>
         </div>
-        <PartyGrid players={session.players} myId={me.user.id} />
+        <PartyGrid players={session.players} myId={me.user.id} content={content} />
       </Page>
 
-      <nav className="pager" aria-label="Pages">
-        {combat && (
-          <button
-            type="button"
-            className={`pager-tab ${page === -1 ? 'on' : ''} ${myTurn && page !== -1 ? 'alert' : ''}`}
-            aria-pressed={page === -1}
-            onClick={() => setPage(-1)}
-          >
-            ‹ {myTurn ? 'Your turn!' : 'Fight'}
-          </button>
-        )}
-        <button type="button" className={`pager-tab ${page === 0 ? 'on' : ''}`} aria-pressed={page === 0} onClick={() => setPage(0)}>My sheet</button>
-        <button type="button" className={`pager-tab ${page === 1 ? 'on' : ''}`} aria-pressed={page === 1} onClick={() => setPage(1)}>Party ›</button>
-      </nav>
+      <PagerPill
+        page={page}
+        position={position}
+        dragging={dragging}
+        onPage={setPage}
+        tabs={[
+          ...(combat ? [{ page: -1, label: `‹ ${myTurn ? 'Your turn!' : 'Fight'}`, className: myTurn && page !== -1 ? 'alert' : '' }] : []),
+          { page: 0, label: 'My sheet' },
+          { page: 1, label: 'Party ›' },
+        ]}
+      />
 
-      {handout && handoutOpen && (
-        <div className="handout-overlay" role="dialog" aria-modal aria-label={handout.title}>
-          <div className="handout-scroll">
-            <h2 className="handout-title">{handout.title}</h2>
-            {handout.imageUrl && <img className="handout-image" src={handout.imageUrl} alt={handout.title} />}
-            {handout.text && <p className="handout-text">{handout.text}</p>}
-          </div>
-          <button className="primary handout-close" onClick={() => setClosedAt(handout.shownAt)}>Close</button>
-        </div>
-      )}
+      {handout && handoutOpen && <HandoutOverlay key={handout.shownAt} handout={handout} onClose={() => setClosedAt(handout.shownAt)} />}
     </>
+  );
+}
+
+/** What the DM is showing, over the whole screen until closed. It fades in and out. */
+function HandoutOverlay({ handout, onClose }: { handout: NonNullable<SessionState['handout']>; onClose: () => void }) {
+  const { closing, close } = useClosing(onClose, 200);
+  return (
+    <div className={`handout-overlay ${closing ? 'closing' : ''}`} role="dialog" aria-modal aria-label={handout.title}>
+      <div className="handout-scroll">
+        <h2 className="handout-title">{handout.title}</h2>
+        {handout.imageUrl && <img className="handout-image" src={handout.imageUrl} alt={handout.title} />}
+        {handout.text && <p className="handout-text">{handout.text}</p>}
+      </div>
+      <button className="primary handout-close" onClick={close}>Close</button>
+    </div>
   );
 }
 
@@ -159,7 +169,8 @@ function FightPage({ combat, me, game }: { combat: Combat; me: SessionPlayer; ga
   const canRoll = dice && !!mine && mine.initiative === null;
   return (
     <div className="fight-page">
-      <p className={`fight-status ${isMe(active) ? 'mine' : ''}`} role="status">
+      {/* Keyed by whose turn it is: the line comes in anew with every turn. */}
+      <p key={active?.id ?? 'none'} className={`fight-status ${isMe(active) ? 'mine' : ''}`} role="status">
         {isMe(active)
           ? "It's your turn!"
           : active

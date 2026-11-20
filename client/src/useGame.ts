@@ -20,6 +20,8 @@ export function useGame(token: string, onUnauthorized: () => void) {
   const [error, setError] = useState<string | null>(null);
   /** Counts "Initiate fight" alerts from the DM; each one pulses the screen (see FightAlert). */
   const [fightAlerts, setFightAlerts] = useState(0);
+  /** The latest rest the DM called; `n` goes up with each one (see RestAlert). */
+  const [restAlert, setRestAlert] = useState<{ n: number; rest: 'short' | 'long'; characterId?: string } | null>(null);
   /** DM: the latest rolls the players made with the dice roller, oldest first. */
   const [rolls, setRolls] = useState<DiceRoll[]>([]);
 
@@ -67,6 +69,7 @@ export function useGame(token: string, onUnauthorized: () => void) {
     s.on('session:state', setSession);
     s.on('session:alert', (alert) => {
       if (alert.kind === 'fight') setFightAlerts((n) => n + 1);
+      else if (alert.kind === 'rest') setRestAlert((last) => ({ n: (last?.n ?? 0) + 1, rest: alert.rest, characterId: alert.characterId }));
     });
     s.on('session:roll', (roll) => setRolls((list) => [...list.slice(-19), roll]));
     s.on('session:ended', () => {
@@ -105,6 +108,7 @@ export function useGame(token: string, onUnauthorized: () => void) {
     /** For features that talk to the server themselves (campaign prep, fights, log). */
     call,
     fightAlerts,
+    restAlert,
     rolls,
     status,
     session,

@@ -81,12 +81,17 @@ export interface CustomResource {
 }
 
 /** The last thing a player used, shown to the DM next to their name. */
+export const ACTION_KINDS = ['spell', 'attack', 'feature', 'heal'] as const;
+export type ActionKind = (typeof ACTION_KINDS)[number];
+
 export interface LastAction {
   name: string;
   /** e.g. "3rd-level slot", "cantrip", "attack"; for a dice roll its total, "17". */
   detail?: string;
   /** A roll of the dice roller ("Stealth check" · "17"), not something that was used up. */
   roll?: boolean;
+  /** What kind of thing it was, so the phones can show the fitting effect. Older entries have none. */
+  kind?: ActionKind;
   /** ISO time. */
   at: string;
 }
@@ -275,10 +280,11 @@ export interface SessionState {
   combat: Combat | null;
 }
 
-/** Something that should grab everyone's attention for a moment. */
-export interface SessionAlert {
-  kind: 'fight';
-}
+/**
+ * Something every phone shows for a moment: the fight alert, or a rest the DM
+ * called (for the whole party, or with `characterId` for one character).
+ */
+export type SessionAlert = { kind: 'fight' } | { kind: 'rest'; rest: 'short' | 'long'; characterId?: string };
 
 /** What spending one Hit Die did. */
 export interface HitDieSpent {

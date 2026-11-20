@@ -1,0 +1,265 @@
+/* Everything that moves: transitions between screens, press feedback, and the effects when something
+   happens to a character. styles.css holds how things look at rest; a screen must be complete and
+   readable with this file switched off.
+
+   Rules of this file:
+   - Only `transform` and `opacity` move on anything big, so phones stay smooth. Small things (a bar,
+     a border) may change other properties.
+   - Whatever animates in ends in its normal look (keyframes only say where it comes from), and what
+     flashes is invisible at rest. Nothing may depend on an animation having run.
+   - Colours are the theme's tokens, as everywhere.
+   - Settings → "Animations and effects" off, or a phone set to "reduce motion", puts
+     `data-motion="off"` on <html> (settings.ts): the block right below then stops all of it. */
+
+:root {
+  --ease-out: cubic-bezier(0.22, 0.8, 0.3, 1);
+  /* Overshoots a little before it settles. */
+  --ease-spring: cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+
+/* ---- the off switch ---- */
+:root[data-motion='off'] *:not(.fight-alert *, .rest-alert *),
+:root[data-motion='off'] *:not(.fight-alert *, .rest-alert *)::before,
+:root[data-motion='off'] *:not(.fight-alert *, .rest-alert *)::after { animation: none !important; transition: none !important; }
+/* The two alerts say something, so they stay, as a plain fade. */
+:root[data-motion='off'] :is(.fa-tint, .fa-line, .fa-emblem) { animation: fa-fade 2.6s ease-in-out both; }
+:root[data-motion='off'] .fa-spark { animation: none; }
+:root[data-motion='off'] :is(.ra-glow, .ra-line, .ra-emblem, .ra-text) { animation: fa-fade 2.4s ease-in-out both; }
+:root[data-motion='off'] :is(.ra-twinkle, .ra-flame) { animation: none; }
+
+/* ---- shared keyframes ---- */
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(14px); } }
+@keyframes sink-out { to { opacity: 0; transform: translateY(40px); } }
+@keyframes from-left { from { opacity: 0; transform: translateX(-70px); } }
+@keyframes from-right { from { opacity: 0; transform: translateX(70px); } }
+@keyframes from-top { from { opacity: 0; transform: translateY(-30px); } }
+@keyframes to-left { to { opacity: 0; transform: translateX(-110%); } }
+@keyframes to-right { to { opacity: 0; transform: translateX(110%); } }
+@keyframes to-top { to { opacity: 0; transform: translateY(-40px); } }
+@keyframes pop-in { from { opacity: 0; transform: scale(0.6); } }
+/* Something lights up once: for elements that are invisible at rest. */
+@keyframes flash { 0% { opacity: 0; } 18% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ---- touch: everything answers a finger ---- */
+body { transition: background-color 0.25s, color 0.25s; }
+button, .chip, .condition-badge, .party-card, .lobby-slot, .turn-row, input, select, textarea {
+  transition: transform 0.12s var(--ease-out), border-color 0.18s, color 0.18s, background-color 0.18s, opacity 0.18s, box-shadow 0.18s;
+}
+button:not(:disabled):active { transform: scale(0.96); }
+button.party-card:active, .play-choice:not(:disabled):active { transform: scale(0.98); }
+/* Rows that span the screen dim instead of shrinking. */
+:is(.row-button, .picker-option, .check-row, .prep-main, .turn-name, .theme-option, .list-button, .levelup-banner, button.cs-check, .panel-tabs button, .tabs button, .sheet-tabs button):not(:disabled):active { transform: none; opacity: 0.6; }
+
+/* ---- home: everything comes in from its own side, and leaves that way ---- */
+.home-hero { transition: transform 0.75s cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.55s ease; will-change: transform; animation: fade-in 0.7s ease-out backwards; }
+.home-hero::after { transition: opacity 0.55s ease; }
+.home-user { animation: from-top 0.4s var(--ease-out) backwards; }
+.home-item { animation: from-left 0.45s var(--ease-out) backwards; }
+.home-item:nth-child(2) { animation-delay: 0.07s; }
+.home-hero-tag { animation: fade-in 0.5s ease-out 0.2s backwards; }
+.home-play { animation: from-right 0.45s var(--ease-out) 0.08s backwards; }
+.home.leaving { pointer-events: none; }
+.home.leaving .home-user { animation: to-top 0.2s ease-in forwards; }
+.home.leaving .home-item { animation: to-left 0.2s ease-in forwards; }
+.home.leaving .home-hero-tag { animation: fade-out 0.15s ease-in forwards; }
+.home.leaving .home-play { animation: to-right 0.2s ease-in forwards; }
+
+/* ---- Play: the buttons leave to their sides, the picture glides on, the next page rises ---- */
+/* Coming up from below the screen, a touch too far, then settling. */
+@keyframes rise-up { from { opacity: 0; transform: translateY(70vh); } 55% { opacity: 1; } 78% { transform: translateY(-10px); } }
+.scene-title { animation: from-top 0.4s var(--ease-out) 0.1s backwards; }
+.back-button { animation: fade-in 0.35s ease-out 0.3s backwards; }
+.play-choice { animation: rise-up 0.6s var(--ease-out) 0.05s backwards; }
+.play-choice.host { animation-delay: 0.13s; }
+/* Back from a page: they return from where they left to. */
+.play-screen:is([data-from='join'], [data-from='host']) .play-choice.join { animation: from-left 0.45s var(--ease-out) 0.1s backwards; }
+.play-screen:is([data-from='join'], [data-from='host']) .play-choice.host { animation: from-right 0.45s var(--ease-out) 0.1s backwards; }
+.play-screen.leaving { pointer-events: none; }
+.play-screen.leaving .scene-title { animation: to-top 0.18s ease-in forwards; }
+.play-screen.leaving .back-button { animation: fade-out 0.15s ease-in forwards; }
+.play-screen.leaving .play-choice.join { animation: to-left 0.2s ease-in forwards; }
+.play-screen.leaving .play-choice.host { animation: to-right 0.2s ease-in forwards; }
+/* The one that was tapped lights up as it goes. */
+.play-screen[data-to='join'] .play-choice.join, .play-screen[data-to='host'] .play-choice.host { border-color: var(--gold); }
+/* Back to the home screen: they sink back down instead. */
+.play-screen.leaving:not([data-to='join'], [data-to='host']) .play-choice { animation: sink-out 0.2s ease-in forwards; }
+.play-frame { animation: rise-up 0.6s var(--ease-out) 0.12s backwards; }
+.play-page.leaving .play-frame { animation: sink-out 0.2s ease-in forwards; }
+
+/* ---- panels: Characters, Settings, Configure ---- */
+@keyframes panel-in { from { opacity: 0; transform: translateY(18px) scale(0.985); } }
+@keyframes panel-out { to { opacity: 0; transform: translateY(14px) scale(0.985); } }
+.panel { animation: panel-in 0.28s var(--ease-out) backwards; }
+.panel.closing { animation: panel-out 0.15s ease-in forwards; pointer-events: none; }
+/* A newly chosen section (the body is keyed by the tab). */
+.panel-body, .sheet-body { animation: rise-in 0.22s var(--ease-out) backwards; }
+/* Lists arrive row by row. */
+.rows li, .setting-row, .theme-option { animation: rise-in 0.3s var(--ease-out) backwards; }
+:is(.rows li, .setting-row, .theme-option):nth-child(2) { animation-delay: 0.04s; }
+:is(.rows li, .setting-row, .theme-option):nth-child(3) { animation-delay: 0.08s; }
+:is(.rows li, .setting-row, .theme-option):nth-child(4) { animation-delay: 0.12s; }
+:is(.rows li, .setting-row, .theme-option):nth-child(5) { animation-delay: 0.16s; }
+:is(.rows li, .setting-row, .theme-option):nth-child(n + 6) { animation-delay: 0.2s; }
+
+/* ---- whole screens: a short fade, so nothing just pops into place ---- */
+/* Opacity only: a transform on these would move the fixed bars and pages inside them. */
+.lobby, .classic, .dm-page, .card.sheet, .creator, .back { animation: fade-in 0.3s ease-out backwards; }
+.error[role='alert'], .offline-note, .notice { animation: rise-in 0.25s var(--ease-out) backwards; }
+.dm-sheet { animation: rise-in 0.3s var(--ease-out) backwards; }
+
+/* ---- lobby ---- */
+.lobby-dm { animation: pop-in 0.4s var(--ease-spring) backwards; }
+.lobby-slot:not(.empty) { animation: pop-in 0.4s var(--ease-spring) 0.08s backwards; }
+.lobby-slot.ready .lobby-ready, .lobby-go.is-ready { animation: pop-in 0.35s var(--ease-spring) backwards; }
+
+/* ---- sheets from the bottom, pickers, overlays ---- */
+@keyframes sheet-up { from { transform: translateY(100%); } }
+@keyframes sheet-down { to { transform: translateY(100%); } }
+.info-backdrop, .picker-backdrop { animation: fade-in 0.22s ease-out backwards; }
+.info-sheet, .picker-panel { animation: sheet-up 0.32s var(--ease-out) backwards; }
+.info-backdrop.closing, .picker-backdrop.closing { animation: fade-out 0.19s ease-in forwards; pointer-events: none; }
+.closing > .info-sheet, .closing > .picker-panel { animation: sheet-down 0.19s ease-in forwards; }
+.info-hover { animation: fade-in 0.15s ease-out backwards; }
+/* A handout unrolls; the level-up wizard comes up over the sheet. */
+@keyframes unroll { from { opacity: 0; transform: translateY(16px) scale(0.96); } }
+.handout-overlay { animation: fade-in 0.28s ease-out backwards; }
+.handout-scroll { animation: unroll 0.45s var(--ease-out) 0.05s backwards; }
+.handout-overlay.closing { animation: fade-out 0.2s ease-in forwards; }
+.levelup-overlay { animation: rise-in 0.3s var(--ease-out) backwards; }
+
+/* ---- the sidebar ---- */
+.drawer { transition: transform 0.32s var(--ease-out), box-shadow 0.32s; }
+.drawer-backdrop { transition: opacity 0.28s ease; }
+.drawer.open > * { animation: from-left 0.35s var(--ease-out) 0.05s backwards; }
+.drawer.open > :nth-child(n + 4) { animation-delay: 0.1s; }
+.drawer.open > :nth-child(n + 7) { animation-delay: 0.15s; }
+
+/* ---- swipe pages ---- */
+.pager-mark.settle { transition: transform 0.26s var(--ease-out), width 0.26s var(--ease-out); }
+.page-scrim.settle { transition: opacity 0.26s ease; }
+.pager { animation: rise-in 0.35s var(--ease-out) 0.15s backwards; }
+
+/* ---- hit points ---- */
+.hpbar span { transition: width 0.45s var(--ease-out), background-color 0.3s; }
+/* The lighter part waits, then follows. */
+.hpbar .hpbar-ghost { transition: width 0.5s ease-in 0.4s; }
+.cs-hp-now, .hp-now { transition: color 0.3s; }
+@keyframes float-up { 0% { opacity: 0; transform: translateY(8px) scale(0.7); } 18% { opacity: 1; transform: translateY(0) scale(1.15); } 30% { transform: translateY(-2px) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-34px); } }
+.hp-fx-flash { animation: flash 0.7s ease-out; }
+.hp-fx-num { animation: float-up 1.1s ease-out; }
+@keyframes ring-out { 0% { opacity: 0; transform: scale(0.3); } 25% { opacity: 1; } 100% { opacity: 0; transform: scale(1.5); } }
+.card-ring { animation: ring-out 0.85s ease-out; }
+.action-chip.fresh, .condition-badge.fresh, .status-chip { animation: pop-in 0.4s var(--ease-spring) backwards; }
+@keyframes num-flash { from { color: var(--gold); transform: scale(1.35); } }
+.num-flash { animation: num-flash 0.7s ease-out; }
+/* An item that just arrived: it slides in with a gold edge that fades. */
+@keyframes row-fresh { 0% { opacity: 0; transform: translateX(-14px); box-shadow: inset 3px 0 0 var(--gold); } 25% { opacity: 1; transform: none; } 70% { box-shadow: inset 3px 0 0 var(--gold); } 100% { box-shadow: inset 3px 0 0 transparent; } }
+li.fresh { animation: row-fresh 1.6s ease-out; }
+.pip { transition: background-color 0.3s, border-color 0.3s; }
+
+/* ---- "Used: …" and "Received: …" at the top of the sheet ---- */
+.use-flash { animation: from-top 0.28s var(--ease-out) backwards, fade-out 0.3s ease-in 2.2s forwards; }
+.use-flash.got { animation: from-top 0.28s var(--ease-out) backwards, fade-out 0.3s ease-in 2.7s forwards; }
+
+/* ---- things that want attention: a soft glow that breathes ---- */
+@keyframes breathe { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+.death-saves.dying::after, .concentration.alert::after, .levelup-banner::after { content: ''; position: absolute; inset: -2px; border-radius: inherit; opacity: 0; pointer-events: none; }
+/* A heartbeat while dying. */
+.death-saves.dying::after { box-shadow: 0 0 18px color-mix(in srgb, var(--bad) 70%, transparent); animation: breathe 1.5s ease-in-out infinite; }
+.concentration.alert::after { box-shadow: 0 0 16px color-mix(in srgb, var(--warn) 70%, transparent); animation: breathe 1.2s ease-in-out 3; }
+.levelup-banner::after { box-shadow: 0 0 16px color-mix(in srgb, var(--gold) 60%, transparent); animation: breathe 2.4s ease-in-out infinite; }
+.death-saves, .concentration, .cs-rest, .levelup-banner { animation: rise-in 0.35s var(--ease-out) backwards; }
+
+/* ---- fights ---- */
+.fight-status { animation: pop-in 0.35s var(--ease-spring) backwards; }
+@keyframes turn-on { from { box-shadow: 0 0 0 1px var(--gold), 0 0 22px var(--gold); } }
+.turn-row.active { animation: turn-on 0.7s ease-out; }
+.turn-row .badge { animation: pop-in 0.3s var(--ease-spring) backwards; }
+.fight-round { animation: fade-in 0.3s ease-out backwards; }
+
+/* ---- dice roller ---- */
+@keyframes die-spin { from { transform: rotate(0) scale(0.7); } to { transform: rotate(420deg) scale(1.1); } }
+.roll-total.tumbling .roll-die { opacity: 0.9; animation: die-spin 0.52s linear; }
+.roll-die { transition: opacity 0.25s; }
+.roll-total.tumbling .roll-number { opacity: 0.6; }
+@keyframes roll-land { from { transform: scale(1.5); } }
+.roll-total.landed .roll-number { animation: roll-land 0.35s var(--ease-spring); }
+/* What the dice showed stays hidden until the number has landed. */
+.roll-result > * { transition: opacity 0.25s; }
+.roll-result:has(.tumbling) > :not(.roll-total) { opacity: 0; pointer-events: none; }
+@keyframes toast-out { to { opacity: 0; transform: translateY(-14px); } }
+.roll-toast.leaving { animation: toast-out 0.2s ease-in forwards; }
+
+/* ---- the effects layer (fx/FxLayer.tsx): bursts where something happened, glows over the screen ---- */
+.fx-layer { position: fixed; inset: 0; z-index: 110; pointer-events: none; overflow: hidden; contain: strict; }
+.fx-burst { position: absolute; width: 0; height: 0; }
+.fx-burst > * { position: absolute; opacity: 0; }
+/* Pieces fly out from the middle: `--a` is the direction, `--d` how far. */
+@keyframes fx-fly { 0% { opacity: 0; transform: rotate(var(--a)) translateY(-6px) scale(0.4); } 25% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--d) * -1)) scale(1); } }
+@keyframes fx-ring { 0% { opacity: 0; transform: scale(0.2); } 25% { opacity: 1; } 100% { opacity: 0; transform: scale(1.25); } }
+.fx-ring { left: -56px; top: -56px; width: 112px; height: 112px; border-radius: 50%; border: 2px solid var(--fx); box-shadow: 0 0 14px var(--fx), inset 0 0 14px var(--fx); animation: fx-ring 0.65s ease-out; }
+.fx-ring2 { animation-delay: 0.14s; }
+.fx-ring.fx-soft { border-width: 1px; animation-duration: 0.9s; }
+@keyframes fx-rune { 0% { opacity: 0; transform: scale(0.4) rotate(-40deg); } 30% { opacity: 1; } 100% { opacity: 0; transform: scale(1.05) rotate(70deg); } }
+.fx-rune { left: -50px; top: -50px; width: 100px; height: 100px; fill: none; stroke: var(--fx); stroke-width: 1.6; stroke-linejoin: round; animation: fx-rune 0.85s ease-out; }
+/* A four-pointed star. */
+.fx-star, .fx-glint { width: 14px; height: 14px; background: var(--fx); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+.fx-star { left: -7px; top: -7px; animation: fx-fly 0.75s ease-out 0.08s; }
+.fx-ray { left: -1.5px; top: -8px; width: 3px; height: 16px; border-radius: 2px; background: var(--fx); animation: fx-fly 0.6s ease-out; }
+.fx-ray.fx-long { top: -14px; height: 28px; animation-duration: 0.8s; }
+.fx-shard { left: -2.5px; top: -6px; width: 5px; height: 12px; background: var(--fx); clip-path: polygon(50% 0, 100% 100%, 0 100%); animation: fx-fly 0.45s ease-out 0.1s; }
+/* A blade: a thin diamond that shoots across and thins out. */
+@keyframes fx-slash { 0% { opacity: 0; transform: rotate(var(--r)) translateX(-50px) scaleX(0.1); } 35% { opacity: 1; transform: rotate(var(--r)) scaleX(1); } 100% { opacity: 0; transform: rotate(var(--r)) translateX(16px) scale(1.2, 0.15); } }
+.fx-slash { --r: -34deg; left: -75px; top: -7px; width: 150px; height: 14px; background: linear-gradient(to right, var(--fx), var(--text) 55%, var(--fx)); clip-path: polygon(0 50%, 55% 0, 100% 50%, 55% 100%); animation: fx-slash 0.4s ease-out; }
+.fx-slash.fx-slash2 { --r: 34deg; animation-delay: 0.11s; }
+@keyframes fx-rise { 0% { opacity: 0; transform: translateY(12px) scale(0.5); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(calc(var(--d) * -1)) scale(1); } }
+.fx-plus { left: calc(var(--x) - 7px); top: -7px; width: 14px; height: 14px; background: var(--fx); clip-path: polygon(36% 0, 64% 0, 64% 36%, 100% 36%, 100% 64%, 64% 64%, 64% 100%, 36% 100%, 36% 64%, 0 64%, 0 36%, 36% 36%); animation: fx-rise 0.9s ease-out; }
+@keyframes fx-glint { 0% { opacity: 0; transform: scale(0) rotate(0); } 50% { opacity: 1; transform: scale(1.2) rotate(45deg); } 100% { opacity: 0; transform: scale(0) rotate(90deg); } }
+.fx-glint { margin: -7px; animation: fx-glint 0.6s ease-in-out; }
+
+/* Over the whole screen: a glow at the edges. */
+.fx-screen { position: absolute; inset: 0; opacity: 0; }
+.fx-hurt { box-shadow: inset 0 0 70px 14px color-mix(in srgb, var(--bad) 45%, transparent); animation: flash 0.6s ease-out; }
+.fx-mend { box-shadow: inset 0 0 70px 10px color-mix(in srgb, var(--ok) 32%, transparent); animation: flash 0.85s ease-out; }
+/* Dropped to 0: deeper, two beats. */
+@keyframes fx-beat { 0% { opacity: 0; } 12% { opacity: 1; } 34% { opacity: 0.25; } 50% { opacity: 1; } 100% { opacity: 0; } }
+.fx-down { background: color-mix(in srgb, var(--bad) 9%, transparent); box-shadow: inset 0 0 110px 30px color-mix(in srgb, var(--bad) 60%, transparent); animation: fx-beat 1.4s ease-in-out; }
+/* On a white page the same glow reads as the whole screen turning pink, so it is thinner there. */
+:root[data-theme='light'] .fx-hurt { box-shadow: inset 0 0 46px 4px color-mix(in srgb, var(--bad) 34%, transparent); }
+:root[data-theme='light'] .fx-mend { box-shadow: inset 0 0 46px 4px color-mix(in srgb, var(--ok) 28%, transparent); }
+:root[data-theme='light'] .fx-down { box-shadow: inset 0 0 70px 14px color-mix(in srgb, var(--bad) 42%, transparent); }
+/* Level up: rays turning behind the new level. (The colours in the mask are only "solid" and "see-through".) */
+.fx-level { opacity: 1; display: grid; place-items: center; }
+/* The sheet dims behind it, or the new level would sit on top of the hit points. */
+@keyframes fx-level-dim { 0%, 100% { opacity: 0; } 12%, 76% { opacity: 1; } }
+.fx-level::before { content: ''; position: absolute; inset: 0; opacity: 0; background: color-mix(in srgb, var(--bg) 88%, transparent); animation: fx-level-dim 2.5s ease-out; }
+@keyframes fx-rays { 0% { opacity: 0; transform: rotate(0) scale(0.4); } 15% { opacity: 1; transform: rotate(8deg) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: rotate(50deg) scale(1.1); } }
+.fx-level-rays {
+  position: absolute; left: 50%; top: 42%; width: 100vmin; height: 100vmin; margin: -50vmin 0 0 -50vmin; opacity: 0;
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--gold) 26%, transparent) 0 7deg, transparent 7deg 20deg);
+  -webkit-mask-image: radial-gradient(closest-side, #000 10%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 10%, transparent 100%);
+  animation: fx-rays 2.5s ease-out;
+}
+@keyframes fx-level-text { 0% { opacity: 0; transform: scale(0.5); } 12% { opacity: 1; transform: scale(1.12); } 20% { transform: scale(1); } 78% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06); } }
+.fx-level-text { position: relative; top: -8%; display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0; color: var(--gold); text-align: center; text-shadow: 0 0 16px var(--bg), 0 0 6px var(--bg), 0 0 2px var(--bg); animation: fx-level-text 2.5s ease-out; }
+.fx-level-text strong { font: 700 3.2rem/1.1 Georgia, 'Times New Roman', serif; letter-spacing: 0.04em; }
+.fx-level-text span { font-size: 1.05rem; color: var(--text); }
+@keyframes fx-arrow { 0%, 10% { transform: translateY(18px); } 30%, 100% { transform: none; } }
+.fx-level-arrow { width: 52px; fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; animation: fx-arrow 2.5s var(--ease-spring); }
+
+/* ---- the rest alert (session/RestAlert.tsx): one calm 2.4 s timeline ---- */
+@keyframes ra-glow { 0%, 100% { opacity: 0; } 25%, 70% { opacity: 1; } }
+@keyframes ra-line { 0% { clip-path: inset(-4px 50% -4px 50%); } 16%, 78% { clip-path: inset(-4px 0 -4px 0); opacity: 1; } 100% { clip-path: inset(-4px 0 -4px 0); opacity: 0; } }
+@keyframes ra-emblem { 0% { opacity: 0; transform: scale(0.3); } 14% { opacity: 1; transform: scale(1.1); } 22%, 78% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.9); } }
+@keyframes ra-text { 0%, 12% { opacity: 0; transform: translateY(8px); } 26%, 78% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes ra-twinkle { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+@keyframes ra-flame { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(0.94, 1.07); } }
+.ra-glow { animation: ra-glow 2.4s ease-in-out both; }
+.ra-line { animation: ra-line 2.4s var(--ease-out) both; }
+.ra-emblem { animation: ra-emblem 2.4s ease-out both; }
+.ra-text { animation: ra-text 2.4s ease-out both; }
+.ra-twinkle { animation: ra-twinkle 0.8s ease-in-out infinite; }
+.ra-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: ra-flame 0.5s ease-in-out infinite; }

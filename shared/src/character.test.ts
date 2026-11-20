@@ -35,6 +35,12 @@ describe('sanitizeCharacterPatch', () => {
     expect(() => sanitizeCharacterPatch({ inventory: [] })).toThrow();
     expect(sanitizeCharacterPatch({ inventory: [] }, { allowInventory: true })).toEqual({ inventory: [] });
   });
+
+  it('keeps the kind of the last action only when it is one the phones know', () => {
+    const at = '2026-11-20T20:00:00.000Z';
+    expect(sanitizeCharacterPatch({ lastAction: { name: 'Fire Bolt', kind: 'spell', at } })).toEqual({ lastAction: { name: 'Fire Bolt', kind: 'spell', at } });
+    expect(sanitizeCharacterPatch({ lastAction: { name: 'Fire Bolt', kind: 'explosion', at } })).toEqual({ lastAction: { name: 'Fire Bolt', at } });
+  });
 });
 
 describe('normalizeCharacter', () => {
