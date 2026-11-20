@@ -424,7 +424,7 @@ export interface ClientToServerEvents {
   'session:ready': (input: { ready: boolean }, ack: (res: Ack<object>) => void) => void;
   /** DM: start the session. The client warns first if not everyone is ready. */
   'session:start': (ack: (res: Ack<object>) => void) => void;
-  /** Player leaves the session (their character stays saved). */
+  /** Player leaves the session (their character stays saved). Also works from a phone that is not in it right now: it leaves the session the player's character is still in. */
   'session:leave': (ack: (res: Ack<object>) => void) => void;
   /** DM ends the session for everyone (all characters stay saved). */
   'session:end': (ack: (res: Ack<object>) => void) => void;

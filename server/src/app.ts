@@ -1281,9 +1281,11 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     });
 
     socket.on('session:leave', (ack) => {
-      const code = socket.data.code;
+      if (socket.data.code && socket.data.isHost) return ack({ ok: false, error: 'As the DM, end the session instead.' });
+      // Not in it on this phone (opened under another address, or the browser forgot):
+      // the session this player's character is still sitting in.
+      const code = socket.data.code ?? store.listCharacters(user.id).find((c) => c.inSession)?.inSession;
       if (!code) return ack({ ok: false, error: 'You are not in a session.' });
-      if (socket.data.isHost) return ack({ ok: false, error: 'As the DM, end the session instead.' });
       store.removeSessionPlayer(code, user.id);
       // Take every tab of this user out of the session.
       for (const s of io.sockets.sockets.values()) {
