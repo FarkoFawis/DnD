@@ -38,7 +38,7 @@ export function DefaultPortrait({ character: c }: { character: Pick<CharacterDat
       {/* hooded figure: hood, face shadow, shoulders */}
       <path d="M100 62c-30 0-46 26-46 58 0 18 6 30 14 38-30 10-52 34-58 72v70h180v-70c-6-38-28-62-58-72 8-8 14-20 14-38 0-32-16-58-46-58z" fill={`url(#${id}-fig)`} />
       <path d="M100 84c-18 0-28 16-28 36 0 22 12 38 28 38s28-16 28-38c0-20-10-36-28-36z" fill={`hsl(${h} 40% 5%)`} />
-      <text x="100" y="134" textAnchor="middle" fontSize="40" fontFamily="Georgia, serif" fontWeight="700" fill={`hsl(${h} 60% 72%)`} opacity="0.9">{initial}</text>
+      <text x="100" y="134" textAnchor="middle" fontSize="40" style={{ fontFamily: 'var(--font-display)' }} fontWeight="700" fill={`hsl(${h} 60% 72%)`} opacity="0.9">{initial}</text>
     </svg>
   );
 }

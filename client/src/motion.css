@@ -245,7 +245,7 @@ li.fresh { animation: row-fresh 1.6s ease-out; }
 }
 @keyframes fx-level-text { 0% { opacity: 0; transform: scale(0.5); } 12% { opacity: 1; transform: scale(1.12); } 20% { transform: scale(1); } 78% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06); } }
 .fx-level-text { position: relative; top: -8%; display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0; color: var(--gold); text-align: center; text-shadow: 0 0 16px var(--bg), 0 0 6px var(--bg), 0 0 2px var(--bg); animation: fx-level-text 2.5s ease-out; }
-.fx-level-text strong { font: 700 3.2rem/1.1 Georgia, 'Times New Roman', serif; letter-spacing: 0.04em; }
+.fx-level-text strong { font-size: 3.4rem; font-weight: 700; line-height: 1.1; letter-spacing: 0.04em; }
 .fx-level-text span { font-size: 1.05rem; color: var(--text); }
 @keyframes fx-arrow { 0%, 10% { transform: translateY(18px); } 30%, 100% { transform: none; } }
 .fx-level-arrow { width: 52px; fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; animation: fx-arrow 2.5s var(--ease-spring); }
