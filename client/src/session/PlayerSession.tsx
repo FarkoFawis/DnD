@@ -108,7 +108,7 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
 
       {combat && (
         <Page side="left" shown={-fightAt} dragging={dragging} open={page === -1}>
-          <div className="party-panel-head">
+          <div className="party-panel-head narrow">
             <h2 className="party-title grow">Fight</h2>
             <button type="button" className="link back-link" onClick={() => setPage(0)}>My sheet ›</button>
           </div>
