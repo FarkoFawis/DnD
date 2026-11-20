@@ -8,10 +8,31 @@
  */
 import type { Ability, Skill } from '../rules.ts';
 
+/**
+ * A counter for a feature, trait or feat that can only be used so often
+ * (packs only; the SRD's own are in resources.ts). The sheet shows it with a
+ * Use button and rests give it back.
+ */
+export interface UsesDef {
+  /**
+   * How many: a fixed number, "pb" (Proficiency Bonus), "level" (character
+   * level), an ability like "wis" (its modifier, at least 1), or steps by
+   * level: [[3, 4], [7, 5]] = 4 from level 3 on, 5 from level 7 on.
+   */
+  max: number | 'pb' | 'level' | Ability | [level: number, uses: number][];
+  /** "short": all back on a Short Rest · "shortOne": one back per Short Rest · "long": Long Rest only. */
+  resetOn: 'short' | 'shortOne' | 'long';
+  /** A pool of points or dice spent several at a time. */
+  pool?: boolean;
+  /** Name of the counter when it isn't the feature's, e.g. "Superiority Dice". */
+  name?: string;
+}
+
 export interface Feature {
   level: number;
   name: string;
   description: string;
+  uses?: UsesDef;
 }
 
 /** One way to get starting equipment: a fixed list plus gold, e.g. option A or B. */
@@ -66,9 +87,9 @@ export interface SpeciesDef {
   /** "Medium", "Small" or "Small or Medium" */
   size: string;
   speed: number;
-  traits: { name: string; description: string }[];
+  traits: { name: string; description: string; uses?: UsesDef }[];
   /** Lineage / ancestry / legacy picked with the species. */
-  subspecies?: { label: string; options: { id: string; name: string; description: string }[] };
+  subspecies?: { label: string; options: { id: string; name: string; description: string; uses?: UsesDef }[] };
   /** Human: one extra skill of your choice. */
   skillChoice?: number;
   /** Human: one extra Origin feat. */
@@ -99,6 +120,7 @@ export interface FeatDef {
   prerequisite?: string;
   repeatable?: boolean;
   description: string;
+  uses?: UsesDef;
 }
 
 export interface SpellDef {

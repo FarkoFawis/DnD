@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { Content, parsePack } from './content/index.ts';
+import { SRD } from './content/srd.ts';
 import { DEFAULT_CHARACTER, type CharacterData } from './protocol.ts';
-import { HIT_DICE_ID, applyRest, applyUse, canSpendHitDice, castOptions, hitDiceLeft, hitDieSize, limitedUses, spellSlots, spendHitDie } from './resources.ts';
+import { HIT_DICE_ID, applyRest, applyUse, canSpendHitDice, castOptions, hitDiceLeft, hitDieSize, limitedUses, packUseId, spellSlots, spendHitDie } from './resources.ts';
 
 const char = (p: Partial<CharacterData>): CharacterData => ({ ...structuredClone(DEFAULT_CHARACTER), ...p });
 const slots = (p: Partial<CharacterData>) => spellSlots(char(p)).map((s) => s.max);
@@ -156,5 +158,77 @@ describe('Hit Dice (2024)', () => {
     const spent = hurt({ used: { [HIT_DICE_ID]: 2, 'second-wind': 1 }, resting: true });
     expect(applyRest(spent, 'short').used).toEqual({ [HIT_DICE_ID]: 2 });
     expect(applyRest(spent, 'long')).toMatchObject({ used: {}, hpCurrent: 28, resting: false });
+  });
+});
+
+describe('counters from content packs', () => {
+  const { pack, problems } = parsePack(
+    {
+      id: 'test',
+      name: 'Test pack',
+      subclasses: [
+        {
+          id: 'dice-fighter',
+          classId: 'fighter',
+          name: 'Dice Fighter',
+          features: [
+            { level: 3, name: 'Trick Dice', description: 'd', uses: { max: [[3, 4], [7, 5]], resetOn: 'short', name: 'Dice' } },
+            { level: 3, name: 'Second Wind', description: 'no counter of its own' },
+          ],
+        },
+      ],
+      species: [{ id: 'glowfolk', name: 'Glowfolk', size: 'Medium', speed: 30, traits: [{ name: 'Glow', description: 'd', uses: { max: 'wis', resetOn: 'long' } }] }],
+      feats: [
+        { id: 'fortunate', name: 'Fortunate', category: 'origin', description: 'd', uses: { max: 'pb', resetOn: 'long', pool: true, name: 'Fortune Points' } },
+        { id: 'one-a-rest', name: 'One a Rest', category: 'general', description: 'd', uses: { max: 2, resetOn: 'shortOne' } },
+      ],
+    },
+    'test',
+  );
+  const content = new Content([SRD, pack!]);
+  const feature = (name: string, ref: string) => ({ id: ref, name, source: 'test', ref });
+  const c = char({
+    className: 'Fighter',
+    level: 7,
+    abilities: { ...DEFAULT_CHARACTER.abilities, wis: 8 },
+    features: [
+      feature('Second Wind', 'class:fighter:Second Wind'),
+      feature('Trick Dice', 'subclass:dice-fighter:Trick Dice'),
+      feature('Glow', 'species:glowfolk:Glow'),
+      feature('Fortunate', 'feat:fortunate'),
+      feature('Fortunate', 'feat:fortunate'),
+      feature('One a Rest', 'feat:one-a-rest'),
+      feature('Gone', 'feat:not-in-any-pack'),
+    ],
+  });
+
+  it('reads the pack without complaints', () => expect(problems).toEqual([]));
+
+  it('adds a counter for each feature that has uses, once', () => {
+    const uses = limitedUses(c, content).filter((u) => u.id.startsWith('f:'));
+    expect(uses.map((u) => [u.id, u.name, u.max, u.resetOn])).toEqual([
+      ['f:subclass:dice-fighter:Trick Dice', 'Dice', 5, 'short'],
+      ['f:species:glowfolk:Glow', 'Glow', 1, 'long'], // ability modifier, but at least 1
+      ['f:feat:fortunate', 'Fortune Points', 3, 'long'],
+      ['f:feat:one-a-rest', 'One a Rest', 2, 'shortOne'],
+    ]);
+    expect(uses[2]!.pool).toBe(true);
+    expect(limitedUses({ ...c, level: 3 }, content).find((u) => u.name === 'Dice')?.max).toBe(4);
+    // The built-in counters are unchanged, and without the content there are no extra ones.
+    expect(limitedUses(c, content).filter((u) => u.id === 'second-wind')).toHaveLength(1);
+    expect(limitedUses(c).some((u) => u.id.startsWith('f:'))).toBe(false);
+  });
+
+  it('spends them and rests give them back', () => {
+    const id = packUseId('subclass:dice-fighter:Trick Dice');
+    const once = applyUse(c, { kind: 'feature', useId: id }, {}, content);
+    expect(once.used[id]).toBe(1);
+    expect(once.action.name).toBe('Dice');
+    expect(() => applyUse({ ...c, used: { [id]: 5 } }, { kind: 'feature', useId: id }, {}, content)).toThrow(/No uses of Dice left/);
+    expect(() => applyUse(c, { kind: 'feature', useId: id })).toThrow(/no limited uses/);
+
+    const spent = { ...c, used: { [id]: 3, 'f:feat:fortunate': 2, 'f:feat:one-a-rest': 2 } };
+    expect(applyRest(spent, 'short', content).used).toEqual({ 'f:feat:fortunate': 2, 'f:feat:one-a-rest': 1 });
+    expect(applyRest(spent, 'long', content).used).toEqual({});
   });
 });
