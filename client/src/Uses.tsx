@@ -65,7 +65,7 @@ export function UsesList({
   onUse?: (req: UseRequest) => Promise<boolean>;
   onRestore?: (id: string) => void;
 }) {
-  const uses = limitedUses(c);
+  const uses = limitedUses(c, content);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   if (uses.length === 0) return <p className="muted small">No limited-use features.</p>;
   return (

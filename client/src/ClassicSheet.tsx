@@ -57,7 +57,7 @@ export function ClassicSheet({
   const unlocked = c.hpItemsUnlocked;
   const spellsByLevel = [...c.spells].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
   const levels = [...new Set(spellsByLevel.map((s) => s.level))];
-  const hasUses = limitedUses(c).length > 0;
+  const hasUses = limitedUses(c, content).length > 0;
   /** The DM said this character levels up: the player runs the wizard here, on their own phone. */
   const [levelling, setLevelling] = useState(false);
   const canLevelUp = c.levelUpReady && c.level < 20;
