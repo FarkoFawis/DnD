@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { InfoEntry } from '@dnd/shared';
+import { BottomSheet } from './BottomSheet.tsx';
 
 const HOLD_MS = 450;
 const HOVER_MS = 300;
@@ -92,16 +93,16 @@ export function Info({
       >
         {children}
       </span>
-      {open === 'sheet' &&
-        createPortal(
-          <div className="info-backdrop" onClick={() => setOpen(null)}>
-            <div className="info-sheet" role="dialog" aria-label={entry.title} onClick={(e) => e.stopPropagation()}>
+      {open === 'sheet' && (
+        <BottomSheet label={entry.title} onClose={() => setOpen(null)}>
+          {(close) => (
+            <>
               <InfoBody entry={entry} />
-              <button className="secondary info-close" onClick={() => setOpen(null)}>Close</button>
-            </div>
-          </div>,
-          document.body,
-        )}
+              <button className="secondary info-close" onClick={close}>Close</button>
+            </>
+          )}
+        </BottomSheet>
+      )}
       {open === 'hover' &&
         anchor.current &&
         createPortal(

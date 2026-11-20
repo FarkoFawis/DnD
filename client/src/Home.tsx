@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { CharacterSummary } from '@dnd/shared';
 import { GearIcon, PersonIcon } from './icons.tsx';
 import { Portrait } from './Portrait.tsx';
 import { Drawer } from './session/SessionDrawer.tsx';
@@ -6,21 +7,52 @@ import type { Game } from './useGame.ts';
 
 export type HomeTarget = 'play' | 'characters' | 'settings';
 
+/** The hero of the home screen: the newest character with a picture of its own, else the newest one. */
+function heroOf(characters: CharacterSummary[]): CharacterSummary | undefined {
+  return [...characters].reverse().find((c) => c.data.portrait) ?? characters.at(-1);
+}
+
+/**
+ * The picture behind the home screen. It lives outside `Home` (App.tsx puts it
+ * behind both the home screen and Play) so it can stay and glide sideways,
+ * like a camera moving along a scene, while the screens in front change.
+ */
+export function HeroBackdrop({ game }: { game: Game }) {
+  const hero = heroOf(game.characters ?? []);
+  return (
+    <div className="home-hero" aria-hidden>
+      {hero ? <Portrait characterId={hero.id} character={hero.data} className="home-hero-art" /> : <HeroDie />}
+    </div>
+  );
+}
+
 /**
  * The screen after logging in. Top left: who you are (tap for the sidebar
  * with the connection status and Log out). Down the left: Characters and
  * Settings as round buttons. On the right, behind them: one of your
  * characters as the picture of the screen. Bottom right: Play.
  */
-export function Home({ game, username, onPick, onSignOut }: { game: Game; username: string; onPick: (t: HomeTarget) => void; onSignOut: () => void }) {
+export function Home({
+  game,
+  username,
+  onPick,
+  onSignOut,
+  leaving,
+}: {
+  game: Game;
+  username: string;
+  onPick: (t: HomeTarget) => void;
+  onSignOut: () => void;
+  /** Another screen is about to open: everything slides off to its side first. */
+  leaving?: boolean;
+}) {
   const [menu, setMenu] = useState(false);
   const characters = game.characters ?? [];
-  // The hero of the screen: the newest character with a picture of its own, else the newest one.
-  const hero = [...characters].reverse().find((c) => c.data.portrait) ?? characters.at(-1);
+  const hero = heroOf(characters);
   const count = characters.length;
 
   return (
-    <section className="home">
+    <section className={`home ${leaving ? 'leaving' : ''}`}>
       <Drawer game={game} open={menu} onClose={() => setMenu(false)}>
         <p className="muted small drawer-label">Logged in as</p>
         <p className="drawer-campaign">{username}</p>
@@ -36,10 +68,6 @@ export function Home({ game, username, onPick, onSignOut }: { game: Game; userna
           Log out
         </button>
       </Drawer>
-
-      <div className="home-hero" aria-hidden>
-        {hero ? <Portrait characterId={hero.id} character={hero.data} className="home-hero-art" /> : <HeroDie />}
-      </div>
 
       <button type="button" className="home-user" aria-label={`${username}: open the menu`} aria-expanded={menu} onClick={() => setMenu(true)}>
         <span className="home-avatar">

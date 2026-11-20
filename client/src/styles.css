@@ -23,6 +23,7 @@
   --bad-text: #fca5a5;
   --info: #93c5fd;
   --info-dim: #3b5b8a;
+  --scrim: #000000; /* what dims a page while another slides over it; the same in every theme */
   color-scheme: dark;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
@@ -636,8 +637,15 @@ button.party-card { cursor: pointer; }
 .party-panel { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow-y: auto; overscroll-behavior: contain; padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) calc(84px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); box-shadow: -12px 0 30px rgba(0, 0, 0, 0.5); will-change: transform; }
 .party-panel.settle { transition: transform 0.26s cubic-bezier(0.22, 0.8, 0.3, 1), visibility 0s linear 0.26s; }
 .party-panel[aria-hidden='false'].settle { transition: transform 0.26s cubic-bezier(0.22, 0.8, 0.3, 1); }
-.party-panel-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
-.party-panel-head .party-title { margin: 0; text-align: center; }
+/* The title stands in the middle of the page whatever is left and right of it (a link back, the campaign's
+   name, or nothing): three columns, the outer two equally wide. */
+.party-panel-head { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.party-panel-head > * { grid-row: 1; min-width: 0; }
+.party-panel-head .party-title { grid-column: 2; margin: 0; text-align: center; }
+.party-panel-head > :first-child:not(.party-title) { grid-column: 1; justify-self: start; }
+.party-panel-head > :last-child:not(.party-title) { grid-column: 3; justify-self: end; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* On a wide screen the head of a page keeps to the column its content is in (.fight-page). */
+.party-panel-head.narrow { max-width: 560px; margin-left: auto; margin-right: auto; }
 .pager { position: fixed; z-index: 31; left: 50%; transform: translateX(-50%); bottom: calc(10px + env(safe-area-inset-bottom)); display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--bg); border: 1px solid var(--edge-strong); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5); }
 .pager-tab { min-height: 36px; padding: 6px 16px; border: 0; border-radius: 999px; background: none; color: var(--muted); font-weight: 600; font-size: 0.85rem; }
 .pager-tab.on { color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
@@ -833,18 +841,19 @@ button.link.rollable { text-decoration: none; padding: 0; min-height: 0; }
 .app:has(> .panel) { height: 100dvh; display: flex; flex-direction: column; }
 .offline-note { margin: 0 0 8px; }
 .home { position: relative; isolation: isolate; flex: 1; display: flex; flex-direction: column; }
-/* The picture of the screen: one of your characters, fading into the page towards the menu and the bottom.
-   (The colours in the masks are only "see-through" and "solid", not colours of the page.) */
+/* The picture of the screen: one of your characters, from edge to edge, fading into the page at the top and
+   the bottom (the colours in the mask are only "see-through" and "solid", not colours of the page).
+   On the home screen the page colour lies over its left side, where the menu is (`::after`); that is a layer
+   of its own so it can fade away on Play, where the picture fills the screen. */
 .home-hero {
-  position: absolute; z-index: -1; top: 0; right: -16px; bottom: 92px; width: 88%; pointer-events: none;
-  -webkit-mask-image: linear-gradient(to right, transparent 14%, #000 72%), linear-gradient(to bottom, transparent 0, #000 16%, #000 62%, transparent 98%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(to right, transparent 14%, #000 72%), linear-gradient(to bottom, transparent 0, #000 16%, #000 62%, transparent 98%);
-  mask-composite: intersect;
+  position: absolute; z-index: -1; top: 0; left: -16px; right: -16px; bottom: 92px; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 62%, transparent 98%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 62%, transparent 98%);
 }
+.home-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to right, var(--bg) 22%, transparent 76%); }
 .home-hero-art { width: 100%; height: 100%; background: none; }
 .home-hero-art .portrait-img { object-position: 50% 20%; }
-.home-hero-die { display: block; width: 78%; height: 100%; margin-left: auto; fill: none; stroke: var(--edge-strong); stroke-width: 1.4; stroke-linejoin: round; }
+.home-hero-die { display: block; width: 68%; height: 100%; margin-left: auto; fill: none; stroke: var(--edge-strong); stroke-width: 1.4; stroke-linejoin: round; }
 .home-hero-die text { fill: var(--faint); stroke: none; font-size: 40px; font-weight: 800; font-family: Georgia, serif; }
 .home-user { align-self: flex-start; display: flex; align-items: center; gap: 10px; max-width: 100%; padding: 0; background: none; border: 0; color: var(--text); }
 .home-avatar { position: relative; flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--gold-dim); background: var(--bg); color: var(--gold); font-size: 1.25rem; font-weight: 800; }
@@ -899,3 +908,167 @@ button.link.rollable { text-decoration: none; padding: 0; min-height: 0; }
 .round-button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 .new-campaign { margin-top: 20px; }
 .new-campaign .secondary { align-self: flex-end; }
+
+/* ---- stage: the picture behind Home and Play ---- */
+/* The picture stays while the screens in front change, and sits somewhere else for each of them
+   (`data-scene`, set in App.tsx). motion.css makes it glide there. */
+.app-full { overflow-x: hidden; overflow-x: clip; }
+.stage { position: relative; isolation: isolate; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.stage > .home { isolation: auto; }
+/* It pans by growing and sliding at once, never by more than it grew, so no edge of it comes into view. */
+.stage[data-scene='play'] .home-hero { transform: scale(1.18) translateX(-5%); opacity: 0.5; }
+.stage:is([data-scene='join'], [data-scene='host']) .home-hero { transform: scale(1.4) translateX(-11%); opacity: 0.2; }
+.stage:not([data-scene='home']) .home-hero::after { opacity: 0; }
+.stage[data-scene='away'] .home-hero, .stage:has(> .panel) .home-hero { opacity: 0; }
+.app:has(.play-screen), .app:has(.stage > .panel) { height: 100dvh; }
+.app:has(.play-screen) { overflow: hidden; overflow: clip; }
+
+/* ---- Play: two big buttons, then the page ---- */
+.play-screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* The name of the screen, between two lines that fade out. */
+.scene-title { display: flex; align-items: center; gap: 14px; margin: 6px 0 0; font-size: 1.1rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); text-shadow: 0 0 8px var(--bg); }
+.scene-title::before, .scene-title::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, transparent, var(--edge-strong)); }
+.scene-title::after { background: linear-gradient(to left, transparent, var(--edge-strong)); }
+.scene-title span { padding-left: 0.22em; }
+.play-choices { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-content: center; padding: 16px 0; }
+/* Page colour, a little see-through, so the picture behind stays a picture and the writing stays readable. */
+.play-choice { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-width: 0; min-height: min(54dvh, 380px); padding: 18px 10px; border-radius: 16px; border: 2px solid var(--edge-strong); background: color-mix(in srgb, var(--bg) 84%, transparent); box-shadow: inset 0 0 0 4px var(--bg), inset 0 0 0 5px var(--edge); color: var(--text); text-align: center; }
+.play-choice strong { font-size: 1.55rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; padding-left: 0.14em; }
+.play-choice-sub { max-width: 11em; font-size: 0.82rem; line-height: 1.35; color: var(--muted); }
+.play-choice .home-icon { width: 76px; height: 76px; }
+.play-choice .home-icon svg { width: 36px; height: 36px; }
+.play-choice.likely { border-color: var(--gold-dim); }
+.play-choice.likely strong { color: var(--gold); }
+.play-choice:active { border-color: var(--gold); }
+.scene-bar { display: flex; align-items: center; margin-top: auto; padding: 10px 0 6px; }
+.back-button { display: inline-flex; align-items: center; gap: 10px; min-height: 54px; padding: 0 24px 0 18px; border-radius: 999px; border: 2px solid var(--gold-dim); background: var(--bg); color: var(--gold); font-size: 1rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.back-button span { font-size: 1.7rem; line-height: 1; margin-top: -0.12em; }
+.back-button:active { border-color: var(--gold); }
+/* As tall as what is in it, at most the room there is (then it scrolls). */
+.play-frame { flex: 0 1 auto; min-height: 0; overflow-y: auto; margin-top: 14px; padding: 16px 14px; border: 1px solid var(--edge-strong); border-radius: 14px; background: var(--bg); }
+
+/* ---- pieces the effects need in place (what moves is in motion.css) ---- */
+/* The pager's gold outline is one mark that glides between the tabs (PagerPill.tsx). */
+.pager-mark { position: absolute; left: 0; top: 3px; bottom: 3px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--gold); pointer-events: none; }
+.pager .pager-tab.on { box-shadow: none; }
+.page-scrim { position: fixed; inset: 0; z-index: 29; background: var(--scrim); pointer-events: none; }
+/* Hit points: the part just lost stays behind the bar for a moment, lighter. */
+.hpbar { position: relative; }
+.hpbar span { position: relative; }
+.hpbar .hpbar-ghost { position: absolute; left: 0; top: 0; background: var(--text); opacity: 0.4; }
+/* The flash and the floating "−7" over a box of hit points (HpFx): invisible until they play. */
+.cs-hp, .hp-box { position: relative; }
+.turn-hp { position: relative; display: inline-block; }
+.hp-fx { position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none; }
+.hp-fx-flash { position: absolute; inset: 0; border-radius: inherit; opacity: 0; }
+.hp-fx.dmg { --fx: var(--bad); }
+.hp-fx.heal { --fx: var(--ok); }
+.hp-fx-flash { box-shadow: inset 0 0 0 2px var(--fx), inset 0 0 28px color-mix(in srgb, var(--fx) 55%, transparent); }
+.hp-fx-num { position: absolute; right: 12px; top: 8px; opacity: 0; color: var(--fx); font: 800 1.7rem/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; text-shadow: 0 0 6px var(--bg), 0 0 2px var(--bg); }
+.party-card .hp-fx-num { left: 0; right: 0; top: 28%; text-align: center; font-size: 2.4rem; text-shadow: 0 2px 8px var(--overlay-bg), 0 0 3px var(--overlay-bg); }
+.turn-hp .hp-fx-flash { display: none; }
+.turn-hp .hp-fx-num { right: 0; top: -1.1em; font-size: 1.05rem; }
+/* Party card: the ring of light when that character casts or uses something (ActionRing). */
+.fx-tint-info { --fx: var(--info); }
+.fx-tint-gold { --fx: var(--gold); }
+.fx-tint-red { --fx: var(--bad); }
+.fx-tint-ok { --fx: var(--ok); }
+.fx-tint-warn { --fx: var(--warn); }
+.card-ring { position: absolute; left: 50%; top: 30%; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid var(--fx); box-shadow: 0 0 18px var(--fx), inset 0 0 18px var(--fx); opacity: 0; pointer-events: none; }
+.num-flash { display: inline-block; }
+.use-flash.got { border-color: var(--gold-dim); color: var(--gold); }
+.death-saves, .concentration, .levelup-banner { position: relative; }
+/* The dice roller: a die behind the number while it tumbles. */
+.roll-total { position: relative; }
+.roll-number { position: relative; display: inline-block; }
+.roll-die { position: absolute; left: 50%; top: 50%; width: 104px; height: 114px; margin: -57px 0 0 -52px; fill: none; stroke: var(--edge-strong); stroke-width: 4; stroke-linejoin: round; opacity: 0; pointer-events: none; }
+.roll-total.landed.high .roll-number { text-shadow: 0 0 26px color-mix(in srgb, var(--gold) 55%, transparent); }
+
+/* The DM called a rest: a line of light with an emblem and one line of text. Never blocks taps. */
+.rest-alert { --ra: var(--info); position: fixed; inset: 0; z-index: 100; pointer-events: none; overflow: hidden; }
+.rest-alert.short { --ra: var(--warn); }
+/* The page dims behind the words, or they would sit on top of the sheet's numbers. */
+.ra-glow { position: absolute; inset: 0; background: linear-gradient(to top, color-mix(in srgb, var(--ra) 16%, transparent), transparent 62%), color-mix(in srgb, var(--bg) 90%, transparent); }
+.ra-band { position: absolute; left: 0; right: 0; top: 38%; height: 0; }
+.ra-line { position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: linear-gradient(to right, transparent, var(--ra) 22%, var(--ra) 78%, transparent); }
+.ra-emblem { position: absolute; left: 50%; top: 0; width: 92px; height: 92px; margin: -46px 0 0 -46px; overflow: visible; }
+.ra-disc { fill: var(--overlay-bg); stroke: var(--ra); stroke-width: 2.5; }
+.ra-icon { fill: none; stroke: var(--ra); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.ra-text { position: absolute; left: 16px; right: 16px; top: 58px; margin: 0; display: flex; flex-direction: column; gap: 4px; text-align: center; text-shadow: 0 0 8px var(--bg), 0 0 3px var(--bg), 0 0 14px var(--bg); }
+.ra-text strong { font-size: 1.3rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ra); padding-left: 0.2em; }
+.ra-text span { font-size: 0.9rem; color: var(--text); }
+
+/* ---- moments of the session (session/MomentAlert.tsx): two lines open from the middle, the upper one with the
+   fight alert's diamond, and the words stand between them. Never blocks taps. What moves is in motion.css. ---- */
+.moment-alert { --ma: var(--gold); position: fixed; inset: 0; z-index: 100; pointer-events: none; overflow: hidden; }
+.moment-alert.round { --ma: var(--text); }
+.moment-alert.reveal { --ma: var(--bad); }
+.moment-alert.end { --ma: var(--ok); }
+/* The page dims behind the words only, so what is under them stays readable. The title card takes the whole screen. */
+.ma-veil { position: absolute; left: 0; right: 0; top: 38%; height: 320px; margin-top: -160px; background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--bg) 93%, transparent) 28%, color-mix(in srgb, var(--bg) 93%, transparent) 72%, transparent); }
+.moment-alert.title .ma-veil { top: 0; bottom: 0; height: auto; margin: 0; background: color-mix(in srgb, var(--bg) 95%, transparent); }
+.ma-band { position: absolute; left: 0; right: 0; top: 38%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.ma-rule { position: relative; width: 100%; height: 2px; flex: none; background: linear-gradient(to right, transparent, var(--ma) 22%, var(--ma) 78%, transparent); }
+.ma-rule i { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; transform: rotate(45deg); border: 2px solid var(--ma); background: var(--bg); }
+.ma-text { margin: 0; padding: 0 16px; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; }
+.ma-kicker { font-size: 0.8rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); padding-left: 0.24em; }
+.ma-title { font-size: 1.9rem; line-height: 1.15; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ma); padding-left: 0.14em; overflow-wrap: anywhere; }
+.ma-sub { font-size: 0.95rem; color: var(--text); }
+/* Names keep their own spelling: the campaign on the title card, an opponent that is revealed. */
+.moment-alert:is(.title, .reveal) .ma-title { font-family: Georgia, 'Times New Roman', serif; letter-spacing: 0.03em; text-transform: none; padding-left: 0; }
+.moment-alert.title .ma-title { font-size: 2.2rem; }
+.moment-alert.title .ma-band { gap: 20px; }
+
+/* ---- opponents the DM keeps hidden ---- */
+.turn-row.masked { border-style: dashed; }
+.turn-who { min-width: 0; }
+.turn-mark { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: 8px; border: 1px solid var(--edge-strong); border-radius: 6px; font-size: 0.85rem; font-weight: 800; color: var(--muted); vertical-align: middle; }
+.role-tag.hidden-tag { border-style: dashed; white-space: nowrap; }
+.unlock-switch.hide-switch { border-color: var(--edge-strong); margin: 12px 0 0; }
+.turn-more > button { width: 100%; }
+
+/* ---- Heroic Inspiration: a four-pointed star ---- */
+.insp-star { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--gold); stroke-width: 1.6; stroke-linejoin: round; }
+.inspiration-token { display: flex; align-items: center; gap: 12px; width: 100%; margin: 10px 0; padding: 10px 14px; text-align: left; font: inherit; font-family: system-ui, sans-serif; color: var(--gold); background: none; border: 1px solid var(--gold); border-radius: 12px; }
+.inspiration-token .small { color: var(--muted); }
+.inspiration-token .insp-star { width: 28px; height: 28px; fill: color-mix(in srgb, var(--gold) 25%, transparent); }
+.inspiration-give { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0 0 12px; text-align: left; }
+.inspiration-give.has { border-color: var(--gold); color: var(--gold); }
+.inspiration-give.has .insp-star { fill: color-mix(in srgb, var(--gold) 25%, transparent); }
+.insp-rule { margin: 10px 0 16px; }
+/* On a portrait, like "You": light on dark in every theme. */
+.party-star { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(28, 25, 23, 0.85); border: 1px solid var(--gold); }
+.party-card.away .party-star { top: 34px; }
+.party-star .insp-star { width: 18px; height: 18px; fill: var(--gold); }
+
+/* ---- DM: who in the party is best at a skill ---- */
+.party-head { display: flex; align-items: baseline; gap: 12px; }
+.party-checks select { width: 100%; margin: 10px 0 2px; }
+.rank-rows li { gap: 12px; padding: 10px 2px; }
+.rank-value { width: 60px; flex: none; text-align: center; font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rank-rows li.best .rank-value { color: var(--gold); }
+.role-tag.best-tag { border-color: var(--gold-dim); color: var(--gold); }
+
+/* ---- the end of a session: the evening in numbers, over the home screen until closed ---- */
+.summary-screen { position: fixed; inset: 0; z-index: 80; background: var(--bg); display: flex; flex-direction: column; padding: max(16px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom)); }
+.summary-scroll { flex: 1; overflow-y: auto; max-width: 560px; width: 100%; margin: 0 auto; }
+.summary-kicker { margin: 22px 0 6px; text-align: center; font-size: 0.8rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); padding-left: 0.24em; }
+.summary-title { margin: 0; text-align: center; font-family: Georgia, 'Times New Roman', serif; font-size: 2rem; line-height: 1.15; color: var(--gold); overflow-wrap: anywhere; }
+.summary-rule { position: relative; display: block; height: 2px; margin: 20px 0 22px; background: linear-gradient(to right, transparent, var(--gold) 22%, var(--gold) 78%, transparent); }
+.summary-rule i { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; transform: rotate(45deg); border: 2px solid var(--gold); background: var(--bg); }
+.summary-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0; text-align: center; }
+.summary-stats div { display: flex; flex-direction: column-reverse; gap: 2px; min-width: 0; }
+.summary-stats dt { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.summary-stats dd { margin: 0; font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.summary-rests { margin: 14px 0 0; }
+.summary-party { list-style: none; margin: 0 0 16px; padding: 0; border-top: 1px solid var(--rule); }
+.summary-party li { padding: 12px 2px; border-bottom: 1px solid var(--rule); }
+.summary-party p { margin: 2px 0 0; }
+.summary-who { display: flex; align-items: center; gap: 8px; font-size: 1.05rem; }
+.summary-party p.summary-who { margin: 0 0 8px; }
+.summary-party li.me .summary-who strong { color: var(--gold); }
+.summary-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 6px; }
+.summary-nums div { display: flex; flex-direction: column; min-width: 0; }
+.summary-nums dd { margin: 0; font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.summary-nums dt { font-size: 0.7rem; line-height: 1.2; color: var(--muted); }
+.summary-nums .bad dd { color: var(--bad-text); }

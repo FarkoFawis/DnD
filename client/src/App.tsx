@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import type { PublicUser } from '@dnd/shared';
 import { logout, me, saveCode, savedToken, saveToken } from './api.ts';
 import { Characters } from './Characters.tsx';
-import { Home, type HomeTarget } from './Home.tsx';
-import { Play } from './Play.tsx';
+import { useScene } from './fx/hooks.ts';
+import { HeroBackdrop, Home, type HomeTarget } from './Home.tsx';
+import { Play, type PlayPage } from './Play.tsx';
 import { Login } from './Login.tsx';
 import { SessionView } from './SessionView.tsx';
+import { SessionSummaryScreen } from './session/SessionSummary.tsx';
 import { SettingsScreen } from './SettingsScreen.tsx';
 import { StatusPill } from './StatusPill.tsx';
 import { useGame, type Status } from './useGame.ts';
@@ -67,17 +69,23 @@ export function App() {
   return <LoggedIn auth={auth} onSignOut={signOut} />;
 }
 
-type Screen = 'home' | HomeTarget;
+/** `join` and `host` are the two pages behind the buttons of Play. */
+type Screen = 'home' | HomeTarget | PlayPage;
+/** Home and Play share the picture behind them: it stays while they change in front of it. */
+const ON_STAGE: readonly Screen[] = ['home', 'play', 'join', 'host'];
 
 function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
   const game = useGame(auth.token, onSignOut);
-  const [screen, setScreen] = useState<Screen>('home');
-  const home = () => setScreen('home');
+  // `to`: the screen that is about to open, while the current one is still sliding away.
+  const { scene: screen, from, to, go, jump } = useScene<Screen>('home');
+  const home = () => go('home');
+  /** From a panel, which has already faded away by itself. */
+  const homeNow = () => go('home', true);
   // Whoever leaves a session, or whose session ends, lands on the home screen again.
   const inSession = !!game.session;
   useEffect(() => {
-    if (inSession) setScreen('home');
-  }, [inSession]);
+    if (inSession) jump('home');
+  }, [inSession, jump]);
   // The bar at the top is only there in the lobby. The home screen keeps what was in it in its sidebar,
   // and once the session starts the screen is only the game (the rest is in that sidebar too).
   const inLobby = !!game.session && !game.session.started;
@@ -91,18 +99,39 @@ function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
       {!game.session && screen !== 'home' && game.status !== 'online' && (
         <p className="offline-note"><StatusPill status={game.status} /></p>
       )}
+      {game.summary && !game.session && (
+        <SessionSummaryScreen
+          summary={game.summary}
+          mine={(game.characters ?? []).map((c) => c.data.name)}
+          onClose={game.closeSummary}
+        />
+      )}
       {game.session ? (
         <SessionView game={game} session={game.session} myId={auth.user.id} />
       ) : game.rejoining ? (
         <p className="muted">Getting you back into your session…</p>
-      ) : screen === 'play' ? (
-        <Play game={game} onBack={home} onCharacters={() => setScreen('characters')} />
       ) : screen === 'characters' ? (
-        <Characters game={game} onBack={home} />
+        <Characters game={game} onBack={homeNow} />
       ) : screen === 'settings' ? (
-        <SettingsScreen onBack={home} />
+        <SettingsScreen onBack={homeNow} />
       ) : (
-        <Home game={game} username={auth.user.username} onPick={setScreen} onSignOut={onSignOut} />
+        // `data-scene` is where the picture behind should be: it glides there (motion.css).
+        <div className="stage" data-scene={to && ON_STAGE.includes(to) ? to : to ? 'away' : screen}>
+          <HeroBackdrop game={game} />
+          {screen === 'home' ? (
+            <Home game={game} username={auth.user.username} onPick={go} onSignOut={onSignOut} leaving={to !== null} />
+          ) : (
+            <Play
+              game={game}
+              page={screen === 'play' ? null : (screen as PlayPage)}
+              onPage={(page) => go(page ?? 'play')}
+              onBack={home}
+              onCharacters={() => go('characters')}
+              from={from}
+              to={to}
+            />
+          )}
+        </div>
       )}
     </Shell>
   );

@@ -29,7 +29,10 @@ import { ConcentrationBanner, ConditionBadges, ConditionEditor, DeathSaves } fro
 import { LevelUp } from './creator/LevelUp.tsx';
 import { CustomUsesEditor, RestButtons, SlotTracker, UsesList } from './Uses.tsx';
 import { HitDice } from './HitDice.tsx';
+import { InspirationStar, InspirationToken } from './Inspiration.tsx';
 import { useSettings } from './settings.ts';
+import { useFresh } from './fx/hooks.ts';
+import { FlashNum, HpFx, Num, useCharacterFx } from './fx/sheetFx.tsx';
 import type { Game } from './useGame.ts';
 
 /** Edits one character (by id). The server decides who may: owner outside sessions, DM inside. */
@@ -50,6 +53,8 @@ export interface SheetActions {
   endRest: () => Promise<boolean>;
   /** The dice roller. Null when refused. */
   roll: (req: RollRequest, mode: RollMode) => Promise<DiceRoll | null>;
+  /** Heroic Inspiration: the DM gives it or takes it back, the player spends it. */
+  inspiration: (action: 'give' | 'take' | 'spend') => Promise<boolean>;
 }
 
 export function sheetActions(game: Game, characterId: string): SheetActions {
@@ -68,6 +73,7 @@ export function sheetActions(game: Game, characterId: string): SheetActions {
     spendHitDie: (roll) => game.spendHitDie(characterId, roll),
     endRest: () => game.endRest(characterId),
     roll: (req, mode) => game.roll(characterId, req, mode),
+    inspiration: (action) => game.inspiration(characterId, action),
   };
 }
 
@@ -128,6 +134,8 @@ export function Sheet({
   const stats = deriveStats(draft);
   const content = useContent();
   const { dice } = useSettings();
+  // The burst where a Use or Cast button was tapped, and the celebration after a level-up.
+  useCharacterFx(character, content, { glow: false, ownTapsOnly: true });
 
   /** Set + save immediately (toggles, numbers, selects). */
   const set = <K extends keyof CharacterData>(key: K, value: CharacterData[K]) => {
@@ -173,7 +181,8 @@ export function Sheet({
         <p className="notice">Your DM manages your HP, items and coins. Ask them to unlock it if you need to change them.</p>
       )}
       {tab === 'Main' && portrait}
-      <fieldset className="sheet-body" disabled={readOnly}>
+      {/* Keyed by the tab: a newly chosen tab fades in. */}
+      <fieldset key={tab} className="sheet-body" disabled={readOnly}>
 
       {tab === 'Main' && (
         <>
@@ -193,6 +202,25 @@ export function Sheet({
               <p className="muted small">{character.name || 'The player'} is spending Hit Dice on their phone.</p>
             )}
           </div>
+          {/* Heroic Inspiration: the DM hands it out here; outside sessions its owner can only use it up. */}
+          {dmUnlock ? (
+            <button
+              type="button"
+              className={`secondary inspiration-give ${character.inspiration ? 'has' : ''}`}
+              aria-pressed={character.inspiration}
+              onClick={() => void actions.inspiration(character.inspiration ? 'take' : 'give')}
+            >
+              <InspirationStar />
+              <span className="grow">
+                {character.inspiration ? 'Has Heroic Inspiration' : 'Give Heroic Inspiration'}
+                <span className="muted small block">
+                  {character.inspiration ? 'Tap to take it back.' : `${character.name || 'The player'} can give it up to reroll a die.`}
+                </span>
+              </span>
+            </button>
+          ) : (
+            !readOnly && <InspirationToken has={character.inspiration} onSpend={() => actions.inspiration('spend')} />
+          )}
           {dmUnlock ? (
             <>
               <h3 className="section-label">Conditions</h3>
@@ -451,8 +479,9 @@ export function HpBox({
     return (
       <div className="hp-box">
         <div className="hp-label">Hit points</div>
+        <HpFx value={character.hpCurrent} />
         <div className="hp-now big">
-          {character.hpCurrent}
+          <Num value={character.hpCurrent} />
           <span className="muted"> / {character.hpMax}</span>
           {character.hpTemp > 0 && <span className="temp-badge">+{character.hpTemp} temp</span>}
         </div>
@@ -461,12 +490,13 @@ export function HpBox({
   }
   return (
     <div className="hp-box">
+      <HpFx value={character.hpCurrent} />
       <div className="hp-label">Hit points</div>
       <div className="hp-row">
         <button aria-label="Take 5 damage" onClick={() => void onHp(-5)}>−5</button>
         <button aria-label="Take 1 damage" onClick={() => void onHp(-1)}>−1</button>
         <span className="hp-now">
-          {character.hpCurrent}
+          <Num value={character.hpCurrent} />
           <span className="muted"> / {character.hpMax}</span>
           {character.hpTemp > 0 && <span className="temp-badge">+{character.hpTemp}</span>}
         </span>
@@ -501,6 +531,8 @@ export function Items({
   readOnly: boolean;
   content: Content | null;
 }) {
+  /** Items added while the list is open slide in. */
+  const fresh = useFresh(character.inventory.map((i) => i.id));
   return (
     <>
       <div className="coins">
@@ -519,17 +551,17 @@ export function Items({
       ) : (
         <ul className="items">
           {character.inventory.map((item) => (
-            <li key={item.id}>
+            <li key={item.id} className={fresh.has(item.id) ? 'fresh' : undefined}>
               <Info entry={itemEntry(content, item)} className="grow" tapToOpen>
                 <span className="block">{item.name}</span>
                 {item.notes && <span className="muted small block">{item.notes}</span>}
               </Info>
               {readOnly ? (
-                <span className="qty">×{item.qty}</span>
+                <span className="qty">×<FlashNum value={item.qty} /></span>
               ) : (
                 <>
                   <button aria-label={`One less ${item.name}`} onClick={() => void actions.updateItem(item.id, { qty: item.qty - 1 })}>−</button>
-                  <span className="qty">{item.qty}</span>
+                  <span className="qty"><FlashNum value={item.qty} /></span>
                   <button aria-label={`One more ${item.name}`} onClick={() => void actions.updateItem(item.id, { qty: item.qty + 1 })}>+</button>
                   <button aria-label={`Remove ${item.name}`} className="remove" onClick={() => void actions.removeItem(item.id)}>✕</button>
                 </>
