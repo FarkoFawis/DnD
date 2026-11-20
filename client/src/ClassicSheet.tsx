@@ -70,17 +70,19 @@ export function ClassicSheet({
   const [flash, setFlash] = useState<{ text: string; got?: boolean } | null>(null);
   const flashEl = useRef<HTMLParagraphElement>(null);
   const lastAt = c.lastAction?.at;
-  const [seenAt, setSeenAt] = useState(lastAt);
+  const seenAt = useRef(lastAt);
   useEffect(() => {
-    if (lastAt === seenAt) return;
-    setSeenAt(lastAt);
+    if (lastAt === seenAt.current) return;
+    seenAt.current = lastAt;
     // A roll of the dice roller has its own result sheet.
     if (c.lastAction?.roll) return;
     const text = actionText(c.lastAction);
     setFlash(text ? { text: `Used: ${text}` } : null);
     const t = setTimeout(() => setFlash(null), 2500);
     return () => clearTimeout(t);
-  }, [lastAt, seenAt, c.lastAction]);
+    // Only a new action (its time) starts this: the object is a new one with every update from the
+    // server, and running again would cancel the timer that takes the line away.
+  }, [lastAt]);
   /** Items that arrived while the sheet was open slide in and are announced. */
   const freshItems = useFresh(c.inventory.map((i) => i.id));
   const newest = c.inventory.findLast((i) => freshItems.has(i.id));
