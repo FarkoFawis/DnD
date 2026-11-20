@@ -15,6 +15,7 @@
     "dev": "concurrently -n server,client -c blue,magenta \"npm:dev -w server\" \"npm:dev -w client\"",
     "build": "npm run build -w client",
     "start": "npm start -w server",
+    "host": "npm run host -w server --",
     "test": "npm test -w shared && npm test -w server",
     "typecheck": "npm run typecheck --workspaces",
     "users": "npm run users -w server --",
