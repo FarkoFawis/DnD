@@ -8,6 +8,7 @@ import { DmFight, DmToolbox } from './DmTools.tsx';
 import { Page } from './Page.tsx';
 import { PagerPill } from './PagerPill.tsx';
 import { SessionDrawer } from './SessionDrawer.tsx';
+import { useFightMoments } from './moments.ts';
 import { usePager } from './usePager.ts';
 
 /**
@@ -33,6 +34,9 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
     if (hadFight.current && !combat) setPage((p) => (p === -1 ? 0 : p));
     hadFight.current = combat !== null;
   }, [combat, setPage]);
+
+  // A new round and the end of the fight show on the DM's phone too.
+  useFightMoments(combat, { onFightPage: page === -1 });
 
   const active = combat?.combatants.find((c) => c.id === combat.activeId);
   const fightAt = Math.max(-1, Math.min(0, position)); // -1 = fight page fully shown

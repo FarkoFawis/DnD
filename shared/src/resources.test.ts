@@ -158,3 +158,12 @@ describe('Hit Dice (2024)', () => {
     expect(applyRest(spent, 'long')).toMatchObject({ used: {}, hpCurrent: 28, resting: false });
   });
 });
+
+describe('Heroic Inspiration on a Long Rest', () => {
+  it('comes back for Humans (Resourceful) only', () => {
+    const human = char({ features: [{ id: 'f1', name: 'Resourceful', source: 'Human', ref: 'species:human:Resourceful' }] });
+    expect(applyRest(human, 'long').inspiration).toBe(true);
+    expect(applyRest(human, 'short').inspiration).toBeUndefined();
+    expect('inspiration' in applyRest(char({ inspiration: true }), 'long')).toBe(false);
+  });
+});

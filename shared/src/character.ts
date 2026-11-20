@@ -178,6 +178,10 @@ const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
     if (!isObj(v)) throw new Invalid('Invalid death saves.');
     return { successes: int(v.successes, 'death save successes', 0, 3), failures: int(v.failures, 'death save failures', 0, 3) };
   },
+  inspiration: (v) => {
+    if (typeof v !== 'boolean') throw new Invalid('Invalid Heroic Inspiration.');
+    return v;
+  },
   portrait: (v) => text(v, 'portrait', 40),
   notes: (v) => text(v, 'notes', LIMITS.notesMaxLength),
 };

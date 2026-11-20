@@ -29,6 +29,7 @@ import { ConcentrationBanner, ConditionBadges, ConditionEditor, DeathSaves } fro
 import { LevelUp } from './creator/LevelUp.tsx';
 import { CustomUsesEditor, RestButtons, SlotTracker, UsesList } from './Uses.tsx';
 import { HitDice } from './HitDice.tsx';
+import { InspirationStar, InspirationToken } from './Inspiration.tsx';
 import { useSettings } from './settings.ts';
 import { useFresh } from './fx/hooks.ts';
 import { FlashNum, HpFx, Num, useCharacterFx } from './fx/sheetFx.tsx';
@@ -52,6 +53,8 @@ export interface SheetActions {
   endRest: () => Promise<boolean>;
   /** The dice roller. Null when refused. */
   roll: (req: RollRequest, mode: RollMode) => Promise<DiceRoll | null>;
+  /** Heroic Inspiration: the DM gives it or takes it back, the player spends it. */
+  inspiration: (action: 'give' | 'take' | 'spend') => Promise<boolean>;
 }
 
 export function sheetActions(game: Game, characterId: string): SheetActions {
@@ -70,6 +73,7 @@ export function sheetActions(game: Game, characterId: string): SheetActions {
     spendHitDie: (roll) => game.spendHitDie(characterId, roll),
     endRest: () => game.endRest(characterId),
     roll: (req, mode) => game.roll(characterId, req, mode),
+    inspiration: (action) => game.inspiration(characterId, action),
   };
 }
 
@@ -198,6 +202,25 @@ export function Sheet({
               <p className="muted small">{character.name || 'The player'} is spending Hit Dice on their phone.</p>
             )}
           </div>
+          {/* Heroic Inspiration: the DM hands it out here; outside sessions its owner can only use it up. */}
+          {dmUnlock ? (
+            <button
+              type="button"
+              className={`secondary inspiration-give ${character.inspiration ? 'has' : ''}`}
+              aria-pressed={character.inspiration}
+              onClick={() => void actions.inspiration(character.inspiration ? 'take' : 'give')}
+            >
+              <InspirationStar />
+              <span className="grow">
+                {character.inspiration ? 'Has Heroic Inspiration' : 'Give Heroic Inspiration'}
+                <span className="muted small block">
+                  {character.inspiration ? 'Tap to take it back.' : `${character.name || 'The player'} can give it up to reroll a die.`}
+                </span>
+              </span>
+            </button>
+          ) : (
+            !readOnly && <InspirationToken has={character.inspiration} onSpend={() => actions.inspiration('spend')} />
+          )}
           {dmUnlock ? (
             <>
               <h3 className="section-label">Conditions</h3>

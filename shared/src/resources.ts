@@ -266,6 +266,8 @@ export function applyRest(c: CharacterData, kind: 'short' | 'long'): Partial<Cha
       concentration: null,
       deathSaves: { successes: 0, failures: 0 },
       resting: false,
+      // Humans (the Resourceful trait) get Heroic Inspiration with every Long Rest.
+      ...(c.features.some((f) => f.name.trim().toLowerCase() === 'resourceful') ? { inspiration: true } : {}),
     };
   }
   const next = { ...c.used };

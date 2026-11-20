@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { abilityModifier, applyHpChange, deriveStats, formatModifier, proficiencyBonus } from './rules.ts';
+import { abilityModifier, applyHpChange, deriveStats, formatModifier, partyCheckName, partyCheckValue, proficiencyBonus, rankParty, type SheetInputs } from './rules.ts';
 
 describe('abilityModifier', () => {
   it.each([
@@ -70,5 +70,53 @@ describe('deriveStats', () => {
   });
   it('has no spell numbers for non-casters', () => {
     expect(deriveStats({ ...wizard, saveProficiencies: [], skillProficiencies: [], skillExpertise: [], spellcastingAbility: null }).spellSaveDc).toBeNull();
+  });
+});
+
+describe('who is best at a check', () => {
+  const sheet = (p: Partial<SheetInputs>): SheetInputs => ({
+    level: 5,
+    abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    saveProficiencies: [],
+    skillProficiencies: [],
+    skillExpertise: [],
+    initiativeBonus: 0,
+    spellcastingAbility: null,
+    ...p,
+  });
+  const party = [
+    { id: 'brom', sheet: sheet({ abilities: { str: 16, dex: 12, con: 14, int: 8, wis: 10, cha: 10 }, saveProficiencies: ['str', 'con'] }) },
+    { id: 'elowen', sheet: sheet({ abilities: { str: 8, dex: 16, con: 12, int: 17, wis: 14, cha: 10 }, skillProficiencies: ['perception'], initiativeBonus: 3 }) },
+    { id: 'tam', sheet: sheet({ abilities: { str: 10, dex: 16, con: 10, int: 10, wis: 12, cha: 14 }, skillProficiencies: ['stealth'], skillExpertise: ['stealth'] }) },
+  ];
+
+  it('names every kind of check', () => {
+    expect(partyCheckName('skill:sleightOfHand')).toBe('Sleight of Hand');
+    expect(partyCheckName('save:con')).toBe('Constitution save');
+    expect(partyCheckName('passive:perception')).toBe('Passive Perception');
+    expect(partyCheckName('initiative')).toBe('Initiative');
+  });
+
+  it('gives the bonus, or the score itself for a passive check', () => {
+    expect(partyCheckValue(party[1]!.sheet, 'skill:perception')).toBe(5);
+    expect(partyCheckValue(party[1]!.sheet, 'passive:perception')).toBe(15);
+    expect(partyCheckValue(party[0]!.sheet, 'save:con')).toBe(5);
+    expect(partyCheckValue(party[1]!.sheet, 'initiative')).toBe(6);
+  });
+
+  it('orders the party best first and says who is trained', () => {
+    expect(rankParty(party, 'skill:stealth').map((r) => [r.id, r.value, r.best, r.trained, r.expert])).toEqual([
+      ['tam', 9, true, true, true],
+      ['elowen', 3, false, false, false],
+      ['brom', 1, false, false, false],
+    ]);
+    expect(rankParty(party, 'save:str').map((r) => [r.id, r.value, r.trained])).toEqual([['brom', 6, true], ['tam', 0, false], ['elowen', -1, false]]);
+    expect(rankParty(party, 'passive:perception')[0]).toMatchObject({ id: 'elowen', value: 15, trained: true });
+  });
+
+  it('marks everyone who shares the top value and keeps the table order among them', () => {
+    const ranked = rankParty(party, 'skill:acrobatics');
+    expect(ranked.map((r) => [r.id, r.best])).toEqual([['elowen', true], ['tam', true], ['brom', false]]);
+    expect(rankParty([], 'initiative')).toEqual([]);
   });
 });

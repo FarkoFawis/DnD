@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Combat, SessionPlayer, SessionState } from '@dnd/shared';
+import type { Combat, Combatant, SessionPlayer, SessionState } from '@dnd/shared';
 import { ClassicSheet } from '../ClassicSheet.tsx';
 import { RollSheet } from '../Dice.tsx';
 import { useContent } from '../content/useContent.ts';
@@ -8,11 +8,12 @@ import { PartyGrid } from '../PartyGrid.tsx';
 import { Portrait } from '../Portrait.tsx';
 import { sheetActions } from '../Sheet.tsx';
 import type { Game } from '../useGame.ts';
-import { useClosing } from '../fx/hooks.ts';
+import { useChanges, useClosing } from '../fx/hooks.ts';
 import { useCharacterFx } from '../fx/sheetFx.tsx';
 import { Page } from './Page.tsx';
 import { PagerPill } from './PagerPill.tsx';
 import { SessionDrawer } from './SessionDrawer.tsx';
+import { useFightMoments } from './moments.ts';
 import { usePager } from './usePager.ts';
 
 /**
@@ -35,6 +36,9 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
     if (!hadFight.current && combat) setPage(-1);
     hadFight.current = combat !== null;
   }, [combat, setPage]);
+
+  // "Your turn" wherever the player is looking; a new round only on the Fight page.
+  useFightMoments(combat, { myCharacterId: me.characterId, onFightPage: page === -1 });
 
   const active = combat?.combatants.find((c) => c.id === combat.activeId);
   const myTurn = !!active && active.kind === 'player' && active.ref === me.characterId;
@@ -205,16 +209,32 @@ function FightPage({ combat, me, game }: { combat: Combat; me: SessionPlayer; ga
       <h3 className="section-label">Turn order</h3>
       <ol className="turn-list">
         {order.map((c) => (
-          <li key={c.id} className={`turn-row ${c.id === combat.activeId ? 'active' : ''} ${c.kind} ${isMe(c) ? 'me' : ''}`}>
-            <span className="turn-init">{c.initiative ?? '–'}</span>
-            <span className="grow">
-              {c.name}
-              {isMe(c) && <span className="muted small"> (you)</span>}
-            </span>
-            {c.id === combat.activeId && <span className="badge">Turn</span>}
-          </li>
+          <TurnRow key={c.id} c={c} active={c.id === combat.activeId} me={isMe(c)} />
         ))}
       </ol>
     </div>
+  );
+}
+
+/** One line of the turn order. An opponent the DM keeps hidden has no name yet; it turns over when revealed. */
+function TurnRow({ c, active, me }: { c: Combatant; active: boolean; me: boolean }) {
+  const hidden = c.hidden === true;
+  const flips = useChanges(hidden);
+  return (
+    <li className={`turn-row ${active ? 'active' : ''} ${c.kind} ${me ? 'me' : ''} ${hidden ? 'masked' : ''}`}>
+      <span className="turn-init">{c.initiative ?? '–'}</span>
+      <span key={flips} className={`grow turn-who ${flips > 0 && !hidden ? 'revealed' : ''}`}>
+        {hidden ? (
+          <>
+            <span className="turn-mark" aria-hidden>?</span>
+            <span className="muted">Unknown</span>
+          </>
+        ) : (
+          c.name
+        )}
+        {me && <span className="muted small"> (you)</span>}
+      </span>
+      {active && <span className="badge">Turn</span>}
+    </li>
   );
 }

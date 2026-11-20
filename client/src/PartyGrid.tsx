@@ -14,6 +14,8 @@ import { isDead } from '@dnd/shared';
 import { useContent } from './content/useContent.ts';
 import { useChanges } from './fx/hooks.ts';
 import { ActionRing, HpBar, HpFx, Num } from './fx/sheetFx.tsx';
+import { InspirationStar } from './Inspiration.tsx';
+import { PartyChecks } from './PartyChecks.tsx';
 import { Portrait } from './Portrait.tsx';
 import { Sheet, sheetActions } from './Sheet.tsx';
 import { StatusChips } from './Status.tsx';
@@ -25,6 +27,8 @@ function PartyCard({ player, isMe, selected, content, onClick }: { player: Sessi
   const action = actionText(c.lastAction);
   /** How often this character did something since the screen opened: the chip pops in anew each time. */
   const acted = useChanges(c.lastAction?.at);
+  /** Heroic Inspiration just arrived: its star pops in. */
+  const inspired = useChanges(c.inspiration);
   const body = (
     <>
       <Portrait characterId={player.characterId} character={c} className="party-art" />
@@ -34,6 +38,11 @@ function PartyCard({ player, isMe, selected, content, onClick }: { player: Sessi
       <ActionRing character={c} content={content} />
       {isMe && <span className="party-you">You</span>}
       {!player.online && <span className="party-offline">Offline</span>}
+      {c.inspiration && (
+        <span key={inspired} className={`party-star ${inspired > 0 ? 'fresh' : ''}`} role="img" aria-label="Has Heroic Inspiration">
+          <InspirationStar />
+        </span>
+      )}
       <span className="party-info">
         <span className="party-name">{c.name || player.user.username}</span>
         <span className="party-sub">{[c.species, c.className, `Lv ${c.level}`].filter(Boolean).join(' · ')}</span>
@@ -100,13 +109,18 @@ export function DmParty({ game, session, myId }: { game: Game; session: SessionS
   const open = session.players.find((p) => p.user.id === openId);
   const sheet = useRef<HTMLDivElement>(null);
   const content = useContent();
+  const [ranking, setRanking] = useState(false);
   useEffect(() => {
     if (openId) sheet.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [openId]);
   return (
     <section className="party">
-      <h2 className="party-title">Party</h2>
+      <div className="party-head">
+        <h2 className="party-title grow">Party</h2>
+        {session.players.length > 0 && <button type="button" className="link" onClick={() => setRanking(true)}>Who is best at…</button>}
+      </div>
       {session.players.length > 0 && <p className="muted small mb hint">Tap a player to open their sheet: change HP, give or take items, edit anything.</p>}
+      {ranking && <PartyChecks players={session.players} onClose={() => setRanking(false)} />}
       <PartyGrid players={session.players} myId={myId} content={content} selectedId={openId} onSelect={(id) => setOpenId(openId === id ? null : id)} />
       {open && (
         <div className="dm-sheet" ref={sheet}>

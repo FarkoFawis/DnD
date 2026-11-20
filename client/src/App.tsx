@@ -7,6 +7,7 @@ import { HeroBackdrop, Home, type HomeTarget } from './Home.tsx';
 import { Play, type PlayPage } from './Play.tsx';
 import { Login } from './Login.tsx';
 import { SessionView } from './SessionView.tsx';
+import { SessionSummaryScreen } from './session/SessionSummary.tsx';
 import { SettingsScreen } from './SettingsScreen.tsx';
 import { StatusPill } from './StatusPill.tsx';
 import { useGame, type Status } from './useGame.ts';
@@ -97,6 +98,13 @@ function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
       )}
       {!game.session && screen !== 'home' && game.status !== 'online' && (
         <p className="offline-note"><StatusPill status={game.status} /></p>
+      )}
+      {game.summary && !game.session && (
+        <SessionSummaryScreen
+          summary={game.summary}
+          mine={(game.characters ?? []).map((c) => c.data.name)}
+          onClose={game.closeSummary}
+        />
       )}
       {game.session ? (
         <SessionView game={game} session={game.session} myId={auth.user.id} />

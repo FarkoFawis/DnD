@@ -22,6 +22,11 @@ export interface Combatant {
   /** NPCs only, and only sent to the DM. Players' HP lives on their sheets. */
   hp?: { current: number; max: number };
   armorClass?: number;
+  /**
+   * NPCs only: the players don't know yet who this is. They get it without its
+   * name (see publicCombat) until the DM reveals it.
+   */
+  hidden?: boolean;
 }
 
 export interface Combat {
@@ -41,6 +46,8 @@ export type CombatAction =
   | { type: 'prev' }
   /** Damage (negative) or heal (positive) an NPC. */
   | { type: 'hp'; id: string; delta: number }
+  /** Hide an opponent's name from the players, or reveal it. Without `id`: every opponent. */
+  | { type: 'reveal'; id?: string; hidden: boolean }
   | { type: 'remove'; id: string };
 
 /** Returns 1..20. */
@@ -122,6 +129,18 @@ export function applyCombatAction(combat: Combat, action: CombatAction, d20: D20
       const current = Math.max(0, Math.min(c.hp.max, c.hp.current + action.delta));
       return replace({ ...c, hp: { ...c.hp, current } });
     }
+    case 'reveal': {
+      if (typeof action.hidden !== 'boolean') throw new Error('Unknown action.');
+      if (action.id !== undefined && find(action.id).kind !== 'npc') throw new Error('Only opponents can be hidden.');
+      return {
+        ...combat,
+        combatants: combat.combatants.map((c) => {
+          if (c.kind !== 'npc' || (action.id !== undefined && c.id !== action.id)) return c;
+          const { hidden: _hidden, ...shown } = c;
+          return action.hidden ? { ...shown, hidden: true } : shown;
+        }),
+      };
+    }
     case 'remove': {
       const c = find(action.id);
       const order = combat.combatants;
@@ -144,10 +163,61 @@ export function applyCombatAction(combat: Combat, action: CombatAction, d20: D20
   }
 }
 
-/** What players get to see: no opponent HP or AC. */
+/** What the players read in place of a hidden opponent's name. */
+export const UNKNOWN_NAME = 'Unknown';
+
+/**
+ * What players get to see: no opponent HP or AC, and nothing that tells who a
+ * hidden opponent is (it keeps its place in the turn order).
+ */
 export function publicCombat(combat: Combat): Combat {
   return {
     ...combat,
-    combatants: combat.combatants.map(({ hp: _hp, armorClass: _ac, ...c }) => c),
+    combatants: combat.combatants.map(({ hp: _hp, armorClass: _ac, ...c }) =>
+      c.hidden ? { ...c, name: UNKNOWN_NAME, ref: '', bonus: 0, d20: null } : c,
+    ),
   };
+}
+
+/** Several combatants in a few words: "Bandit captain", "3× Goblin, Bandit captain". Copies are numbered ("Goblin 2"). */
+export function groupNames(names: string[]): string {
+  const counts = new Map<string, number>();
+  for (const n of names) {
+    const base = names.length > 1 ? n.replace(/ \d+$/, '') : n;
+    counts.set(base, (counts.get(base) ?? 0) + 1);
+  }
+  return [...counts].map(([name, n]) => (n > 1 ? `${n}× ${name}` : name)).join(', ');
+}
+
+/**
+ * A moment of the fight worth a banner on a phone, read off two states of it:
+ * - `turn`: it just became this player's turn;
+ * - `round`: a new round began (and it is not this player's turn);
+ * - `reveal`: the DM revealed opponents that were hidden;
+ * - `end`: the fight is over.
+ */
+export type FightMoment =
+  | { kind: 'turn'; round: number }
+  | { kind: 'round'; round: number; active: string | null }
+  | { kind: 'reveal'; names: string[] }
+  | { kind: 'end'; rounds: number };
+
+/**
+ * What just happened between two states of the fight, for one phone
+ * (`myCharacterId`: the player's character; none for the DM). Null when it is
+ * nothing to announce: a fight that starts has its own alert.
+ */
+export function fightMoment(before: Combat | null, after: Combat | null, myCharacterId?: string): FightMoment | null {
+  if (!before) return null;
+  if (!after) return { kind: 'end', rounds: before.round };
+  const was = new Map(before.combatants.map((c) => [c.id, c]));
+  const revealed = after.combatants.filter((c) => !c.hidden && was.get(c.id)?.hidden).map((c) => c.name);
+  if (revealed.length > 0) return { kind: 'reveal', names: revealed };
+  const active = after.combatants.find((c) => c.id === after.activeId);
+  const mine = !!active && !!myCharacterId && active.kind === 'player' && active.ref === myCharacterId;
+  if (mine && after.activeId !== before.activeId) return { kind: 'turn', round: after.round };
+  // A fight that was started over begins at round 1 again: nobody in it is the same.
+  const sameFight = after.combatants.some((c) => was.has(c.id)) || after.combatants.length === 0;
+  if (sameFight && after.round > before.round) return { kind: 'round', round: after.round, active: active?.name ?? null };
+  return null;
 }

@@ -55,10 +55,10 @@ export function DmFight({ game, session, prep }: { game: Game; session: SessionS
           session={session}
           prep={prep}
           onCancel={() => setSetup(false)}
-          onGo={async (npcs, characterIds) => {
+          onGo={async (npcs, characterIds, hidden) => {
             const ok = session.combat
-              ? await send((s, done) => s.emit('combat:add', { npcs, characterIds }, done))
-              : await send((s, done) => s.emit('combat:start', { npcs }, done));
+              ? await send((s, done) => s.emit('combat:add', { npcs, characterIds, hidden }, done))
+              : await send((s, done) => s.emit('combat:start', { npcs, hidden }, done));
             if (ok) setSetup(false);
           }}
         />
@@ -113,13 +113,15 @@ function FightSetup(props: {
   session: SessionState;
   prep: Prep;
   onCancel: () => void;
-  onGo: (npcs: NpcPick[], characterIds: string[]) => void;
+  onGo: (npcs: NpcPick[], characterIds: string[], hidden: boolean) => void;
 }) {
   const { session } = props;
   const { prep, error } = props.prep;
   const adding = session.combat !== null;
   /** npcId -> how many. Starts empty: the DM ticks who shows up. */
   const [counts, setCounts] = useState<Record<string, number>>({});
+  /** The players get "Unknown" in place of the names until the DM reveals them. */
+  const [hidden, setHidden] = useState(false);
   const inFight = new Set(session.combat?.combatants.filter((c) => c.kind === 'player').map((c) => c.ref));
   const missing = session.players.filter((p) => !inFight.has(p.characterId));
   const picks = Object.entries(counts).flatMap(([npcId, count]) => (count > 0 ? [{ npcId, count }] : []));
@@ -168,10 +170,19 @@ function FightSetup(props: {
             })}
           </ul>
         )}
+        {total > 0 && (
+          <label className="unlock-switch hide-switch">
+            <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />
+            <span className="grow">
+              Keep their names hidden
+              <span className="muted small block hint">Players see “Unknown” in the turn order until you reveal each one.</span>
+            </span>
+          </label>
+        )}
         <button
           className="primary wide fight-button"
           disabled={adding && total === 0 && missing.length === 0}
-          onClick={() => props.onGo(picks, missing.map((p) => p.characterId))}
+          onClick={() => props.onGo(picks, missing.map((p) => p.characterId), hidden && total > 0)}
         >
           {adding ? 'Add to the fight' : `⚔ Start the fight${total > 0 ? ` (${total} ${total === 1 ? 'opponent' : 'opponents'})` : ''}`}
         </button>
@@ -195,6 +206,7 @@ function CombatTracker(props: {
   const [openId, setOpenId] = useState<string | null>(null);
   const unrolled = combat.combatants.filter((c) => c.initiative === null);
   const noneRolled = unrolled.length === combat.combatants.length;
+  const hiddenCount = combat.combatants.filter((c) => c.hidden).length;
 
   return (
     <div className="tracker">
@@ -215,6 +227,14 @@ function CombatTracker(props: {
         )}
       </div>
       <p className="muted small hint">Or type each initiative in. Tap a name for more.</p>
+      {hiddenCount > 0 && (
+        <p className="notice showing-note">
+          <span className="grow">
+            {hiddenCount === 1 ? 'One opponent is' : `${hiddenCount} opponents are`} “Unknown” to the players.
+          </span>
+          <button className="link" onClick={() => void act({ type: 'reveal', hidden: false })}>Reveal all</button>
+        </p>
+      )}
       {combat.combatants.length === 0 && <p className="muted mt">Nobody is in this fight yet.</p>}
       <ol className="turn-list">
         {combat.combatants.map((c) => (
@@ -271,6 +291,7 @@ function CombatRow(props: { c: Combatant; npc?: Npc; active: boolean; open: bool
             {down ? 'Down' : <><Num value={c.hp.current} />/{c.hp.max}</>}
           </span>
         )}
+        {c.hidden && <span className="role-tag hidden-tag">Hidden</span>}
         {props.active && <span className="badge">Turn</span>}
       </div>
       {props.open && (
@@ -291,6 +312,11 @@ function CombatRow(props: { c: Combatant; npc?: Npc; active: boolean; open: bool
               {npc.personality && <p className="muted small pre-line">{npc.personality}</p>}
               {npc.notes && <p className="muted small pre-line">{npc.notes}</p>}
             </div>
+          )}
+          {c.kind === 'npc' && (
+            <button className={c.hidden ? 'primary' : 'secondary'} onClick={() => void act({ type: 'reveal', id: c.id, hidden: !c.hidden })}>
+              {c.hidden ? 'Reveal to the players' : 'Hide the name from the players'}
+            </button>
           )}
           <div className="tool-row">
             <button className="secondary" onClick={() => void act({ type: 'roll', ids: [c.id] })}>🎲 Roll again</button>

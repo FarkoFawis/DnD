@@ -987,3 +987,78 @@ button.link.rollable { text-decoration: none; padding: 0; min-height: 0; }
 .ra-text { position: absolute; left: 16px; right: 16px; top: 58px; margin: 0; display: flex; flex-direction: column; gap: 4px; text-align: center; text-shadow: 0 0 8px var(--bg), 0 0 3px var(--bg), 0 0 14px var(--bg); }
 .ra-text strong { font-size: 1.3rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ra); padding-left: 0.2em; }
 .ra-text span { font-size: 0.9rem; color: var(--text); }
+
+/* ---- moments of the session (session/MomentAlert.tsx): two lines open from the middle, the upper one with the
+   fight alert's diamond, and the words stand between them. Never blocks taps. What moves is in motion.css. ---- */
+.moment-alert { --ma: var(--gold); position: fixed; inset: 0; z-index: 100; pointer-events: none; overflow: hidden; }
+.moment-alert.round { --ma: var(--text); }
+.moment-alert.reveal { --ma: var(--bad); }
+.moment-alert.end { --ma: var(--ok); }
+/* The page dims behind the words only, so what is under them stays readable. The title card takes the whole screen. */
+.ma-veil { position: absolute; left: 0; right: 0; top: 38%; height: 320px; margin-top: -160px; background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--bg) 93%, transparent) 28%, color-mix(in srgb, var(--bg) 93%, transparent) 72%, transparent); }
+.moment-alert.title .ma-veil { top: 0; bottom: 0; height: auto; margin: 0; background: color-mix(in srgb, var(--bg) 95%, transparent); }
+.ma-band { position: absolute; left: 0; right: 0; top: 38%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.ma-rule { position: relative; width: 100%; height: 2px; flex: none; background: linear-gradient(to right, transparent, var(--ma) 22%, var(--ma) 78%, transparent); }
+.ma-rule i { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; transform: rotate(45deg); border: 2px solid var(--ma); background: var(--bg); }
+.ma-text { margin: 0; padding: 0 16px; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; }
+.ma-kicker { font-size: 0.8rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); padding-left: 0.24em; }
+.ma-title { font-size: 1.9rem; line-height: 1.15; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ma); padding-left: 0.14em; overflow-wrap: anywhere; }
+.ma-sub { font-size: 0.95rem; color: var(--text); }
+/* Names keep their own spelling: the campaign on the title card, an opponent that is revealed. */
+.moment-alert:is(.title, .reveal) .ma-title { font-family: Georgia, 'Times New Roman', serif; letter-spacing: 0.03em; text-transform: none; padding-left: 0; }
+.moment-alert.title .ma-title { font-size: 2.2rem; }
+.moment-alert.title .ma-band { gap: 20px; }
+
+/* ---- opponents the DM keeps hidden ---- */
+.turn-row.masked { border-style: dashed; }
+.turn-who { min-width: 0; }
+.turn-mark { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: 8px; border: 1px solid var(--edge-strong); border-radius: 6px; font-size: 0.85rem; font-weight: 800; color: var(--muted); vertical-align: middle; }
+.role-tag.hidden-tag { border-style: dashed; white-space: nowrap; }
+.unlock-switch.hide-switch { border-color: var(--edge-strong); margin: 12px 0 0; }
+.turn-more > button { width: 100%; }
+
+/* ---- Heroic Inspiration: a four-pointed star ---- */
+.insp-star { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--gold); stroke-width: 1.6; stroke-linejoin: round; }
+.inspiration-token { display: flex; align-items: center; gap: 12px; width: 100%; margin: 10px 0; padding: 10px 14px; text-align: left; font: inherit; font-family: system-ui, sans-serif; color: var(--gold); background: none; border: 1px solid var(--gold); border-radius: 12px; }
+.inspiration-token .small { color: var(--muted); }
+.inspiration-token .insp-star { width: 28px; height: 28px; fill: color-mix(in srgb, var(--gold) 25%, transparent); }
+.inspiration-give { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0 0 12px; text-align: left; }
+.inspiration-give.has { border-color: var(--gold); color: var(--gold); }
+.inspiration-give.has .insp-star { fill: color-mix(in srgb, var(--gold) 25%, transparent); }
+.insp-rule { margin: 10px 0 16px; }
+/* On a portrait, like "You": light on dark in every theme. */
+.party-star { position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(28, 25, 23, 0.85); border: 1px solid var(--gold); }
+.party-card.away .party-star { top: 34px; }
+.party-star .insp-star { width: 18px; height: 18px; fill: var(--gold); }
+
+/* ---- DM: who in the party is best at a skill ---- */
+.party-head { display: flex; align-items: baseline; gap: 12px; }
+.party-checks select { width: 100%; margin: 10px 0 2px; }
+.rank-rows li { gap: 12px; padding: 10px 2px; }
+.rank-value { width: 60px; flex: none; text-align: center; font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rank-rows li.best .rank-value { color: var(--gold); }
+.role-tag.best-tag { border-color: var(--gold-dim); color: var(--gold); }
+
+/* ---- the end of a session: the evening in numbers, over the home screen until closed ---- */
+.summary-screen { position: fixed; inset: 0; z-index: 80; background: var(--bg); display: flex; flex-direction: column; padding: max(16px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom)); }
+.summary-scroll { flex: 1; overflow-y: auto; max-width: 560px; width: 100%; margin: 0 auto; }
+.summary-kicker { margin: 22px 0 6px; text-align: center; font-size: 0.8rem; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); padding-left: 0.24em; }
+.summary-title { margin: 0; text-align: center; font-family: Georgia, 'Times New Roman', serif; font-size: 2rem; line-height: 1.15; color: var(--gold); overflow-wrap: anywhere; }
+.summary-rule { position: relative; display: block; height: 2px; margin: 20px 0 22px; background: linear-gradient(to right, transparent, var(--gold) 22%, var(--gold) 78%, transparent); }
+.summary-rule i { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; transform: rotate(45deg); border: 2px solid var(--gold); background: var(--bg); }
+.summary-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0; text-align: center; }
+.summary-stats div { display: flex; flex-direction: column-reverse; gap: 2px; min-width: 0; }
+.summary-stats dt { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.summary-stats dd { margin: 0; font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.summary-rests { margin: 14px 0 0; }
+.summary-party { list-style: none; margin: 0 0 16px; padding: 0; border-top: 1px solid var(--rule); }
+.summary-party li { padding: 12px 2px; border-bottom: 1px solid var(--rule); }
+.summary-party p { margin: 2px 0 0; }
+.summary-who { display: flex; align-items: center; gap: 8px; font-size: 1.05rem; }
+.summary-party p.summary-who { margin: 0 0 8px; }
+.summary-party li.me .summary-who strong { color: var(--gold); }
+.summary-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 6px; }
+.summary-nums div { display: flex; flex-direction: column; min-width: 0; }
+.summary-nums dd { margin: 0; font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.summary-nums dt { font-size: 0.7rem; line-height: 1.2; color: var(--muted); }
+.summary-nums .bad dd { color: var(--bad-text); }
