@@ -118,7 +118,7 @@ describe('Hit Dice on a Short Rest', () => {
 
     const first = ok(await mira.emitWithAck('character:hitDice', { characterId: id, action: 'spend', roll: 7 }));
     expect(first.spent).toEqual({ die: 10, roll: 7, modifier: 2, healed: 9 });
-    expect(first.character.data).toMatchObject({ hpCurrent: 12, used: { hitDice: 1 }, resting: true });
+    expect(first.character.data).toMatchObject({ hpCurrent: 12, used: { hitDice: 1 }, resting: true, lastAction: { kind: 'heal' } });
     expect(await mira.emitWithAck('character:hitDice', { characterId: id, action: 'spend', roll: 11 })).toMatchObject({ ok: false });
 
     // Without a roll of their own, the server throws the d10.
@@ -147,8 +147,11 @@ describe('Hit Dice on a Short Rest', () => {
     expect(w.store.getCharacter(character.id)!.data.resting).toBe(false);
 
     ok(await dm.emitWithAck('character:adjustHp', { characterId: character.id, delta: -5 }));
+    // A rest for one character says whose it is, so only that player's phone shows the alert.
+    const alert = new Promise((resolve) => mira.on('session:alert', (a) => 'characterId' in a && resolve(a)));
     ok(await dm.emitWithAck('character:rest', { characterId: character.id, kind: 'short' }));
     expect(w.store.getCharacter(character.id)!.data.resting).toBe(true);
+    expect(await alert).toEqual({ kind: 'rest', rest: 'short', characterId: character.id });
     ok(await dm.emitWithAck('combat:start', { npcs: [] }));
     expect(w.store.getCharacter(character.id)!.data.resting).toBe(false);
     expect(await mira.emitWithAck('character:hitDice', { characterId: character.id, action: 'spend', roll: 3 })).toMatchObject({ ok: false });

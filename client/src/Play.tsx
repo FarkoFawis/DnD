@@ -4,17 +4,37 @@ import type { CampaignSummary, CharacterSummary, ImportSummary } from '@dnd/shar
 import { uploadBackup } from './api.ts';
 import { CampaignConfig } from './prep/CampaignConfig.tsx';
 import { CharacterLine } from './Characters.tsx';
-import { GearIcon } from './icons.tsx';
-import { Panel } from './Panel.tsx';
+import { CrownIcon, GearIcon, KeyIcon } from './icons.tsx';
 import type { Game } from './useGame.ts';
 
-const TABS = [
-  { id: 'join', label: 'Join' },
-  { id: 'host', label: 'Host' },
-] as const;
+export type PlayPage = 'join' | 'host';
 
-/** Play: join a session with a code, or host one of your campaigns. */
-export function Play({ game, onBack, onCharacters }: { game: Game; onBack: () => void; onCharacters: () => void }) {
+/**
+ * Play: two big buttons, Join and Host. Tapping one sends both off to their
+ * sides while the picture behind glides on, then that page rises from the
+ * bottom. Back is always bottom left. App.tsx owns which page is open (`page`)
+ * and when this one is leaving (`leaving`, `to`), because the picture behind
+ * belongs to the home screen too.
+ */
+export function Play({
+  game,
+  onBack,
+  onCharacters,
+  page,
+  onPage,
+  from,
+  to,
+}: {
+  game: Game;
+  onBack: () => void;
+  onCharacters: () => void;
+  /** null: the two buttons. */
+  page: PlayPage | null;
+  onPage: (page: PlayPage | null) => void;
+  /** The screen before this one and, while this one is leaving, the next: they decide which way things move. */
+  from: string | null;
+  to: string | null;
+}) {
   // People who run campaigns usually want to host; everyone else joins.
   const [mode, setMode] = useState<'join' | 'host'>(game.campaigns?.length ? 'host' : 'join');
   /** The campaign the DM is planning ("Configure"). */
@@ -22,10 +42,63 @@ export function Play({ game, onBack, onCharacters }: { game: Game; onBack: () =>
   if (configuring) {
     return <CampaignConfig game={game} campaign={configuring} onBack={() => setConfiguring(null)} />;
   }
+  const scene = { 'data-from': from ?? undefined, 'data-to': to ?? undefined };
+  if (page === null) {
+    return (
+      <section className={`play-screen ${to ? 'leaving' : ''}`} aria-label="Play" {...scene}>
+        <h2 className="scene-title"><span>Play</span></h2>
+        <div className="play-choices">
+          {/* `mode` is the likelier of the two (see above), and after that the one picked last: it gets the gold edge. */}
+          <button
+            type="button"
+            className={`play-choice join ${mode === 'join' ? 'likely' : ''}`}
+            onClick={() => {
+              setMode('join');
+              onPage('join');
+            }}
+          >
+            <span className="home-icon" aria-hidden><KeyIcon /></span>
+            <strong>Join</strong>
+            <span className="play-choice-sub hint">With the code from your DM</span>
+          </button>
+          <button
+            type="button"
+            className={`play-choice host ${mode === 'host' ? 'likely' : ''}`}
+            onClick={() => {
+              setMode('host');
+              onPage('host');
+            }}
+          >
+            <span className="home-icon" aria-hidden><CrownIcon /></span>
+            <strong>Host</strong>
+            <span className="play-choice-sub hint">Open a lobby as the DM</span>
+          </button>
+        </div>
+        <div className="scene-bar">
+          <BackButton onClick={onBack} />
+        </div>
+      </section>
+    );
+  }
   return (
-    <Panel title="Play" tabs={TABS} tab={mode} onTab={setMode} onClose={onBack}>
-      {mode === 'join' ? <Join game={game} onCharacters={onCharacters} /> : <Host game={game} onConfigure={setConfiguring} />}
-    </Panel>
+    <section key={page} className={`play-screen play-page ${to ? 'leaving' : ''}`} aria-label={page === 'join' ? 'Join' : 'Host'} {...scene}>
+      <h2 className="scene-title"><span>{page === 'join' ? 'Join' : 'Host'}</span></h2>
+      <div className="play-frame">
+        {page === 'join' ? <Join game={game} onCharacters={onCharacters} /> : <Host game={game} onConfigure={setConfiguring} />}
+      </div>
+      <div className="scene-bar">
+        <BackButton onClick={() => onPage(null)} />
+      </div>
+    </section>
+  );
+}
+
+/** The way back, always in the same place: bottom left, big enough for a thumb. */
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" className="back-button" onClick={onClick}>
+      <span aria-hidden>‹</span> Back
+    </button>
   );
 }
 
@@ -71,7 +144,7 @@ function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) 
           </ul>
         )}
         <div className="row-gap">
-          <button className="ghost" onClick={() => setChoice(null)}>Back</button>
+          <button className="ghost" onClick={() => setChoice(null)}>Other code</button>
           <button className="ghost" onClick={onCharacters}>Characters</button>
         </div>
       </>

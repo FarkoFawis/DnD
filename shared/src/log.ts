@@ -22,6 +22,7 @@ export const LOG_KINDS = [
   'defeated', // an opponent dropped to 0 HP or was removed at 0
   'fightEnd', // `amount` = rounds
   'handout', // the DM showed a handout; `what` = its title
+  'inspiration', // Heroic Inspiration; `what` = 'gained' | 'used'
 ] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 
@@ -63,6 +64,7 @@ export function describeLogEntry(e: LogEvent): string {
     case 'defeated': return `${e.who} was defeated.`;
     case 'fightEnd': return `The fight ended after ${n} ${n === 1 ? 'round' : 'rounds'}.`;
     case 'handout': return `The DM showed "${e.what}".`;
+    case 'inspiration': return `${e.who} ${e.what === 'used' ? 'used' : 'gained'} Heroic Inspiration.`;
   }
 }
 
@@ -143,4 +145,88 @@ export function recapLines(r: Recap): string[] {
   if (r.rests.length) lines.push(`The party rested: ${tally(r.rests.map((k) => `${k} rest`)).join(', ')}.`);
   if (r.handouts.length) lines.push(`Handouts shown: ${r.handouts.join(', ')}.`);
   return lines;
+}
+
+/** A log timestamp ("2026-11-19 21:03:47", UTC) as milliseconds. */
+export function logTime(at: string): number {
+  const ms = Date.parse(`${at.replace(' ', 'T')}Z`);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+/**
+ * What every phone shows when the DM ends a session: the evening in numbers.
+ * Unlike the recap it is for the players too, so it never names an opponent
+ * (one of them may still be a secret).
+ */
+export interface SessionSummary {
+  session: number;
+  campaign: string;
+  /** From the first to the last entry of the log. */
+  minutes: number;
+  fights: number;
+  rounds: number;
+  /** Opponents defeated. */
+  defeated: number;
+  rests: { short: number; long: number };
+  characters: {
+    who: string;
+    damage: number;
+    healed: number;
+    downs: number;
+    /** Spells cast and abilities used. */
+    used: number;
+    /** The one used most often, if any was used at least twice. */
+    favourite: string | null;
+    loot: string[];
+    /** The level reached this session, if any. */
+    level: number | null;
+  }[];
+}
+
+/**
+ * Sums up one session for the summary screen. `players` are the characters at
+ * the table when it ended; they come first, in that order, also when nothing
+ * was logged about them. Characters who left earlier follow.
+ */
+export function buildSummary(entries: LogEntry[], about: { campaign: string; players: string[] }): SessionSummary | null {
+  const recap = buildRecap(entries);
+  if (!recap) return null;
+  const names = [...about.players, ...recap.characters.map((c) => c.who).filter((who) => !about.players.includes(who))];
+  const uses = (who: string) => {
+    const counts = new Map<string, number>();
+    for (const e of entries) {
+      if (e.kind !== 'used' || e.who !== who || !e.what) continue;
+      // "Fire Bolt (cantrip)" and "Fire Bolt (1st-level slot)" are the same thing used.
+      const name = e.what.replace(/ \([^)]*\)$/, '');
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    const top = [...counts].sort((a, b) => b[1] - a[1])[0];
+    return { used: [...counts.values()].reduce((a, b) => a + b, 0), favourite: top && top[1] > 1 ? top[0] : null };
+  };
+  return {
+    session: recap.session,
+    campaign: about.campaign,
+    minutes: Math.max(0, Math.round((logTime(entries[entries.length - 1]!.at) - logTime(entries[0]!.at)) / 60000)),
+    fights: recap.fights.length,
+    rounds: recap.fights.reduce((sum, f) => sum + (f.rounds ?? 0), 0),
+    defeated: recap.fights.reduce((sum, f) => sum + f.defeated.length, 0),
+    rests: { short: recap.rests.filter((r) => r === 'short').length, long: recap.rests.filter((r) => r === 'long').length },
+    characters: names.map((who) => {
+      const c = recap.characters.find((x) => x.who === who);
+      return {
+        who,
+        damage: c?.damage ?? 0,
+        healed: c?.healed ?? 0,
+        downs: c?.downs ?? 0,
+        ...uses(who),
+        loot: c?.loot ?? [],
+        level: c?.level ?? null,
+      };
+    }),
+  };
+}
+
+/** Minutes as hours and minutes: 125 -> "2:05", 45 -> "0:45". */
+export function formatDuration(minutes: number): string {
+  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
 }

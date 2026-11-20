@@ -62,7 +62,7 @@ describe('using things', () => {
   it('cantrips are free', () => {
     const r = applyUse(wiz, { kind: 'spell', spellId: 'fb' });
     expect(r.used).toEqual({});
-    expect(r.action).toEqual({ name: 'Fire Bolt', detail: 'cantrip' });
+    expect(r.action).toEqual({ name: 'Fire Bolt', detail: 'cantrip', kind: 'spell' });
   });
 
   it('a leveled spell spends the lowest free slot, or the one chosen', () => {
@@ -156,5 +156,14 @@ describe('Hit Dice (2024)', () => {
     const spent = hurt({ used: { [HIT_DICE_ID]: 2, 'second-wind': 1 }, resting: true });
     expect(applyRest(spent, 'short').used).toEqual({ [HIT_DICE_ID]: 2 });
     expect(applyRest(spent, 'long')).toMatchObject({ used: {}, hpCurrent: 28, resting: false });
+  });
+});
+
+describe('Heroic Inspiration on a Long Rest', () => {
+  it('comes back for Humans (Resourceful) only', () => {
+    const human = char({ features: [{ id: 'f1', name: 'Resourceful', source: 'Human', ref: 'species:human:Resourceful' }] });
+    expect(applyRest(human, 'long').inspiration).toBe(true);
+    expect(applyRest(human, 'short').inspiration).toBeUndefined();
+    expect('inspiration' in applyRest(char({ inspiration: true }), 'long')).toBe(false);
   });
 });

@@ -6,7 +6,9 @@ import { usePrep } from '../prep/usePrep.ts';
 import type { Game } from '../useGame.ts';
 import { DmFight, DmToolbox } from './DmTools.tsx';
 import { Page } from './Page.tsx';
+import { PagerPill } from './PagerPill.tsx';
 import { SessionDrawer } from './SessionDrawer.tsx';
+import { useFightMoments } from './moments.ts';
 import { usePager } from './usePager.ts';
 
 /**
@@ -32,6 +34,9 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
     if (hadFight.current && !combat) setPage((p) => (p === -1 ? 0 : p));
     hadFight.current = combat !== null;
   }, [combat, setPage]);
+
+  // A new round and the end of the fight show on the DM's phone too.
+  useFightMoments(combat, { onFightPage: page === -1 });
 
   const active = combat?.combatants.find((c) => c.id === combat.activeId);
   const fightAt = Math.max(-1, Math.min(0, position)); // -1 = fight page fully shown
@@ -67,7 +72,7 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
       <RollToasts rolls={game.rolls} />
 
       <Page side="left" shown={-fightAt} dragging={dragging} open={page === -1}>
-        <div className="party-panel-head">
+        <div className="party-panel-head narrow">
           <h2 className="party-title grow">Fight</h2>
           <button type="button" className="link back-link" onClick={() => setPage(0)}>Party ›</button>
         </div>
@@ -76,7 +81,7 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
         </div>
       </Page>
       <Page side="right" shown={toolsAt} dragging={dragging} open={page === 1}>
-        <div className="party-panel-head">
+        <div className="party-panel-head narrow">
           <button type="button" className="link back-link" onClick={() => setPage(0)}>‹ Party</button>
           <h2 className="party-title grow">Tools</h2>
           <span className="muted small">{session.campaign.name}</span>
@@ -86,25 +91,17 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
         </div>
       </Page>
 
-      <nav className="pager" aria-label="Pages">
-        <button
-          type="button"
-          className={`pager-tab ${page === -1 ? 'on' : ''} ${combat && page !== -1 ? 'live' : ''}`}
-          aria-pressed={page === -1}
-          onClick={() => setPage(-1)}
-        >
-          ‹ {combat && page !== -1 && active ? `Fight · ${active.name}` : 'Fight'}
-        </button>
-        <button type="button" className={`pager-tab ${page === 0 ? 'on' : ''}`} aria-pressed={page === 0} onClick={() => setPage(0)}>Party</button>
-        <button
-          type="button"
-          className={`pager-tab ${page === 1 ? 'on' : ''}`}
-          aria-pressed={page === 1}
-          onClick={() => setPage(1)}
-        >
-          Tools{session.handout && page !== 1 ? ' 📜' : ''} ›
-        </button>
-      </nav>
+      <PagerPill
+        page={page}
+        position={position}
+        dragging={dragging}
+        onPage={setPage}
+        tabs={[
+          { page: -1, label: `‹ ${combat && page !== -1 && active ? `Fight · ${active.name}` : 'Fight'}`, className: combat && page !== -1 ? 'live' : '' },
+          { page: 0, label: 'Party' },
+          { page: 1, label: `Tools${session.handout && page !== 1 ? ' 📜' : ''} ›` },
+        ]}
+      />
     </>
   );
 }

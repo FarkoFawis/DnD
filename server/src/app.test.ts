@@ -236,7 +236,8 @@ describe('campaign sessions', () => {
 
     const dmSees = nextState(dm, (s) => s.players[0]?.character.lastAction?.name === 'Magic Missile');
     ok(await mira.emitWithAck('character:use', { characterId: id, use: { kind: 'spell', spellId: 'mm' } }));
-    expect((await dmSees).players[0]?.character.lastAction).toMatchObject({ detail: '1st-level slot' });
+    // `kind` is what the phones pick the effect by.
+    expect((await dmSees).players[0]?.character.lastAction).toMatchObject({ detail: '1st-level slot', kind: 'spell' });
     ok(await mira.emitWithAck('character:use', { characterId: id, use: { kind: 'spell', spellId: 'mm' } }));
     const out = await mira.emitWithAck('character:use', { characterId: id, use: { kind: 'spell', spellId: 'mm' } });
     expect(out).toMatchObject({ ok: false, error: expect.stringMatching(/No spell slots/) });
@@ -245,8 +246,11 @@ describe('campaign sessions', () => {
     expect(await mira.emitWithAck('character:rest', { characterId: id, kind: 'long' })).toMatchObject({ ok: false });
     expect(await mira.emitWithAck('session:rest', { kind: 'long' })).toMatchObject({ ok: false });
     const rested = nextState(mira, (s) => Object.keys(s.players[0]?.character.used ?? { x: 1 }).length === 0);
+    const alert = new Promise((resolve) => mira.once('session:alert', resolve));
     ok(await dm.emitWithAck('session:rest', { kind: 'long' }));
     await rested;
+    // Every phone is told, so it can show the rest alert.
+    expect(await alert).toEqual({ kind: 'rest', rest: 'long' });
   });
 
   it('handles concentration, conditions and death saves', async () => {

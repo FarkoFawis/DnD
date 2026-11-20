@@ -20,3 +20,22 @@ export function PersonIcon() {
     </svg>
   );
 }
+
+/** A key: Join. */
+export function KeyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <circle cx="8" cy="12" r="4.2" />
+      <path d="M12.2 12H21M17.4 12v3.4M20.2 12v2.4" />
+    </svg>
+  );
+}
+
+/** A crown: Host, the Dungeon Master. */
+export function CrownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M4 18.5h16M5 15.5 3.5 7l5.2 4.2L12 5l3.3 6.2L20.5 7 19 15.5z" />
+    </svg>
+  );
+}

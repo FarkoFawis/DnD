@@ -23,10 +23,16 @@ export interface Settings {
   dice: boolean;
   /** The colours of the app: styles.css defines a set of colour tokens per theme. */
   theme: Theme;
+  /**
+   * Animations and effects (pages sliding in, the burst when a spell is cast,
+   * numbers counting). Off: everything simply appears. A phone set to "reduce
+   * motion" never gets them, whatever this says.
+   */
+  effects: boolean;
 }
 
 const KEY = 'dnd.settings';
-const DEFAULTS: Settings = { hints: true, dice: false, theme: 'default' };
+const DEFAULTS: Settings = { hints: true, dice: false, theme: 'default', effects: true };
 const listeners = new Set<(s: Settings) => void>();
 
 function load(): Settings {
@@ -37,6 +43,7 @@ function load(): Settings {
       hints: typeof saved.hints === 'boolean' ? saved.hints : DEFAULTS.hints,
       dice: typeof saved.dice === 'boolean' ? saved.dice : DEFAULTS.dice,
       theme: THEMES.includes(saved.theme as Theme) ? (saved.theme as Theme) : DEFAULTS.theme,
+      effects: typeof saved.effects === 'boolean' ? saved.effects : DEFAULTS.effects,
     };
   } catch {
     return { ...DEFAULTS };
@@ -45,17 +52,28 @@ function load(): Settings {
 
 let current = load();
 
+/** The phone itself asks for less motion (an accessibility setting of Android and iOS). */
+const reducedMotion = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+
 /** Puts the settings on <html>, where styles.css reads them. index.html does the same for the theme before the app loads. */
 function apply(s: Settings) {
   const root = document.documentElement;
   root.dataset.hints = s.hints ? 'on' : 'off';
   root.dataset.theme = s.theme;
+  // motion.css hangs every animation on this; effects in code ask motionOn().
+  root.dataset.motion = s.effects && !reducedMotion?.matches ? 'on' : 'off';
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_BAR[s.theme]);
 }
 
 /** Call once before the first render. */
 export function initSettings() {
   apply(current);
+  reducedMotion?.addEventListener?.('change', () => apply(current));
+}
+
+/** Whether animations and effects may play right now (the Settings switch, and the phone's "reduce motion"). */
+export function motionOn(): boolean {
+  return document.documentElement.dataset.motion !== 'off';
 }
 
 export function changeSettings(patch: Partial<Settings>) {

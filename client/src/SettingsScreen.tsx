@@ -47,6 +47,19 @@ export function SettingsScreen({ onBack }: { onBack: () => void }) {
                 onChange={(e) => changeSettings({ dice: e.target.checked })}
               />
             </label>
+            <label className="setting-row">
+              <span className="setting-name">Animations and effects</span>
+              <span className="setting-about muted small">
+                Pages that slide, numbers that count, the flash when you are hit or cast a spell. Switch them off if your phone stutters or you want it calm.
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                className="switch"
+                checked={settings.effects}
+                onChange={(e) => changeSettings({ effects: e.target.checked })}
+              />
+            </label>
           </div>
         ) : (
           <div className="theme-options" role="radiogroup" aria-label="Theme">
