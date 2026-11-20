@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { InfoEntry } from '@dnd/shared';
+import { useClosing } from './fx/hooks.ts';
 import { Info } from './Info.tsx';
 
 export interface PickerOption {
@@ -60,10 +61,8 @@ export function Picker({
           value={value}
           options={allowCustom ? [...options, { value: CUSTOM_VALUE, label: customLabel, group: 'Not in the book list' }] : options}
           searchable={searchable ?? options.length > 12}
-          onPick={(v) => {
-            onChange(v);
-            setOpen(false);
-          }}
+          onPick={onChange}
+          closeOnPick
           onClose={() => setOpen(false)}
         />
       )}
@@ -79,6 +78,7 @@ export function PickerList({
   onPick,
   onClose,
   multi,
+  closeOnPick,
 }: {
   title: string;
   value: string | string[];
@@ -88,16 +88,20 @@ export function PickerList({
   onClose: () => void;
   /** For multi-select: "2 / 4 picked" in the header. */
   multi?: { count: number; max: number };
+  /** Choosing an option also closes the list (it slides away; `onClose` follows). */
+  closeOnPick?: boolean;
 }) {
   const [q, setQ] = useState('');
   const search = useRef<HTMLInputElement>(null);
+  // The list slides back down before it is gone.
+  const { closing, close } = useClosing(onClose);
   useEffect(() => {
     // Don't pop the phone keyboard open; only focus search on devices with a mouse.
     if (searchable && window.matchMedia('(pointer: fine)').matches) search.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [searchable, onClose]);
+  }, [searchable, close]);
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     return t ? options.filter((o) => o.label.toLowerCase().includes(t) || o.hint?.toLowerCase().includes(t)) : options;
@@ -105,12 +109,12 @@ export function PickerList({
   const selected = new Set(Array.isArray(value) ? value : [value]);
   let lastGroup: string | undefined;
   return createPortal(
-    <div className="picker-backdrop" onClick={onClose}>
+    <div className={`picker-backdrop ${closing ? 'closing' : ''}`} onClick={close}>
       <div className="picker-panel" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="picker-head">
           <strong className="grow">{title}</strong>
           {multi && <span className="muted small">{multi.count} / {multi.max} picked</span>}
-          <button type="button" className="secondary" onClick={onClose}>{multi ? 'Done' : 'Close'}</button>
+          <button type="button" className="secondary" onClick={close}>{multi ? 'Done' : 'Close'}</button>
         </div>
         {searchable && (
           <input ref={search} className="picker-search" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -129,7 +133,10 @@ export function PickerList({
                     className="picker-option"
                     aria-selected={selected.has(o.value)}
                     disabled={o.disabled && !selected.has(o.value)}
-                    onClick={() => onPick(o.value)}
+                    onClick={() => {
+                      onPick(o.value);
+                      if (closeOnPick) close();
+                    }}
                   >
                     <span className="check">{selected.has(o.value) ? '✓' : ''}</span>
                     <span className="grow">

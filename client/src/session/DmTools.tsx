@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { ABILITIES, abilityModifier, formatModifier, type Combat, type CombatAction, type Combatant, type Npc, type SessionState } from '@dnd/shared';
 import { ConfigTabs, npcSummary } from '../prep/CampaignConfig.tsx';
+import { BottomSheet } from '../BottomSheet.tsx';
+import { HpFx, Num } from '../fx/sheetFx.tsx';
 import { NumberField } from '../prep/NumberField.tsx';
 import type { Prep } from '../prep/usePrep.ts';
 import { RestButtons } from '../Uses.tsx';
@@ -126,8 +128,9 @@ function FightSetup(props: {
   const sorted = [...(prep?.npcs ?? [])].sort((a, b) => Number(a.role === 'npc') - Number(b.role === 'npc'));
 
   return (
-    <div className="info-backdrop" onClick={props.onCancel}>
-      <div className="info-sheet fight-setup" role="dialog" aria-modal aria-label="Start a fight" onClick={(e) => e.stopPropagation()}>
+    <BottomSheet label="Start a fight" className="fight-setup" modal onClose={props.onCancel}>
+      {(close) => (
+        <>
         <h2 className="info-title">{adding ? 'Add to the fight' : 'Who is fighting?'}</h2>
         <p className={`muted small mb ${adding && missing.length > 0 ? '' : 'hint'}`}>
           {adding
@@ -173,9 +176,10 @@ function FightSetup(props: {
           {adding ? 'Add to the fight' : `⚔ Start the fight${total > 0 ? ` (${total} ${total === 1 ? 'opponent' : 'opponents'})` : ''}`}
         </button>
         {!adding && <p className="muted small center mt hint">Everyone's phone shows the fight alert and buzzes.</p>}
-        <button className="ghost" onClick={props.onCancel}>Cancel</button>
-      </div>
-    </div>
+        <button className="ghost" onClick={close}>Cancel</button>
+        </>
+      )}
+    </BottomSheet>
   );
 }
 
@@ -261,7 +265,12 @@ function CombatRow(props: { c: Combatant; npc?: Npc; active: boolean; open: bool
             {c.armorClass !== undefined && ` · AC ${c.armorClass}`}
           </span>
         </button>
-        {c.hp && <span className={`hp-text ${down ? 'muted' : ''}`}>{down ? 'Down' : `${c.hp.current}/${c.hp.max}`}</span>}
+        {c.hp && (
+          <span className={`hp-text turn-hp ${down ? 'muted' : ''}`}>
+            <HpFx value={c.hp.current} />
+            {down ? 'Down' : <><Num value={c.hp.current} />/{c.hp.max}</>}
+          </span>
+        )}
         {props.active && <span className="badge">Turn</span>}
       </div>
       {props.open && (

@@ -6,6 +6,7 @@ import { usePrep } from '../prep/usePrep.ts';
 import type { Game } from '../useGame.ts';
 import { DmFight, DmToolbox } from './DmTools.tsx';
 import { Page } from './Page.tsx';
+import { PagerPill } from './PagerPill.tsx';
 import { SessionDrawer } from './SessionDrawer.tsx';
 import { usePager } from './usePager.ts';
 
@@ -86,25 +87,17 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
         </div>
       </Page>
 
-      <nav className="pager" aria-label="Pages">
-        <button
-          type="button"
-          className={`pager-tab ${page === -1 ? 'on' : ''} ${combat && page !== -1 ? 'live' : ''}`}
-          aria-pressed={page === -1}
-          onClick={() => setPage(-1)}
-        >
-          ‹ {combat && page !== -1 && active ? `Fight · ${active.name}` : 'Fight'}
-        </button>
-        <button type="button" className={`pager-tab ${page === 0 ? 'on' : ''}`} aria-pressed={page === 0} onClick={() => setPage(0)}>Party</button>
-        <button
-          type="button"
-          className={`pager-tab ${page === 1 ? 'on' : ''}`}
-          aria-pressed={page === 1}
-          onClick={() => setPage(1)}
-        >
-          Tools{session.handout && page !== 1 ? ' 📜' : ''} ›
-        </button>
-      </nav>
+      <PagerPill
+        page={page}
+        position={position}
+        dragging={dragging}
+        onPage={setPage}
+        tabs={[
+          { page: -1, label: `‹ ${combat && page !== -1 && active ? `Fight · ${active.name}` : 'Fight'}`, className: combat && page !== -1 ? 'live' : '' },
+          { page: 0, label: 'Party' },
+          { page: 1, label: `Tools${session.handout && page !== 1 ? ' 📜' : ''} ›` },
+        ]}
+      />
     </>
   );
 }

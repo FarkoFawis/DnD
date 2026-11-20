@@ -876,6 +876,10 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const character = store.updateCharacter(t.ch.id, restPatch(t.ch, input.kind));
       ack({ ok: true, character });
       logFor(character, { kind: 'rest', what: input.kind });
+      // The DM rested one character: that player's phone shows it (see RestAlert on the client).
+      if (t.isDm && character.inSession) {
+        io.to(roomOf(character.inSession)).emit('session:alert', { kind: 'rest', rest: input.kind, characterId: character.id });
+      }
       afterChange(character);
     });
 
@@ -905,7 +909,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
         const r = spendHitDie(t.ch.data, die, roll);
         const character = store.updateCharacter(t.ch.id, {
           ...r.patch,
-          lastAction: { name: 'Hit Die', detail: `+${r.healed} HP`, at: new Date().toISOString() },
+          lastAction: { name: 'Hit Die', detail: `+${r.healed} HP`, kind: 'heal', at: new Date().toISOString() },
         });
         ack({ ok: true, character, spent: { die, roll, modifier: r.modifier, healed: r.healed } });
         logFor(character, { kind: 'heal', amount: r.healed, what: `Hit Die, ${character.data.hpCurrent}/${character.data.hpMax} HP` });
@@ -1305,6 +1309,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const live = store.getSession(code);
       if (live?.started && live.sessionNo) store.addLog(live.campaignId, live.sessionNo, { kind: 'rest', who: '', what: input.kind });
       ack({ ok: true });
+      io.to(roomOf(code)).emit('session:alert', { kind: 'rest', rest: input.kind });
       broadcast(code);
     });
 

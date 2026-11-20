@@ -5,7 +5,7 @@
  * adapted to a phone. Read-only, except HP and items when the DM unlocked them.
  * Tap anything with a description (spell, item, feature, attack) to read it.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ABILITIES,
   ABILITY_NAMES,
@@ -22,6 +22,9 @@ import {
   type RollRequest,
 } from '@dnd/shared';
 import { RollSheet } from './Dice.tsx';
+import { burst } from './fx/fx.ts';
+import { useFresh } from './fx/hooks.ts';
+import { FlashNum, HpBar, HpFx, Num } from './fx/sheetFx.tsx';
 import { HitDice } from './HitDice.tsx';
 import { useSettings } from './settings.ts';
 import { Info } from './Info.tsx';
@@ -62,8 +65,10 @@ export function ClassicSheet({
   const [levelling, setLevelling] = useState(false);
   const canLevelUp = c.levelUpReady && c.level < 20;
 
-  // Short confirmation after something is used ("Magic Missile · 1st-level slot").
-  const [flash, setFlash] = useState<string | null>(null);
+  // Short confirmation after something is used ("Magic Missile · 1st-level slot")
+  // or handed over by the DM ("Received: Potion of Healing").
+  const [flash, setFlash] = useState<{ text: string; got?: boolean } | null>(null);
+  const flashEl = useRef<HTMLParagraphElement>(null);
   const lastAt = c.lastAction?.at;
   const [seenAt, setSeenAt] = useState(lastAt);
   useEffect(() => {
@@ -71,14 +76,28 @@ export function ClassicSheet({
     setSeenAt(lastAt);
     // A roll of the dice roller has its own result sheet.
     if (c.lastAction?.roll) return;
-    setFlash(actionText(c.lastAction));
+    const text = actionText(c.lastAction);
+    setFlash(text ? { text: `Used: ${text}` } : null);
     const t = setTimeout(() => setFlash(null), 2500);
     return () => clearTimeout(t);
   }, [lastAt, seenAt, c.lastAction]);
+  /** Items that arrived while the sheet was open slide in and are announced. */
+  const freshItems = useFresh(c.inventory.map((i) => i.id));
+  const newest = c.inventory.findLast((i) => freshItems.has(i.id));
+  useEffect(() => {
+    if (!newest || unlocked) return;
+    setFlash({ text: `Received: ${newest.qty > 1 ? `${newest.qty}× ` : ''}${newest.name}`, got: true });
+    const t = setTimeout(() => setFlash(null), 3000);
+    return () => clearTimeout(t);
+    // Once per item: its id says whether it is a new one.
+  }, [newest?.id]);
+  useEffect(() => {
+    if (flash?.got) burst('item', flashEl.current);
+  }, [flash]);
 
   return (
     <article className="classic" aria-label={`${c.name}'s character sheet`}>
-      {flash && <p className="use-flash" role="status">Used: {flash}</p>}
+      {flash && <p key={flash.text} ref={flashEl} className={`use-flash ${flash.got ? 'got' : ''}`} role="status">{flash.text}</p>}
       {canLevelUp && (
         <button type="button" className="levelup-banner" onClick={() => setLevelling(true)}>
           <span className="grow">
@@ -124,15 +143,14 @@ export function ClassicSheet({
           </>
         ) : (
           <div className="cs-hp">
+            <HpFx value={c.hpCurrent} />
             <span className="cs-label">Hit points</span>
             <span className="cs-hp-line">
-              <span className={`cs-hp-now ${c.hpCurrent === 0 ? 'down' : c.hpCurrent <= c.hpMax / 4 ? 'low' : ''}`}>{c.hpCurrent}</span>
+              <span className={`cs-hp-now ${c.hpCurrent === 0 ? 'down' : c.hpCurrent <= c.hpMax / 4 ? 'low' : ''}`} aria-label={`${c.hpCurrent}`}><Num value={c.hpCurrent} /></span>
               {c.hpTemp > 0 && <span className="cs-hp-temp" aria-label={`plus ${c.hpTemp} temporary hit points`}>+{c.hpTemp}</span>}
               <span className="cs-hp-max">/ {c.hpMax}</span>
             </span>
-            <span className="hpbar" aria-hidden>
-              <span style={{ width: `${Math.max(0, Math.min(100, (c.hpCurrent / c.hpMax) * 100))}%` }} className={c.hpCurrent <= c.hpMax / 4 ? 'low' : ''} />
-            </span>
+            <HpBar current={c.hpCurrent} max={c.hpMax} />
           </div>
         )}
       </section>
@@ -289,15 +307,15 @@ export function ClassicSheet({
           <div className="cs-equipment">
             <ul className="cs-coins">
               {COINS.map((k) => (
-                <li key={k}><span className="cs-coin">{k.toUpperCase()}</span><span>{c.coins[k]}</span></li>
+                <li key={k}><span className="cs-coin">{k.toUpperCase()}</span><FlashNum value={c.coins[k]} /></li>
               ))}
             </ul>
             <ul className="cs-items">
               {c.inventory.length === 0 && <li className="muted small">Nothing yet.</li>}
               {c.inventory.map((i) => (
-                <li key={i.id}>
+                <li key={i.id} className={freshItems.has(i.id) ? 'fresh' : undefined}>
                   <Info entry={itemEntry(content, i)} tapToOpen>
-                    {i.qty > 1 && <span className="cs-qty">{i.qty}×</span>} {i.name}
+                    {i.qty > 1 && <span className="cs-qty"><FlashNum value={i.qty} />×</span>} {i.name}
                   </Info>
                 </li>
               ))}

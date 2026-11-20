@@ -62,7 +62,7 @@ describe('using things', () => {
   it('cantrips are free', () => {
     const r = applyUse(wiz, { kind: 'spell', spellId: 'fb' });
     expect(r.used).toEqual({});
-    expect(r.action).toEqual({ name: 'Fire Bolt', detail: 'cantrip' });
+    expect(r.action).toEqual({ name: 'Fire Bolt', detail: 'cantrip', kind: 'spell' });
   });
 
   it('a leveled spell spends the lowest free slot, or the one chosen', () => {
