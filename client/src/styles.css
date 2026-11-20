@@ -841,18 +841,19 @@ button.link.rollable { text-decoration: none; padding: 0; min-height: 0; }
 .app:has(> .panel) { height: 100dvh; display: flex; flex-direction: column; }
 .offline-note { margin: 0 0 8px; }
 .home { position: relative; isolation: isolate; flex: 1; display: flex; flex-direction: column; }
-/* The picture of the screen: one of your characters, fading into the page towards the menu and the bottom.
-   (The colours in the masks are only "see-through" and "solid", not colours of the page.) */
+/* The picture of the screen: one of your characters, from edge to edge, fading into the page at the top and
+   the bottom (the colours in the mask are only "see-through" and "solid", not colours of the page).
+   On the home screen the page colour lies over its left side, where the menu is (`::after`); that is a layer
+   of its own so it can fade away on Play, where the picture fills the screen. */
 .home-hero {
-  position: absolute; z-index: -1; top: 0; right: -16px; bottom: 92px; width: 88%; pointer-events: none;
-  -webkit-mask-image: linear-gradient(to right, transparent 14%, #000 72%), linear-gradient(to bottom, transparent 0, #000 16%, #000 62%, transparent 98%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(to right, transparent 14%, #000 72%), linear-gradient(to bottom, transparent 0, #000 16%, #000 62%, transparent 98%);
-  mask-composite: intersect;
+  position: absolute; z-index: -1; top: 0; left: -16px; right: -16px; bottom: 92px; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 62%, transparent 98%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 62%, transparent 98%);
 }
+.home-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to right, var(--bg) 22%, transparent 76%); }
 .home-hero-art { width: 100%; height: 100%; background: none; }
 .home-hero-art .portrait-img { object-position: 50% 20%; }
-.home-hero-die { display: block; width: 78%; height: 100%; margin-left: auto; fill: none; stroke: var(--edge-strong); stroke-width: 1.4; stroke-linejoin: round; }
+.home-hero-die { display: block; width: 68%; height: 100%; margin-left: auto; fill: none; stroke: var(--edge-strong); stroke-width: 1.4; stroke-linejoin: round; }
 .home-hero-die text { fill: var(--faint); stroke: none; font-size: 40px; font-weight: 800; font-family: Georgia, serif; }
 .home-user { align-self: flex-start; display: flex; align-items: center; gap: 10px; max-width: 100%; padding: 0; background: none; border: 0; color: var(--text); }
 .home-avatar { position: relative; flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--gold-dim); background: var(--bg); color: var(--gold); font-size: 1.25rem; font-weight: 800; }
@@ -914,8 +915,10 @@ button.link.rollable { text-decoration: none; padding: 0; min-height: 0; }
 .app-full { overflow-x: hidden; overflow-x: clip; }
 .stage { position: relative; isolation: isolate; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .stage > .home { isolation: auto; }
-.stage[data-scene='play'] .home-hero { transform: translateX(-30%) scale(1.08); opacity: 0.5; }
-.stage:is([data-scene='join'], [data-scene='host']) .home-hero { transform: translateX(-62%) scale(1.16); opacity: 0.2; }
+/* It pans by growing and sliding at once, never by more than it grew, so no edge of it comes into view. */
+.stage[data-scene='play'] .home-hero { transform: scale(1.18) translateX(-5%); opacity: 0.5; }
+.stage:is([data-scene='join'], [data-scene='host']) .home-hero { transform: scale(1.4) translateX(-11%); opacity: 0.2; }
+.stage:not([data-scene='home']) .home-hero::after { opacity: 0; }
 .stage[data-scene='away'] .home-hero, .stage:has(> .panel) .home-hero { opacity: 0; }
 .app:has(.play-screen), .app:has(.stage > .panel) { height: 100dvh; }
 .app:has(.play-screen) { overflow: hidden; overflow: clip; }
