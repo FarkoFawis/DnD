@@ -444,13 +444,29 @@ describe('campaign sessions', () => {
     });
 
     const dmSeesLeave = nextState(first.dm, (s) => s.players.length === 0);
-    const kickedOut = new Promise<void>((resolve) => mira.once('session:ended', resolve));
+    const kickedOut = new Promise<void>((resolve) => mira.once('session:ended', () => resolve()));
     ok(await elsewhere.emitWithAck('session:leave'));
     await Promise.all([dmSeesLeave, kickedOut]);
     expect(ok(await elsewhere.emitWithAck('character:list')).characters.every((c) => c.inSession === null)).toBe(true);
     ok(await elsewhere.emitWithAck('session:join', { code: second.code, characterId: character.id }));
     expect(await elsewhere.emitWithAck('session:leave')).toEqual({ ok: true });
     expect(await elsewhere.emitWithAck('session:leave')).toMatchObject({ ok: false, error: 'You are not in a session.' });
+  });
+
+  it('stays up when a phone sends an event in the wrong shape', async () => {
+    const mira = await client(await login('Mira'));
+    const loose = mira as unknown as { emit: (...args: unknown[]) => void; emitWithAck: (...args: unknown[]) => Promise<Ack<object>> };
+    // One argument too many where only an answer is expected, and no answer function at all.
+    expect(await loose.emitWithAck('session:leave', { extra: true })).toEqual({ ok: false, error: 'You are not in a session.' });
+    expect(await loose.emitWithAck('combat:end', 1, 2, 3)).toMatchObject({ ok: false });
+    loose.emit('session:end');
+    loose.emit('character:list', 'no answer wanted');
+    loose.emit('combat:action');
+    // No input where one is expected.
+    expect(await loose.emitWithAck('character:update')).toMatchObject({ ok: false });
+    expect(await loose.emitWithAck('combat:action')).toMatchObject({ ok: false });
+    // The server still answers.
+    expect(ok(await mira.emitWithAck('character:list')).characters).toEqual([]);
   });
 
   it('rejects unknown codes', async () => {

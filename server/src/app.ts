@@ -131,6 +131,9 @@ function cleanText(value: unknown, max: number): string | null {
   return text.length > 0 && text.length <= max ? text : null;
 }
 
+/** Events whose only argument is the answer function; every other event is (input, ack). */
+const ACK_ONLY_EVENTS = new Set(['character:list', 'campaign:list', 'combat:end', 'session:start', 'session:leave', 'session:end']);
+
 /** Compares a typed code with the real one without giving away how much of it was right. */
 function sameText(given: unknown, expected: string): boolean {
   if (typeof given !== 'string') return false;
@@ -571,6 +574,34 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
 
   io.on('connection', (socket) => {
     const user = socket.data.user;
+
+    // What arrives is untrusted, its shape included. Every handler below is written as
+    // (ack) or (input, ack): this puts each event into that shape whatever was sent (an
+    // extra argument, a missing answer function), so no handler ever calls something
+    // that is not a function. What is in `input` is checked by the handlers themselves.
+    socket.use((packet, next) => {
+      const [event, ...args] = packet as unknown as [string, ...unknown[]];
+      const last = args[args.length - 1];
+      const ack = typeof last === 'function' ? last : () => {};
+      const input = typeof args[0] === 'function' ? undefined : args[0];
+      (packet as unknown[]).length = 0;
+      if (ACK_ONLY_EVENTS.has(event)) (packet as unknown[]).push(event, ack);
+      else (packet as unknown[]).push(event, input, ack);
+      next();
+    });
+    // A handler that throws must not take the server down in the middle of a game night:
+    // the phone gets an answer, the rest of the table plays on.
+    const listen = socket.on.bind(socket) as (event: string, handler: (...args: unknown[]) => void) => unknown;
+    (socket as { on: unknown }).on = (event: string, handler: (...args: unknown[]) => void) =>
+      listen(event, (...args: unknown[]) => {
+        try {
+          handler(...args);
+        } catch (e) {
+          console.error(`[socket] ${event} failed:`, e);
+          const ack = args[args.length - 1];
+          if (typeof ack === 'function') (ack as (res: unknown) => void)({ ok: false, error: 'Something went wrong on the server. Try again.' });
+        }
+      });
 
     const leaveCurrent = () => {
       const code = socket.data.code;

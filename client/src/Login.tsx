@@ -82,9 +82,9 @@ export function Login({ onLoggedIn }: { onLoggedIn: (r: LoginResult) => void }) 
             </label>
             {step === 'choose' && needsInvite && (
               <label>
-                Invite code
+                {t('Invite code')}
                 <input value={invite} onChange={(e) => setInvite(e.target.value)} autoComplete="off" autoCapitalize="none" autoCorrect="off" required />
-                <span className="small hint">Your DM gave it to you together with the link. You only need it this once.</span>
+                <span className="small hint">{t('Your DM gave it to you together with the link. You only need it this once.')}</span>
               </label>
             )}
             {step === 'choose' && (

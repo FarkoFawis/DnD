@@ -172,16 +172,24 @@ function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) 
     };
     return (
       <div className="still-in-session">
-        <h3 className="panel-heading">You are still in a session</h3>
+        <h3 className="panel-heading">{t('You are still in a session')}</h3>
         <p className="notice">
-          <strong>{stuck.data.name}</strong> is in session <strong>{sessionCode}</strong>
-          {stuck.campaign && <> ({stuck.campaign.name})</>}. Go back to it, or leave it to join another one.
+          {stuck.campaign
+            ? tj('{name} is in session {code} ({campaign}). Go back to it, or leave it to join another one.', {
+                name: <strong>{stuck.data.name}</strong>,
+                code: <strong>{sessionCode}</strong>,
+                campaign: stuck.campaign.name,
+              })
+            : tj('{name} is in session {code}. Go back to it, or leave it to join another one.', {
+                name: <strong>{stuck.data.name}</strong>,
+                code: <strong>{sessionCode}</strong>,
+              })}
         </p>
         <button className="primary" disabled={busy || game.status !== 'online'} onClick={() => void act(() => game.join(sessionCode))}>
-          Back to the session
+          {t('Back to the session')}
         </button>
         <button className="ghost" disabled={busy || game.status !== 'online'} onClick={() => void act(() => game.leave())}>
-          Leave it
+          {t('Leave it')}
         </button>
       </div>
     );
