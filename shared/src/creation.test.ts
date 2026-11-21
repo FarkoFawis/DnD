@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Content, describeRef, parsePack } from './content/index.ts';
+import { Content, describeRef, packWarnings, parsePack } from './content/index.ts';
 import { SRD } from './content/srd.ts';
 import { allProblems, buildCharacter, emptyChoices, pointBuySpent, spellAllowance, stepProblems, type CreationChoices } from './creation.ts';
 import { normalizeCharacter, sanitizeCharacterPatch } from './character.ts';
@@ -62,6 +62,86 @@ describe('SRD content', () => {
     expect(merged.spell('fireball')?.description).toBe('House version');
     expect(merged.spellsFor('wizard', 1).map((s) => s.id)).toContain('chromatic-orb');
     expect(merged.packOf('spells', 'chromatic-orb')?.name).toBe('Our PHB notes');
+  });
+  it('tidies what is inside a pack entry and says what it left out', () => {
+    const { pack, problems } = parsePack(
+      {
+        subclasses: [
+          {
+            id: 'diviner',
+            classId: 'wizard',
+            name: 'Diviner',
+            features: [
+              { level: 3, name: 'Portent', description: 'ok', uses: { max: [[3, 2], [14, 3]], resetOn: 'long', extra: 'dropped' } },
+              { level: 0, name: 'No level', description: 'x' },
+              { level: 6, name: 'Bad counter', description: 'x', uses: { max: 'many', resetOn: 'long' } },
+              'not a feature',
+            ],
+          },
+        ],
+        species: [
+          {
+            id: 'aasimar',
+            name: 'Aasimar',
+            size: 'Small or Medium',
+            speed: 30,
+            traits: [{ name: 'Healing Hands', description: 'ok', uses: { max: 1, resetOn: 'long' } }, { name: 42 }],
+            subspecies: { label: 'Revelation', options: [{ id: 'a', name: 'A', description: 'ok' }, { name: 'No id', description: 'x' }] },
+          },
+        ],
+        feats: [{ id: 'lucky', name: 'Lucky', category: 'origin', description: 'ok', uses: { max: 'pb', resetOn: 'sometimes' } }],
+      },
+      'phb',
+    );
+    expect(problems).toEqual([
+      'subclasses Diviner: feature No level: level must be 1-20 (left out).',
+      'subclasses Diviner: feature Bad counter: uses is not valid, so it gets no counter (see docs/content-packs.md).',
+      'subclasses Diviner: feature #4: name and description must be text (left out).',
+      'species Aasimar: trait #2: name and description must be text (left out).',
+      'species Aasimar: Revelation No id: id is required (left out).',
+      'feats Lucky: uses is not valid, so it gets no counter (see docs/content-packs.md).',
+    ]);
+    const merged = new Content([SRD, pack!]);
+    expect(merged.subclass('diviner')?.features).toEqual([
+      { level: 3, name: 'Portent', description: 'ok', uses: { max: [[3, 2], [14, 3]], resetOn: 'long' } },
+      { level: 6, name: 'Bad counter', description: 'x' },
+    ]);
+    expect(merged.speciesById('aasimar')?.traits.map((t) => t.name)).toEqual(['Healing Hands']);
+    expect(merged.speciesById('aasimar')?.subspecies?.options.map((o) => o.id)).toEqual(['a']);
+    expect(merged.feat('lucky')).toMatchObject({ name: 'Lucky' });
+    expect(merged.feat('lucky')?.uses).toBeUndefined();
+  });
+  it('warns about pack entries that load but point at nothing', () => {
+    const { pack } = parsePack(
+      {
+        subclasses: [{ id: 'typo', classId: 'wizzard', name: 'Typo', features: [{ level: 3, name: 'F', description: 'd' }] }],
+        backgrounds: [
+          {
+            id: 'farmer',
+            name: 'Farmer',
+            abilities: ['str', 'con', 'wis'],
+            skills: ['nature', 'animalHandling'],
+            feat: 'tough',
+            equipment: [{ label: 'A', gp: 30, items: [{ ref: 'sickle', qty: 1 }, { ref: 'no-such-item', qty: 1 }] }],
+          },
+        ],
+        spells: [
+          { id: 'fire-bolt-2', name: 'Fire Bolt', level: 0, classes: ['wizard'], description: 'd' },
+          { id: 'new-spell', name: 'New Spell', level: 1, classes: ['bardd'], description: 'd' },
+        ],
+      },
+      'phb',
+    );
+    expect(packWarnings(pack!, [SRD])).toEqual([
+      'spells Fire Bolt: there already is one with this name (id "fire-bolt"). Use that id to replace it, or players will see both.',
+      'subclasses Typo: there is no class with the id "wizzard".',
+      'backgrounds Farmer: there is no feat with the id "tough" (yet).',
+      'backgrounds Farmer: equipment "no-such-item" is not an item id.',
+      'spells New Spell: there is no class with the id "bardd".',
+    ]);
+    // A clean pack has nothing to say.
+    const clean = parsePack({ feats: [{ id: 'tough', name: 'Tough', category: 'origin', description: 'd' }] }, 'phb').pack!;
+    expect(packWarnings(clean, [SRD])).toEqual([]);
   });
 });
 

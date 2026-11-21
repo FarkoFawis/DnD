@@ -806,7 +806,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
               : { kind: 'attack', name: String(req.name ?? '') };
         const spell = clean.kind === 'spell' ? t.ch.data.spells.find((x) => x.id === clean.spellId) : undefined;
         const def = spell?.ref ? gameContent().spell(spell.ref) : undefined;
-        const r = applyUse(t.ch.data, clean, { concentration: def?.concentration === true });
+        const r = applyUse(t.ch.data, clean, { concentration: def?.concentration === true }, gameContent());
         const character = store.updateCharacter(t.ch.id, {
           used: r.used,
           lastAction: { ...r.action, at: new Date().toISOString() },
@@ -931,7 +931,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
 
     /** A Short Rest in a session also lets the player spend Hit Dice on their own phone. */
     const restPatch = (ch: CharacterSummary, kind: 'short' | 'long'): Partial<CharacterData> => ({
-      ...applyRest(ch.data, kind),
+      ...applyRest(ch.data, kind, gameContent()),
       ...(kind === 'short' && ch.inSession ? { resting: canSpendHitDice(ch.data) } : {}),
     });
 
@@ -1364,7 +1364,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       if (input?.kind !== 'short' && input?.kind !== 'long') return ack({ ok: false, error: 'Short or long rest?' });
       for (const p of store.sessionPlayers(code)) {
         const ch = store.getCharacter(p.characterId);
-        if (ch) store.updateCharacter(ch.id, { ...applyRest(ch.data, input.kind), ...(input.kind === 'short' ? { resting: canSpendHitDice(ch.data) } : {}) });
+        if (ch) store.updateCharacter(ch.id, { ...applyRest(ch.data, input.kind, gameContent()), ...(input.kind === 'short' ? { resting: canSpendHitDice(ch.data) } : {}) });
       }
       const live = store.getSession(code);
       if (live?.started && live.sessionNo) store.addLog(live.campaignId, live.sessionNo, { kind: 'rest', who: '', what: input.kind });

@@ -7,8 +7,10 @@
  * by the ids below). The maximums are always computed from class, level and
  * ability scores, so a level-up or a new score changes them with no migration.
  */
+import type { Content } from './content/index.ts';
+import type { UsesDef } from './content/types.ts';
 import type { CharacterData, Concentration, LastAction } from './protocol.ts';
-import { abilityModifier, proficiencyBonus } from './rules.ts';
+import { ABILITIES, abilityModifier, proficiencyBonus, type Ability } from './rules.ts';
 import { applyDamageOrHealing, isDead } from './status.ts';
 import { msg, ordinal, t } from './i18n.ts';
 
@@ -97,8 +99,34 @@ const byLevel = (level: number, steps: [number, number][]) => {
   return v;
 };
 
-/** Class and species features with limited uses (2024 SRD), plus the character's own custom ones. */
-export function limitedUses(c: CharacterData): LimitedUse[] {
+/** Where a feature ref (class:… subclass:… species:… subspecies:… feat:…) keeps its `uses` in the content. */
+function usesOfRef(content: Content, ref: string): UsesDef | undefined {
+  const [kind, id = '', name = ''] = ref.split(':');
+  switch (kind) {
+    case 'class':
+      return content.class(id)?.features.find((f) => f.name === name)?.uses;
+    case 'subclass':
+      return content.subclass(id)?.features.find((f) => f.name === name)?.uses;
+    case 'species':
+      return content.speciesById(id)?.traits.find((t) => t.name === name)?.uses;
+    case 'subspecies':
+      return content.speciesById(id)?.subspecies?.options.find((o) => o.id === name)?.uses;
+    case 'feat':
+      return content.feat(id)?.uses;
+    default:
+      return undefined;
+  }
+}
+
+/** Key in CharacterData.used for a counter that a content pack gives a feature. */
+export const packUseId = (ref: string) => `f:${ref}`.slice(0, 80);
+
+/**
+ * Class and species features with limited uses (2024 SRD), counters that
+ * content packs give to the character's features (`uses` in a pack, needs the
+ * content), plus the character's own custom ones.
+ */
+export function limitedUses(c: CharacterData, content?: Content | null): LimitedUse[] {
   const level = clampLevel(c.level);
   const pb = proficiencyBonus(level);
   const mod = (a: keyof CharacterData['abilities']) => abilityModifier(c.abilities[a]);
@@ -186,6 +214,23 @@ export function limitedUses(c: CharacterData): LimitedUse[] {
       break;
   }
 
+  if (content) {
+    for (const f of c.features) {
+      if (!f.ref || out.some((u) => u.ref === f.ref)) continue;
+      const def = usesOfRef(content, f.ref);
+      if (!def) continue;
+      const m = def.max;
+      const max =
+        typeof m === 'number' ? m
+        : m === 'pb' ? pb
+        : m === 'level' ? level
+        : Array.isArray(m) ? byLevel(level, m)
+        : (ABILITIES as readonly string[]).includes(m) ? Math.max(1, mod(m as Ability))
+        : 0;
+      add({ id: packUseId(f.ref), name: def.name ?? f.name, max, resetOn: def.resetOn, ref: f.ref, ...(def.pool ? { pool: true } : {}) });
+    }
+  }
+
   for (const r of c.customResources) add({ id: `custom:${r.id}`, name: r.name, max: r.max, resetOn: r.resetOn });
   return out;
 }
@@ -214,6 +259,8 @@ export function applyUse(
   req: UseRequest,
   /** Whether the spell being cast needs concentration (from the content; the sheet doesn't store it). */
   spellInfo: { concentration?: boolean; ref?: string } = {},
+  /** For counters that content packs give to features. */
+  content?: Content | null,
 ): { used: Record<string, number>; action: Omit<LastAction, 'at'>; concentration?: Concentration } {
   const next = { ...c.used };
   if (req.kind === 'attack') {
@@ -237,7 +284,7 @@ export function applyUse(
     next[slot.id] = used(c, slot.id) + 1;
     return { used: next, action: { name: spell.name, detail: t('{nth}-level slot', { nth: ordinal(slot.level) }), kind: 'spell' }, ...conc };
   }
-  const u = limitedUses(c).find((x) => x.id === req.useId);
+  const u = limitedUses(c, content).find((x) => x.id === req.useId);
   if (!u) throw new Error(t('That feature has no limited uses.'));
   const amount = u.pool ? Math.floor(req.amount ?? 1) : 1;
   if (!(amount >= 1)) throw new Error(t('Invalid amount.'));
@@ -255,7 +302,7 @@ export function applyUse(
  * max, temporary HP goes away, one Exhaustion level is removed and
  * concentration ends (2024 rules).
  */
-export function applyRest(c: CharacterData, kind: 'short' | 'long'): Partial<CharacterData> {
+export function applyRest(c: CharacterData, kind: 'short' | 'long', content?: Content | null): Partial<CharacterData> {
   if (c.deathSaves.failures >= 3) return {}; // the dead don't rest
   if (kind === 'long') {
     return {
@@ -272,7 +319,7 @@ export function applyRest(c: CharacterData, kind: 'short' | 'long'): Partial<Cha
   }
   const next = { ...c.used };
   for (const s of spellSlots(c)) if (s.pact) delete next[s.id];
-  for (const u of limitedUses(c)) {
+  for (const u of limitedUses(c, content)) {
     if (u.resetOn === 'short') delete next[u.id];
     else if (u.resetOn === 'shortOne' && next[u.id]) next[u.id] = next[u.id]! - 1;
   }

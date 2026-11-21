@@ -9,6 +9,7 @@ import type {
   SpeciesDef,
   SpellDef,
   SubclassDef,
+  UsesDef,
 } from './types.ts';
 
 export * from './types.ts';
@@ -132,6 +133,86 @@ const DEFAULTS: { [K in Kind]: Record<string, unknown> } = {
   items: { category: '', description: '' },
 };
 
+/** A `uses` counter from a pack, or null when it can't be used as written. */
+function cleanUses(v: unknown): UsesDef | null {
+  if (!isObj(v) || !['short', 'shortOne', 'long'].includes(v.resetOn as string)) return null;
+  const m = v.max;
+  const count = (n: unknown) => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= 999;
+  const okMax =
+    count(m) ||
+    m === 'pb' ||
+    m === 'level' ||
+    ABILITY_SET.has(m as string) ||
+    (Array.isArray(m) && m.length > 0 && m.length <= 20 && m.every((p) => Array.isArray(p) && p.length === 2 && count(p[0]) && count(p[1])));
+  if (!okMax) return null;
+  return {
+    max: m as UsesDef['max'],
+    resetOn: v.resetOn as UsesDef['resetOn'],
+    ...(v.pool === true ? { pool: true } : {}),
+    ...(str(v.name, 80) ? { name: v.name as string } : {}),
+  };
+}
+
+/**
+ * The named parts inside an entry (features of a class or subclass, traits and
+ * lineages of a species): drops the ones that can't be shown and tidies their
+ * `uses`. `needs` are the fields every part must have.
+ */
+function cleanParts(list: unknown, where: string, needs: 'level' | 'id' | null, problems: string[]): Record<string, unknown>[] {
+  if (list === undefined) return [];
+  if (!Array.isArray(list)) {
+    problems.push(`${where} must be a list (left out).`);
+    return [];
+  }
+  const out: Record<string, unknown>[] = [];
+  list.forEach((f, i) => {
+    const label = isObj(f) && typeof f.name === 'string' ? f.name : `#${i + 1}`;
+    if (!isObj(f) || !str(f.name, 120) || (f.description !== undefined && typeof f.description !== 'string')) {
+      problems.push(`${where} ${label}: name and description must be text (left out).`);
+      return;
+    }
+    if (needs === 'level' && !(Number.isInteger(f.level) && (f.level as number) >= 1 && (f.level as number) <= 20)) {
+      problems.push(`${where} ${label}: level must be 1-20 (left out).`);
+      return;
+    }
+    if (needs === 'id' && !str(f.id, 64)) {
+      problems.push(`${where} ${label}: id is required (left out).`);
+      return;
+    }
+    out.push(withCleanUses({ description: '', ...f }, `${where} ${label}`, problems));
+  });
+  return out;
+}
+
+function withCleanUses(e: Record<string, unknown>, where: string, problems: string[]): Record<string, unknown> {
+  if (e.uses === undefined) return e;
+  const uses = cleanUses(e.uses);
+  if (uses) return { ...e, uses };
+  problems.push(`${where}: uses is not valid, so it gets no counter (see docs/content-packs.md).`);
+  const { uses: _dropped, ...rest } = e;
+  return rest;
+}
+
+/** Tidies what is nested inside an entry that passed its check. */
+function cleanEntry(kind: Kind, e: Record<string, unknown>, label: string, problems: string[]): Record<string, unknown> {
+  const where = `${kind} ${label}`;
+  if (kind === 'classes' || kind === 'subclasses') return { ...e, features: cleanParts(e.features, `${where}: feature`, 'level', problems) };
+  if (kind === 'feats') return withCleanUses(e, where, problems);
+  if (kind === 'species') {
+    const out: Record<string, unknown> = { ...e, traits: cleanParts(e.traits, `${where}: trait`, null, problems) };
+    if (e.subspecies !== undefined) {
+      const sub = e.subspecies;
+      if (isObj(sub) && str(sub.label, 80)) out.subspecies = { label: sub.label, options: cleanParts(sub.options, `${where}: ${sub.label}`, 'id', problems) };
+      else {
+        problems.push(`${where}: subspecies needs a label and options (left out).`);
+        delete out.subspecies;
+      }
+    }
+    return out;
+  }
+  return e;
+}
+
 /**
  * Validates a content pack read from a file. Bad entries are dropped with a
  * reason instead of failing the whole pack.
@@ -160,10 +241,55 @@ export function parsePack(raw: unknown, fallbackId: string): { pack: ContentPack
       }
       const reason = CHECKS[kind](e);
       if (reason) problems.push(`${kind} ${label}: ${reason}.`);
-      else ok.push({ ...DEFAULTS[kind], ...e });
+      else ok.push(cleanEntry(kind, { ...DEFAULTS[kind], ...e }, label, problems));
     });
     (pack as unknown as Record<string, unknown>)[kind] = ok;
   }
   return { pack, problems };
 }
 export * from './attacks.ts';
+
+/**
+ * Things in a pack that load fine but probably aren't what was meant: ids that
+ * point at nothing, the same thing entered twice. For `npm run content`.
+ * `base` are the packs loaded before it (the SRD first).
+ */
+export function packWarnings(pack: ContentPack, base: ContentPack[]): string[] {
+  const all = new Content([...base, pack]);
+  const before = new Content(base);
+  const w: string[] = [];
+  const slug = (n: string) => n.trim().toLowerCase();
+
+  for (const kind of KINDS) {
+    const seen = new Set<string>();
+    const earlier = new Map<string, string>();
+    for (const p of base) for (const e of p[kind] ?? []) earlier.set(slug(e.name), e.id);
+    for (const e of pack[kind] ?? []) {
+      if (seen.has(e.id)) w.push(`${kind} ${e.name}: the id "${e.id}" is used twice in this pack; only the last one counts.`);
+      seen.add(e.id);
+      const other = earlier.get(slug(e.name));
+      if (other && other !== e.id) w.push(`${kind} ${e.name}: there already is one with this name (id "${other}"). Use that id to replace it, or players will see both.`);
+    }
+  }
+  for (const s of pack.subclasses ?? []) {
+    if (!all.class(s.classId)) w.push(`subclasses ${s.name}: there is no class with the id "${s.classId}".`);
+    if (s.features.length === 0) w.push(`subclasses ${s.name}: has no features yet.`);
+  }
+  for (const b of pack.backgrounds ?? []) {
+    if (!b.feat) w.push(`backgrounds ${b.name}: has no origin feat.`);
+    else if (!all.feat(b.feat)) w.push(`backgrounds ${b.name}: there is no feat with the id "${b.feat}" (yet).`);
+    for (const opt of b.equipment) {
+      for (const piece of opt.items ?? []) {
+        const refs = 'ref' in piece ? [piece.ref] : piece.from;
+        for (const ref of refs) if (!all.item(ref)) w.push(`backgrounds ${b.name}: equipment "${ref}" is not an item id.`);
+      }
+    }
+  }
+  for (const sp of pack.spells ?? []) {
+    for (const c of sp.classes) if (!all.class(c)) w.push(`spells ${sp.name}: there is no class with the id "${c}".`);
+    if (sp.classes.length === 0 && !before.spell(sp.id)) w.push(`spells ${sp.name}: is on no class's spell list, so nobody can pick it.`);
+    if (!sp.description) w.push(`spells ${sp.name}: has no description.`);
+  }
+  for (const f of pack.feats ?? []) if (!f.description) w.push(`feats ${f.name}: has no description.`);
+  return w;
+}
