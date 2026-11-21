@@ -1,0 +1,16 @@
+# Never into the image: local databases, uploaded pictures and private content packs.
+server/data
+**/*.sqlite
+**/*.sqlite-*
+.env
+**/*.dnd-backup.json
+
+node_modules
+**/node_modules
+**/dist
+**/dev-dist
+.git
+.github
+docs
+*.md
+*.log

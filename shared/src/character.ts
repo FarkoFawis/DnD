@@ -1,7 +1,9 @@
 import {
+  ACTION_KINDS,
   COINS,
   DEFAULT_CHARACTER,
   LIMITS,
+  type ActionKind,
   type CharacterData,
   type CharacterFeature,
   type CustomResource,
@@ -98,6 +100,7 @@ function sanitizeLastAction(v: unknown): LastAction | null {
     name: text(v.name, 'action name', 80),
     ...(v.detail ? { detail: text(v.detail, 'action detail', 80) } : {}),
     ...(v.roll === true ? { roll: true } : {}),
+    ...(ACTION_KINDS.includes(v.kind as ActionKind) ? { kind: v.kind as ActionKind } : {}),
     at: text(v.at, 'action time', 40),
   };
 }
@@ -174,6 +177,10 @@ const FIELDS: { [K in Field]: (v: unknown) => CharacterData[K] } = {
   deathSaves: (v) => {
     if (!isObj(v)) throw new Invalid('Invalid death saves.');
     return { successes: int(v.successes, 'death save successes', 0, 3), failures: int(v.failures, 'death save failures', 0, 3) };
+  },
+  inspiration: (v) => {
+    if (typeof v !== 'boolean') throw new Invalid('Invalid Heroic Inspiration.');
+    return v;
   },
   portrait: (v) => text(v, 'portrait', 40),
   notes: (v) => text(v, 'notes', LIMITS.notesMaxLength),

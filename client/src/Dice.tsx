@@ -4,8 +4,7 @@
  * throws the dice and the DM gets the result (`RollToasts` on the DM's screen,
  * and the last roll on the player's party card).
  */
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   planFormula,
   planRoll,
@@ -17,17 +16,22 @@ import {
   type RollMode,
   type RollPlan,
   type RollRequest,
+  naturalText,
 } from '@dnd/shared';
+import { BottomSheet } from './BottomSheet.tsx';
+import { burst, move } from './fx/fx.ts';
+import { motionOn } from './settings.ts';
+import { t, tx } from './i18n.tsx';
 
 type Roll = (req: RollRequest, mode: RollMode) => Promise<DiceRoll | null>;
 
 const isAttack = (r: { kind: RollRequest['kind'] }) => r.kind === 'attack' || r.kind === 'spellAttack';
 
 /** What a natural 20 or 1 means for this roll, if anything. */
-function naturalText(r: DiceRoll): string | null {
+function naturalLine(r: DiceRoll): string | null {
   if (r.natural === null) return null;
-  if (isAttack(r)) return r.natural === 20 ? 'Natural 20: a critical hit!' : 'Natural 1: a miss.';
-  return `Natural ${r.natural}.`;
+  if (isAttack(r)) return r.natural === 20 ? t('Natural 20: a critical hit!') : t('Natural 1: a miss.');
+  return t('Natural {n}.', { n: r.natural });
 }
 
 function tryPlan(c: CharacterData, req: RollRequest, content: Content | null): RollPlan | null {
@@ -80,17 +84,18 @@ export function RollSheet({
       if (!p) return null;
       return (
         <button key={String(twoHanded)} type="button" className="secondary" disabled={busy} onClick={() => void run(req, 'normal')}>
-          {twoHanded ? 'Two-handed' : crit ? 'Roll critical damage' : 'Roll damage'} <span className="small">{planFormula(p)}</span>
+          {twoHanded ? t('Two-handed') : crit ? t('Roll critical damage') : t('Roll damage')} <span className="small">{planFormula(p)}</span>
         </button>
       );
     };
     return <div className="roll-next">{option(false)}{weapon?.versatileDice && option(true)}</div>;
   };
 
-  return createPortal(
-    <div className="info-backdrop" onClick={onClose}>
-      <div className="info-sheet roll-sheet" role="dialog" aria-label={plan?.label ?? 'Roll'} onClick={(e) => e.stopPropagation()}>
-        <h3 className="info-title">{latest?.label ?? plan?.label ?? 'Roll'}</h3>
+  return (
+    <BottomSheet label={plan?.label ?? t('Roll')} className="roll-sheet" onClose={onClose}>
+      {(close) => (
+        <>
+        <h3 className="info-title">{latest ? tx(latest.label) : (plan?.label ?? t('Roll'))}</h3>
         {!latest && plan && (
           <>
             <p className="roll-formula">{planFormula(plan)}</p>
@@ -99,37 +104,74 @@ export function RollSheet({
                 {plan.parts.map((p) => `${p.label} ${p.value > 0 ? '+' : '-'}${Math.abs(p.value)}`).join(' · ')}
               </p>
             )}
-            <div className="roll-modes" role="group" aria-label="How to roll">
-              <button type="button" className="secondary" disabled={busy} onClick={() => void run(request, 'disadvantage')}>Disadvantage</button>
-              <button type="button" className="primary" disabled={busy} onClick={() => void run(request, 'normal')}>Roll</button>
-              <button type="button" className="secondary" disabled={busy} onClick={() => void run(request, 'advantage')}>Advantage</button>
+            <div className="roll-modes" role="group" aria-label={t('How to roll')}>
+              <button type="button" className="secondary" disabled={busy} onClick={() => void run(request, 'disadvantage')}>{t('Disadvantage')}</button>
+              <button type="button" className="primary" disabled={busy} onClick={() => void run(request, 'normal')}>{t('Roll')}</button>
+              <button type="button" className="secondary" disabled={busy} onClick={() => void run(request, 'advantage')}>{t('Advantage')}</button>
             </div>
-            <p className="muted small hint roll-note">Advantage and Disadvantage roll two d20 and keep the higher or the lower one.</p>
+            <p className="muted small hint roll-note">{t('Advantage and Disadvantage roll two d20 and keep the higher or the lower one.')}</p>
           </>
         )}
-        {!latest && !plan && <p className="muted">Loading…</p>}
+        {!latest && !plan && <p className="muted">{t('Loading…')}</p>}
         {latest && (
           <div className="roll-result" role="status" aria-live="polite">
             {latest.kind === 'damage' && attack && (
-              <p className="muted small roll-earlier">{attack.label}: {attack.total}{attack.natural === 20 ? ', critical hit' : ''}</p>
+              <p className="muted small roll-earlier">{tx(attack.label)}: {attack.total}{attack.natural === 20 ? `, ${t('critical hit')}` : ''}</p>
             )}
-            <p key={latest.id} className={`roll-total ${latest.natural === 20 ? 'high' : latest.natural === 1 ? 'low' : ''}`}>
-              {latest.total}
-              {latest.note && <span className="roll-unit"> {latest.note.toLowerCase()}</span>}
-            </p>
+            <RollTotal key={latest.id} roll={latest} />
             <p className="roll-breakdown">
               {rollBreakdown(latest)}
-              {latest.mode !== 'normal' && <span className="muted"> · {latest.mode}</span>}
+              {latest.mode !== 'normal' && <span className="muted"> · {t(latest.mode)}</span>}
             </p>
-            {naturalText(latest) && <p className={`roll-natural ${latest.natural === 20 ? 'high' : 'low'}`}>{naturalText(latest)}</p>}
+            {naturalLine(latest) && <p className={`roll-natural ${latest.natural === 20 ? 'high' : 'low'}`}>{naturalLine(latest)}</p>}
             {damageButtons()}
-            {shared && <p className="muted small roll-note">Your DM sees this roll.</p>}
+            {shared && <p className="muted small roll-note">{t('Your DM sees this roll.')}</p>}
           </div>
         )}
-        <button className="secondary info-close" onClick={onClose}>Close</button>
-      </div>
-    </div>,
-    document.body,
+        <button className="secondary info-close" onClick={close}>{t('Close')}</button>
+        </>
+      )}
+    </BottomSheet>
+  );
+}
+
+/** How long the number tumbles before it lands. */
+const TUMBLE_MS = 520;
+
+/**
+ * The big number of a roll. It tumbles through other numbers for half a
+ * second, with a die spinning behind it, and then lands on the result the
+ * server rolled: a natural 20 bursts into rays, a natural 1 shudders.
+ */
+function RollTotal({ roll }: { roll: DiceRoll }) {
+  const [tumbling, setTumbling] = useState(motionOn);
+  const [fake, setFake] = useState(roll.total);
+  const el = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (!tumbling) return;
+    // Only for show: any number the dice could plausibly land on.
+    const top = roll.kind === 'damage' ? Math.max(4, roll.total * 2) : Math.max(20, roll.total + 4);
+    const spin = setInterval(() => setFake(1 + Math.floor(Math.random() * top)), 60);
+    const land = setTimeout(() => {
+      setTumbling(false);
+      if (roll.natural === 20) burst('crit', el.current);
+      if (roll.natural === 1) move(el.current, 'shake');
+    }, TUMBLE_MS);
+    return () => {
+      clearInterval(spin);
+      clearTimeout(land);
+    };
+    // Each roll gets a RollTotal of its own (keyed by its id), so this runs once.
+  }, []);
+  const mood = roll.natural === 20 ? 'high' : roll.natural === 1 ? 'low' : '';
+  return (
+    <p ref={el} className={`roll-total ${tumbling ? 'tumbling' : `landed ${mood}`}`} aria-hidden={tumbling || undefined}>
+      <svg className="roll-die" viewBox="0 0 200 220" aria-hidden>
+        <path d="M100 10 182 58v104l-82 48-82-48V58zM100 10 60 82h80zM60 82 18 58M140 82l42-24M60 82l40 76 40-76M100 158v52M60 82 18 162M140 82l42 80M100 158l-82 4M100 158l82 4" />
+      </svg>
+      <span className="roll-number">{tumbling ? fake : roll.total}</span>
+      {roll.note && !tumbling && <span className="roll-unit"> {tx(roll.note.toLowerCase())}</span>}
+    </p>
   );
 }
 
@@ -138,35 +180,46 @@ const TOAST_MS = 8000;
 /** DM: each roll a player makes pops up at the top of the screen for a few seconds. */
 export function RollToasts({ rolls }: { rolls: DiceRoll[] }) {
   const [shown, setShown] = useState<DiceRoll[]>([]);
+  /** Toasts on their way out: they slide away first, then they are taken off the page. */
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
   /** Rolls that were already there when the screen opened are old news. */
   const seen = useRef(new Set(rolls.map((r) => r.id)));
+  const dismiss = useCallback((id: string) => {
+    const remove = () => {
+      setShown((list) => list.filter((x) => x.id !== id));
+      setLeaving((set) => new Set([...set].filter((x) => x !== id)));
+    };
+    if (!motionOn()) return remove();
+    setLeaving((set) => new Set(set).add(id));
+    setTimeout(remove, 220);
+  }, []);
   useEffect(() => {
     const fresh = rolls.filter((r) => !seen.current.has(r.id));
     if (fresh.length === 0) return;
     for (const r of fresh) {
       seen.current.add(r.id);
-      setTimeout(() => setShown((list) => list.filter((x) => x.id !== r.id)), TOAST_MS);
+      setTimeout(() => dismiss(r.id), TOAST_MS);
     }
     setShown((list) => [...list, ...fresh].slice(-3));
-  }, [rolls]);
+  }, [rolls, dismiss]);
   if (shown.length === 0) return null;
   return (
-    <div className="roll-toasts" role="log" aria-live="polite" aria-label="Dice rolls">
+    <div className="roll-toasts" role="log" aria-live="polite" aria-label={t('Dice rolls')}>
       {shown.map((r) => (
         <button
           key={r.id}
           type="button"
-          className={`roll-toast ${r.natural === 20 ? 'high' : r.natural === 1 ? 'low' : ''}`}
-          onClick={() => setShown((list) => list.filter((x) => x.id !== r.id))}
+          className={`roll-toast ${r.natural === 20 ? 'high' : r.natural === 1 ? 'low' : ''} ${leaving.has(r.id) ? 'leaving' : ''}`}
+          onClick={() => dismiss(r.id)}
         >
           <span className="roll-toast-total">{r.total}</span>
           <span className="grow">
-            <strong>{r.who}</strong> · {r.label}
+            <strong>{r.who}</strong> · {tx(r.label)}
             <span className="muted small block">
               {rollBreakdown(r)}
-              {r.note && ` ${r.note.toLowerCase()}`}
-              {r.mode !== 'normal' && ` · ${r.mode}`}
-              {r.natural !== null && ` · ${isAttack(r) ? (r.natural === 20 ? 'critical hit' : 'natural 1') : `natural ${r.natural}`}`}
+              {r.note && ` ${tx(r.note.toLowerCase())}`}
+              {r.mode !== 'normal' && ` · ${t(r.mode)}`}
+              {r.natural !== null && ` · ${naturalText(r)}`}
             </span>
           </span>
         </button>

@@ -16,6 +16,7 @@ import {
   type HitDieSpent,
 } from '@dnd/shared';
 import { Pips } from './Uses.tsx';
+import { t } from './i18n.tsx';
 
 export function HitDice({
   character: c,
@@ -58,18 +59,18 @@ export function HitDice({
     <div className="hitdice">
       <div className="hitdice-head">
         <span className="grow">
-          <strong>Hit Dice</strong> <span className="muted small">d{die} · {left} of {c.level} left</span>
+          <strong>{t('Hit Dice')}</strong> <span className="muted small">{t('d{die} · {left} of {level} left', { die, left, level: c.level })}</span>
         </span>
-        <Pips max={c.level} spent={used(c, HIT_DICE_ID)} onRestore={onRestore} label="Hit Die" />
+        <Pips max={c.level} spent={used(c, HIT_DICE_ID)} onRestore={onRestore} label={t('Hit Die')} />
       </div>
       {onSpend &&
         (left === 0 ? (
-          <p className="muted small">None left. They come back after a Long Rest.</p>
+          <p className="muted small">{t('None left. They come back after a Long Rest.')}</p>
         ) : c.hpCurrent >= c.hpMax ? (
-          <p className="muted small">At full HP, nothing to heal.</p>
+          <p className="muted small">{t('At full HP, nothing to heal.')}</p>
         ) : (
           <>
-            <p className="muted small">On a Short Rest each one heals a d{die} roll{plus}{mod !== 0 && ' (Constitution)'}, at least 1 HP.</p>
+            <p className="muted small">{mod === 0 ? t('On a Short Rest each one heals a d{die} roll, at least 1 HP.', { die }) : t('On a Short Rest each one heals a d{die} roll{plus} (Constitution), at least 1 HP.', { die, plus })}</p>
             <form
               className="hitdice-spend"
               onSubmit={(e) => {
@@ -82,21 +83,21 @@ export function HitDice({
                 inputMode="numeric"
                 min={1}
                 max={die}
-                placeholder={`Your d${die} roll`}
-                aria-label={`What your d${die} shows`}
+                placeholder={t('Your d{die} roll', { die })}
+                aria-label={t('What your d{die} shows', { die })}
                 value={roll}
                 onChange={(e) => setRoll(e.target.value)}
               />
-              <button type="submit" className="use-button" disabled={!valid || busy}>Heal</button>
+              <button type="submit" className="use-button" disabled={!valid || busy}>{t('Heal')}</button>
               {canRoll && (
-                <button type="button" className="use-button" disabled={busy} onClick={() => void spend()}>Roll for me</button>
+                <button type="button" className="use-button" disabled={busy} onClick={() => void spend()}>{t('Roll for me')}</button>
               )}
             </form>
           </>
         ))}
       {last && (
         <p className="hitdice-result" role="status">
-          Rolled {last.roll}{last.modifier === 0 ? '' : last.modifier > 0 ? ` + ${last.modifier}` : ` - ${-last.modifier}`}: <strong>+{last.healed} HP</strong>
+          {t('Rolled {n}', { n: last.roll })}{last.modifier === 0 ? '' : last.modifier > 0 ? ` + ${last.modifier}` : ` - ${-last.modifier}`}: <strong>{t('+{n} HP', { n: last.healed })}</strong>
         </p>
       )}
     </div>

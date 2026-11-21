@@ -22,6 +22,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // The fonts too, so an installed app has them offline and from the first paint.
+        globPatterns: ['**/*.{js,css,html,woff2}'],
         // Never cache the realtime connection.
         navigateFallbackDenylist: [/^\/socket\.io/, /^\/api/],
       },

@@ -7,6 +7,9 @@ import type { ReactNode } from 'react';
 export function Page(props: { side: 'left' | 'right'; shown: number; dragging: boolean; open: boolean; children: ReactNode }) {
   const away = (1 - props.shown) * 100;
   return (
+    <>
+    {/* The page underneath dims as this one comes over it. */}
+    <div className={`page-scrim ${props.dragging ? '' : 'settle'}`} style={{ opacity: props.shown * 0.55 }} aria-hidden />
     <div
       className={`party-panel from-${props.side} ${props.dragging ? '' : 'settle'}`}
       style={{
@@ -18,5 +21,6 @@ export function Page(props: { side: 'left' | 'right'; shown: number; dragging: b
     >
       {props.children}
     </div>
+    </>
   );
 }

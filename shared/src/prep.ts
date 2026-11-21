@@ -3,6 +3,7 @@
  * handouts to show on the players' phones, and NPCs / opponents.
  */
 import { ABILITIES, abilityModifier, type Ability } from './rules.ts';
+import { t } from './i18n.ts';
 
 /** A picture and/or a piece of text the DM can put on every player's screen. */
 export interface Handout {
@@ -67,36 +68,36 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 
 function text(v: unknown, field: string, max: number): string {
   if (v === undefined || v === null) return '';
-  if (typeof v !== 'string' || v.length > max) throw new Error(`The ${field} is too long.`);
+  if (typeof v !== 'string' || v.length > max) throw new Error(t('The {field} is too long.', { field }));
   return v.trim();
 }
 
 function int(v: unknown, field: string, min: number, max: number, fallback: number): number {
   if (v === undefined) return fallback;
   if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) {
-    throw new Error(`The ${field} must be a whole number from ${min} to ${max}.`);
+    throw new Error(t('The {field} must be a whole number from {min} to {max}.', { field, min, max }));
   }
   return v;
 }
 
 /** Validates a handout coming from a client. Throws an Error with a message for the user. */
 export function sanitizeHandout(v: unknown): Omit<Handout, 'id'> {
-  if (!isObj(v)) throw new Error('Invalid handout.');
+  if (!isObj(v)) throw new Error(t('Invalid handout.'));
   const title = text(v.title, 'title', PREP_LIMITS.titleMaxLength);
   const body = text(v.text, 'text', PREP_LIMITS.handoutTextMaxLength);
   const imageUrl = v.imageUrl === null || v.imageUrl === undefined || v.imageUrl === '' ? null : v.imageUrl;
   if (imageUrl !== null && (typeof imageUrl !== 'string' || !IMAGE_URL_PATTERN.test(imageUrl))) {
-    throw new Error('Invalid picture.');
+    throw new Error(t('Invalid picture.'));
   }
-  if (!title) throw new Error('Give the handout a title.');
-  if (!body && !imageUrl) throw new Error('Add a picture or some text.');
+  if (!title) throw new Error(t('Give the handout a title.'));
+  if (!body && !imageUrl) throw new Error(t('Add a picture or some text.'));
   return { title, text: body, imageUrl };
 }
 
 export function sanitizeNpc(v: unknown): Omit<Npc, 'id'> {
-  if (!isObj(v)) throw new Error('Invalid NPC.');
+  if (!isObj(v)) throw new Error(t('Invalid NPC.'));
   const name = text(v.name, 'name', PREP_LIMITS.titleMaxLength);
-  if (!name) throw new Error('Give them a name.');
+  if (!name) throw new Error(t('Give them a name.'));
   const raw = isObj(v.abilities) ? v.abilities : {};
   const abilities = Object.fromEntries(
     ABILITIES.map((a) => [a, int(raw[a], `${a.toUpperCase()} score`, 1, 30, 10)]),

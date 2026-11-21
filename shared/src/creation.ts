@@ -7,6 +7,7 @@ import type { Content } from './content/index.ts';
 import type { ClassDef, EquipmentOption, SpeciesDef } from './content/types.ts';
 import type { CharacterData, CharacterFeature, Item, Spell } from './protocol.ts';
 import { ABILITIES, ABILITY_NAMES, SKILLS, abilityModifier, proficiencyBonus, type Ability, type Skill } from './rules.ts';
+import { plural, t, tx } from './i18n.ts';
 
 export const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8] as const;
 export const POINT_BUY_BUDGET = 27;
@@ -237,60 +238,60 @@ export function stepProblems(step: Step, c: CreationChoices, content: Content): 
   const cls = chosenClass(c, content);
   switch (step) {
     case 'class': {
-      if (!cls) return ['Pick a class.'];
+      if (!cls) return [t('Pick a class.')];
       if (c.classId === CUSTOM) {
-        if (!c.customClass.name.trim()) p.push('Name your homebrew class.');
-        if (c.customClass.saves.length !== 2) p.push('Pick two saving throws.');
+        if (!c.customClass.name.trim()) p.push(t('Name your homebrew class.'));
+        if (c.customClass.saves.length !== 2) p.push(t('Pick two saving throws.'));
       }
-      if (c.level >= cls.subclassLevel && !c.subclassId) p.push(`Pick a subclass (you are level ${c.level}).`);
-      if (c.subclassId === CUSTOM && !c.customSubclass.trim()) p.push('Name your homebrew subclass.');
+      if (c.level >= cls.subclassLevel && !c.subclassId) p.push(t('Pick a subclass (you are level {n}).', { n: c.level }));
+      if (c.subclassId === CUSTOM && !c.customSubclass.trim()) p.push(t('Name your homebrew subclass.'));
       const n = cls.skillChoices.choose;
       if (new Set(c.classSkills).size !== n || c.classSkills.some((s) => !cls.skillChoices.from.includes(s)))
-        p.push(`Pick ${n} class skills.`);
+        p.push(t('Pick {n} class skills.', { n }));
       break;
     }
     case 'background': {
       const bg = chosenBackground(c, content);
-      if (!bg) return ['Pick a background.'];
+      if (!bg) return [t('Pick a background.')];
       if (c.backgroundId === CUSTOM) {
         const cb = c.customBackground;
-        if (!cb.name.trim()) p.push('Name your homebrew background.');
-        if (new Set(cb.abilities).size !== 3) p.push('Pick three abilities for the background.');
-        if (new Set(cb.skills).size !== 2) p.push('Pick two background skills.');
-        if (!c.backgroundFeat) p.push('Pick an origin feat.');
+        if (!cb.name.trim()) p.push(t('Name your homebrew background.'));
+        if (new Set(cb.abilities).size !== 3) p.push(t('Pick three abilities for the background.'));
+        if (new Set(cb.skills).size !== 2) p.push(t('Pick two background skills.'));
+        if (!c.backgroundFeat) p.push(t('Pick an origin feat.'));
       }
       p.push(...featProblems(c, content, [bg.feat]));
       break;
     }
     case 'species': {
       const sp = chosenSpecies(c, content);
-      if (!sp) return ['Pick a species.'];
-      if (c.speciesId === CUSTOM && !c.customSpecies.name.trim()) p.push('Name your homebrew species.');
-      if (sp.subspecies && !c.subspeciesId) p.push(`Pick a ${sp.subspecies.label.toLowerCase()}.`);
-      if (sp.size.includes(' or ') && !c.size) p.push('Pick a size.');
-      if (sp.skillChoice && !c.speciesSkill) p.push('Pick a skill (Skillful).');
-      if (sp.originFeatChoice && !c.speciesFeat) p.push('Pick an origin feat (Versatile).');
+      if (!sp) return [t('Pick a species.')];
+      if (c.speciesId === CUSTOM && !c.customSpecies.name.trim()) p.push(t('Name your homebrew species.'));
+      if (sp.subspecies && !c.subspeciesId) p.push(t('Pick: {what}.', { what: tx(sp.subspecies.label) }));
+      if (sp.size.includes(' or ') && !c.size) p.push(t('Pick a size.'));
+      if (sp.skillChoice && !c.speciesSkill) p.push(t('Pick a skill (Skillful).'));
+      if (sp.originFeatChoice && !c.speciesFeat) p.push(t('Pick an origin feat (Versatile).'));
       // Same feat from background and species: its picks were already asked for there.
       const bgFeat = chosenBackground(c, content)?.feat;
       if (sp.originFeatChoice && c.speciesFeat !== bgFeat) p.push(...featProblems(c, content, [c.speciesFeat]));
-      if (new Set(c.languages).size !== EXTRA_LANGUAGES) p.push(`Pick ${EXTRA_LANGUAGES} languages.`);
+      if (new Set(c.languages).size !== EXTRA_LANGUAGES) p.push(t('Pick {n} languages.', { n: EXTRA_LANGUAGES }));
       break;
     }
     case 'abilities': {
       const s = c.baseScores;
       if (c.abilityMethod === 'standard') {
         const used = ABILITIES.map((a) => s[a]).sort((x, y) => y - x);
-        if (used.join() !== [...STANDARD_ARRAY].join()) p.push('Give each ability one number from the standard array.');
+        if (used.join() !== [...STANDARD_ARRAY].join()) p.push(t('Give each ability one number from the standard array.'));
       } else if (c.abilityMethod === 'pointbuy') {
-        if (ABILITIES.some((a) => s[a] < 8 || s[a] > 15)) p.push('Point buy scores go from 8 to 15.');
-        else if (pointBuySpent(s) > POINT_BUY_BUDGET) p.push(`You spent more than ${POINT_BUY_BUDGET} points.`);
-      } else if (ABILITIES.some((a) => s[a] < 3 || s[a] > 18)) p.push('Rolled scores go from 3 to 18.');
+        if (ABILITIES.some((a) => s[a] < 8 || s[a] > 15)) p.push(t('Point buy scores go from 8 to 15.'));
+        else if (pointBuySpent(s) > POINT_BUY_BUDGET) p.push(t('You spent more than {n} points.', { n: POINT_BUY_BUDGET }));
+      } else if (ABILITIES.some((a) => s[a] < 3 || s[a] > 18)) p.push(t('Rolled scores go from 3 to 18.'));
       const bg = chosenBackground(c, content);
       if (bg && c.bonusMode === '2-1') {
-        if (!c.plus2 || !c.plus1) p.push('Pick where your background bonuses (+2 and +1) go.');
-        else if (c.plus2 === c.plus1) p.push('The +2 and +1 must go to different abilities.');
+        if (!c.plus2 || !c.plus1) p.push(t('Pick where your background bonuses (+2 and +1) go.'));
+        else if (c.plus2 === c.plus1) p.push(t('The +2 and +1 must go to different abilities.'));
         else if (!bg.abilities.includes(c.plus2) || !bg.abilities.includes(c.plus1))
-          p.push(`Background bonuses can only go to ${bg.abilities.map((a) => ABILITY_NAMES[a]).join(', ')}.`);
+          p.push(t('Background bonuses can only go to {abilities}.', { abilities: bg.abilities.map((a) => t(ABILITY_NAMES[a])).join(', ') }));
       }
       break;
     }
@@ -299,25 +300,25 @@ export function stepProblems(step: Step, c: CreationChoices, content: Content): 
         if (opts.length === 0) continue;
         const opt = opts.find((o) => o.label === label);
         if (!opt) {
-          p.push(`Pick your ${src} equipment.`);
+          p.push(src === 'class' ? t('Pick your class equipment.') : t('Pick your background equipment.'));
           continue;
         }
         opt.items.forEach((it, i) => {
-          if ('choose' in it && !c.equipmentPicks[`${src}:${opt.label}:${i}`]) p.push(`Pick a ${it.choose.toLowerCase()}.`);
+          if ('choose' in it && !c.equipmentPicks[`${src}:${opt.label}:${i}`]) p.push(t('Pick: {what}.', { what: tx(it.choose) }));
         });
       }
       break;
     }
     case 'spells': {
       const allow = spellAllowance(c, content);
-      if (c.cantrips.length > allow.cantrips) p.push(`Pick at most ${allow.cantrips} cantrips.`);
-      else if (c.cantrips.length < allow.cantrips) p.push(`Pick ${allow.cantrips - c.cantrips.length} more cantrip(s).`);
-      if (c.preparedSpells.length > allow.prepared) p.push(`Pick at most ${allow.prepared} spells.`);
-      else if (c.preparedSpells.length < allow.prepared) p.push(`Pick ${allow.prepared - c.preparedSpells.length} more spell(s).`);
+      if (c.cantrips.length > allow.cantrips) p.push(t('Pick at most {n} cantrips.', { n: allow.cantrips }));
+      else if (c.cantrips.length < allow.cantrips) p.push(plural(allow.cantrips - c.cantrips.length, 'Pick {n} more cantrip.', 'Pick {n} more cantrips.'));
+      if (c.preparedSpells.length > allow.prepared) p.push(t('Pick at most {n} spells.', { n: allow.prepared }));
+      else if (c.preparedSpells.length < allow.prepared) p.push(plural(allow.prepared - c.preparedSpells.length, 'Pick {n} more spell.', 'Pick {n} more spells.'));
       break;
     }
     case 'details':
-      if (!c.name.trim()) p.push('Give your character a name.');
+      if (!c.name.trim()) p.push(t('Give your character a name.'));
       break;
   }
   return p;
@@ -325,13 +326,13 @@ export function stepProblems(step: Step, c: CreationChoices, content: Content): 
 
 function featProblems(c: CreationChoices, content: Content, feats: string[]): string[] {
   const p: string[] = [];
-  if (feats.includes('skilled') && new Set(c.skilledPicks).size !== 3) p.push('Pick 3 skills for the Skilled feat.');
+  if (feats.includes('skilled') && new Set(c.skilledPicks).size !== 3) p.push(t('Pick 3 skills for the Skilled feat.'));
   if (feats.includes('magic-initiate')) {
     const mi = c.magicInitiate;
-    if (!(magicInitiateList(c, content) ?? mi.list)) p.push('Pick a spell list for Magic Initiate.');
-    if (!mi.ability) p.push('Pick a spellcasting ability for Magic Initiate.');
-    if (new Set(mi.cantrips).size !== 2) p.push('Pick 2 Magic Initiate cantrips.');
-    if (!mi.spell) p.push('Pick a level 1 Magic Initiate spell.');
+    if (!(magicInitiateList(c, content) ?? mi.list)) p.push(t('Pick a spell list for Magic Initiate.'));
+    if (!mi.ability) p.push(t('Pick a spellcasting ability for Magic Initiate.'));
+    if (new Set(mi.cantrips).size !== 2) p.push(t('Pick 2 Magic Initiate cantrips.'));
+    if (!mi.spell) p.push(t('Pick a level 1 Magic Initiate spell.'));
   }
   return p;
 }

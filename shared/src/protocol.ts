@@ -18,9 +18,11 @@ export interface AccountStatus {
   exists: boolean;
   /** false = pre-made account that still needs its owner to choose a password. */
   hasPassword: boolean;
+  /** Choosing that first password needs the invite code of this server (set where the app is hosted online). */
+  needsInvite?: boolean;
 }
 
-/** POST /api/auth/login { username, password } -> LoginResult (200) or { error } (4xx) */
+/** POST /api/auth/login { username, password, invite? } -> LoginResult (200) or { error } (4xx) */
 export interface LoginResult {
   token: string;
   user: PublicUser;
@@ -33,7 +35,7 @@ export const PASSWORD_MIN_LENGTH = 6;
 import type { Ability, Skill } from './rules.ts';
 import type { Combat, CombatAction } from './combat.ts';
 import type { CampaignPrep, Handout, Npc } from './prep.ts';
-import type { LogEntry } from './log.ts';
+import type { LogEntry, SessionSummary } from './log.ts';
 import type { UseRequest } from './resources.ts';
 import type { DeathSaveResult } from './status.ts';
 import type { DiceRoll, RollMode, RollRequest } from './dice.ts';
@@ -81,12 +83,17 @@ export interface CustomResource {
 }
 
 /** The last thing a player used, shown to the DM next to their name. */
+export const ACTION_KINDS = ['spell', 'attack', 'feature', 'heal'] as const;
+export type ActionKind = (typeof ACTION_KINDS)[number];
+
 export interface LastAction {
   name: string;
   /** e.g. "3rd-level slot", "cantrip", "attack"; for a dice roll its total, "17". */
   detail?: string;
   /** A roll of the dice roller ("Stealth check" · "17"), not something that was used up. */
   roll?: boolean;
+  /** What kind of thing it was, so the phones can show the fitting effect. Older entries have none. */
+  kind?: ActionKind;
   /** ISO time. */
   at: string;
 }
@@ -177,6 +184,11 @@ export interface CharacterData {
   /** Death saving throws, used while at 0 HP. 3 successes = stable, 3 failures = dead. */
   deathSaves: DeathSaves;
   /**
+   * Heroic Inspiration (2024): you have it or you don't. The DM awards it;
+   * the player gives it up to reroll a die (character:inspiration).
+   */
+  inspiration: boolean;
+  /**
    * Version stamp of the uploaded portrait ("" = none, show the default).
    * The picture itself is at GET /api/portraits/<characterId>?v=<portrait>;
    * upload with PUT /api/characters/<id>/portrait (image body).
@@ -224,6 +236,7 @@ export const DEFAULT_CHARACTER: CharacterData = {
   exhaustion: 0,
   concentration: null,
   deathSaves: { successes: 0, failures: 0 },
+  inspiration: false,
   portrait: '',
   notes: '',
 };
@@ -242,7 +255,7 @@ export interface CharacterSummary {
 /** Fields a player may only change while the DM has unlocked them (hpItemsUnlocked). */
 export const DM_LOCKED_FIELDS = ['hpCurrent', 'hpTemp', 'coins', 'inventory'] as const satisfies readonly (keyof CharacterData)[];
 /** Fields only the DM may ever change. */
-export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'levelUpReady', 'resting', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves', 'portrait'] as const satisfies readonly (keyof CharacterData)[];
+export const DM_ONLY_FIELDS = ['hpItemsUnlocked', 'levelUpReady', 'resting', 'used', 'lastAction', 'conditions', 'exhaustion', 'concentration', 'deathSaves', 'inspiration', 'portrait'] as const satisfies readonly (keyof CharacterData)[];
 
 // ---------- Campaigns & live sessions (socket) ----------
 
@@ -275,10 +288,18 @@ export interface SessionState {
   combat: Combat | null;
 }
 
-/** Something that should grab everyone's attention for a moment. */
-export interface SessionAlert {
-  kind: 'fight';
-}
+/**
+ * Something every phone shows for a moment: the fight alert, a rest the DM
+ * called (for the whole party, or with `characterId` for one character), or
+ * the title card when the DM starts the session (`session` = its number in
+ * the campaign), or Heroic Inspiration for one character.
+ */
+export type SessionAlert =
+  | { kind: 'fight' }
+  | { kind: 'rest'; rest: 'short' | 'long'; characterId?: string }
+  | { kind: 'start'; session: number }
+  /** The DM gave this character Heroic Inspiration. */
+  | { kind: 'inspiration'; characterId: string };
 
 /** What spending one Hit Die did. */
 export interface HitDieSpent {
@@ -326,6 +347,12 @@ export interface ClientToServerEvents {
   'character:levelUp': (input: { characterId: string; choices: Partial<LevelUpChoices> }, ack: CharAck) => void;
   /** DM (or the owner outside a session): give back one spent slot or use. */
   'character:restore': (input: { characterId: string; id: string }, ack: CharAck) => void;
+  /**
+   * Heroic Inspiration. "give" and "take" (back, without it counting as used)
+   * are the DM's; "spend" is the player giving it up for a reroll, in a session
+   * too (the DM may do it for them).
+   */
+  'character:inspiration': (input: { characterId: string; action: 'give' | 'take' | 'spend' }, ack: CharAck) => void;
   /** Short or Long Rest for one character: the DM in a session, or its owner outside one. */
   'character:rest': (input: { characterId: string; kind: 'short' | 'long' }, ack: CharAck) => void;
   /**
@@ -380,14 +407,16 @@ export interface ClientToServerEvents {
   /**
    * "Initiate fight": alerts every phone and starts a fight with all players
    * plus the chosen NPCs (`count` copies each). Initiative is not rolled yet.
+   * `hidden`: the players don't get the opponents' names until the DM reveals
+   * them (combat:action { type: 'reveal' }).
    */
   'combat:start': (
-    input: { npcs: { npcId: string; count: number }[] },
+    input: { npcs: { npcId: string; count: number }[]; hidden?: boolean },
     ack: (res: Ack<object>) => void,
   ) => void;
   /** Add NPCs, or players who joined late, to the running fight. */
   'combat:add': (
-    input: { npcs?: { npcId: string; count: number }[]; characterIds?: string[] },
+    input: { npcs?: { npcId: string; count: number }[]; characterIds?: string[]; hidden?: boolean },
     ack: (res: Ack<object>) => void,
   ) => void;
   'combat:action': (input: CombatAction, ack: (res: Ack<object>) => void) => void;
@@ -422,17 +451,22 @@ export interface ClientToServerEvents {
   'session:ready': (input: { ready: boolean }, ack: (res: Ack<object>) => void) => void;
   /** DM: start the session. The client warns first if not everyone is ready. */
   'session:start': (ack: (res: Ack<object>) => void) => void;
-  /** Player leaves the session (their character stays saved). */
+  /** Player leaves the session (their character stays saved). Also works from a phone that is not in it right now: it leaves the session the player's character is still in. */
   'session:leave': (ack: (res: Ack<object>) => void) => void;
-  /** DM ends the session for everyone (all characters stay saved). */
-  'session:end': (ack: (res: Ack<object>) => void) => void;
+  /**
+   * DM ends the session for everyone (all characters stay saved). A session
+   * that had started comes back as its summary, for the DM here and for the
+   * players with session:ended.
+   */
+  'session:end': (ack: (res: Ack<{ summary?: SessionSummary }>) => void) => void;
   /** DM: the whole party takes a Short or Long Rest. */
   'session:rest': (input: { kind: 'short' | 'long' }, ack: (res: Ack<object>) => void) => void;
 }
 
 export interface ServerToClientEvents {
   'session:state': (session: SessionState) => void;
-  'session:ended': () => void;
+  /** The session is over for this phone. With the summary when the DM ended a session that had started. */
+  'session:ended': (summary?: SessionSummary) => void;
   'session:alert': (alert: SessionAlert) => void;
   /** A player used the dice roller. Sent to the DM only. */
   'session:roll': (roll: DiceRoll) => void;

@@ -236,7 +236,8 @@ describe('campaign sessions', () => {
 
     const dmSees = nextState(dm, (s) => s.players[0]?.character.lastAction?.name === 'Magic Missile');
     ok(await mira.emitWithAck('character:use', { characterId: id, use: { kind: 'spell', spellId: 'mm' } }));
-    expect((await dmSees).players[0]?.character.lastAction).toMatchObject({ detail: '1st-level slot' });
+    // `kind` is what the phones pick the effect by.
+    expect((await dmSees).players[0]?.character.lastAction).toMatchObject({ detail: '1st-level slot', kind: 'spell' });
     ok(await mira.emitWithAck('character:use', { characterId: id, use: { kind: 'spell', spellId: 'mm' } }));
     const out = await mira.emitWithAck('character:use', { characterId: id, use: { kind: 'spell', spellId: 'mm' } });
     expect(out).toMatchObject({ ok: false, error: expect.stringMatching(/No spell slots/) });
@@ -245,8 +246,11 @@ describe('campaign sessions', () => {
     expect(await mira.emitWithAck('character:rest', { characterId: id, kind: 'long' })).toMatchObject({ ok: false });
     expect(await mira.emitWithAck('session:rest', { kind: 'long' })).toMatchObject({ ok: false });
     const rested = nextState(mira, (s) => Object.keys(s.players[0]?.character.used ?? { x: 1 }).length === 0);
+    const alert = new Promise((resolve) => mira.once('session:alert', resolve));
     ok(await dm.emitWithAck('session:rest', { kind: 'long' }));
     await rested;
+    // Every phone is told, so it can show the rest alert.
+    expect(await alert).toEqual({ kind: 'rest', rest: 'long' });
   });
 
   it('handles concentration, conditions and death saves', async () => {
@@ -423,6 +427,46 @@ describe('campaign sessions', () => {
     await dmSeesLeave;
     expect(await dm.emitWithAck('session:leave')).toMatchObject({ ok: false });
     expect(ok(await mira.emitWithAck('character:list')).characters[0]?.inSession).toBeNull();
+  });
+
+  it('lets a player out of a session their phone has forgotten', async () => {
+    const first = await hostCampaign();
+    const { sock: mira } = await joinWithNewCharacter('Mira', first.session.code);
+    // The app is opened under a new address: logged in again, but no session code is remembered.
+    const elsewhere = await client(await login('Mira'));
+    const jonas = await client(await login('Jonas'));
+    const { campaign } = ok(await jonas.emitWithAck('campaign:create', { name: 'Second table' }));
+    const second = ok(await jonas.emitWithAck('session:host', { campaignId: campaign.id })).session;
+    const { character } = ok(await elsewhere.emitWithAck('character:create', { name: 'Spare' }));
+    expect(await elsewhere.emitWithAck('session:join', { code: second.code, characterId: character.id })).toEqual({
+      ok: false,
+      error: 'You are already in another session. Leave it first.',
+    });
+
+    const dmSeesLeave = nextState(first.dm, (s) => s.players.length === 0);
+    const kickedOut = new Promise<void>((resolve) => mira.once('session:ended', () => resolve()));
+    ok(await elsewhere.emitWithAck('session:leave'));
+    await Promise.all([dmSeesLeave, kickedOut]);
+    expect(ok(await elsewhere.emitWithAck('character:list')).characters.every((c) => c.inSession === null)).toBe(true);
+    ok(await elsewhere.emitWithAck('session:join', { code: second.code, characterId: character.id }));
+    expect(await elsewhere.emitWithAck('session:leave')).toEqual({ ok: true });
+    expect(await elsewhere.emitWithAck('session:leave')).toMatchObject({ ok: false, error: 'You are not in a session.' });
+  });
+
+  it('stays up when a phone sends an event in the wrong shape', async () => {
+    const mira = await client(await login('Mira'));
+    const loose = mira as unknown as { emit: (...args: unknown[]) => void; emitWithAck: (...args: unknown[]) => Promise<Ack<object>> };
+    // One argument too many where only an answer is expected, and no answer function at all.
+    expect(await loose.emitWithAck('session:leave', { extra: true })).toEqual({ ok: false, error: 'You are not in a session.' });
+    expect(await loose.emitWithAck('combat:end', 1, 2, 3)).toMatchObject({ ok: false });
+    loose.emit('session:end');
+    loose.emit('character:list', 'no answer wanted');
+    loose.emit('combat:action');
+    // No input where one is expected.
+    expect(await loose.emitWithAck('character:update')).toMatchObject({ ok: false });
+    expect(await loose.emitWithAck('combat:action')).toMatchObject({ ok: false });
+    // The server still answers.
+    expect(ok(await mira.emitWithAck('character:list')).characters).toEqual([]);
   });
 
   it('rejects unknown codes', async () => {

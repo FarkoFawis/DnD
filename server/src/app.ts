@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from 'node:crypto';
+import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, unlink, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { createServer, type Server as HttpServer } from 'node:http';
@@ -25,6 +25,8 @@ import {
   type Handout,
   type LogEvent,
   type Npc,
+  type SessionSummary,
+  buildSummary,
   Content,
   afterConditionsSet,
   afterHpSet,
@@ -67,6 +69,7 @@ import {
   type PublicUser,
   type ServerToClientEvents,
   type SessionState,
+  t,
 } from '@dnd/shared';
 import { SRD } from '@dnd/shared/srd';
 import { loadContentPacks } from './content.ts';
@@ -90,6 +93,12 @@ export interface AppOptions {
   contentDir?: string;
   /** Folder for pictures the DM uploads for handouts. Without it, uploads are switched off. */
   uploadsDir?: string;
+  /**
+   * When set, choosing an account's first password needs this code. For servers
+   * on the internet, where otherwise anyone who guesses the name of an account
+   * that has not logged in yet could take it.
+   */
+  inviteCode?: string;
 }
 
 const IMAGE_TYPES: Record<string, string> = {
@@ -122,10 +131,21 @@ function cleanText(value: unknown, max: number): string | null {
   return text.length > 0 && text.length <= max ? text : null;
 }
 
+/** Events whose only argument is the answer function; every other event is (input, ack). */
+const ACK_ONLY_EVENTS = new Set(['character:list', 'campaign:list', 'combat:end', 'session:start', 'session:leave', 'session:end']);
+
+/** Compares a typed code with the real one without giving away how much of it was right. */
+function sameText(given: unknown, expected: string): boolean {
+  if (typeof given !== 'string') return false;
+  const a = createHash('sha256').update(given.trim()).digest();
+  const b = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(a, b);
+}
+
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 5 * 60 * 1000;
 
-export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDir }: AppOptions): {
+export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDir, inviteCode }: AppOptions): {
   httpServer: HttpServer;
   io: IoServer;
 } {
@@ -145,7 +165,8 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
 
   app.post('/api/auth/status', (req, res) => {
     const username = cleanText(req.body?.username, LIMITS.usernameMaxLength);
-    res.json(username ? store.accountStatus(username) : { exists: false, hasPassword: false });
+    const status = username ? store.accountStatus(username) : { exists: false, hasPassword: false };
+    res.json(status.exists && !status.hasPassword && inviteCode ? { ...status, needsInvite: true } : status);
   });
 
   app.post('/api/auth/login', (req, res) => {
@@ -163,16 +184,20 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     }
     const status = store.accountStatus(username);
     if (status.exists && !status.hasPassword && (password.length < PASSWORD_MIN_LENGTH || password.length > 200)) {
-      res.status(400).json({ error: `Choose a password with at least ${PASSWORD_MIN_LENGTH} characters.` });
+      res.status(400).json({ error: t('Choose a password with at least {n} characters.', { n: PASSWORD_MIN_LENGTH }) });
       return;
     }
-    const result = store.login(username, password);
-    if (!result) {
+    const fail = (code: number, error: string) => {
       const count = (failed && failed.until > Date.now() ? failed.count : 0) + 1;
       failedLogins.set(key, { count, until: Date.now() + LOCKOUT_MS });
-      res.status(401).json({ error: 'Wrong username or password.' });
-      return;
+      res.status(code).json({ error });
+    };
+    // A first password on a server with an invite code: only with that code. Wrong codes count like wrong passwords.
+    if (status.exists && !status.hasPassword && inviteCode && !sameText(req.body?.invite, inviteCode)) {
+      return fail(403, 'That is not the invite code. Ask your DM for it.');
     }
+    const result = store.login(username, password);
+    if (!result) return fail(401, 'Wrong username or password.');
     failedLogins.delete(key);
     res.json(result);
   });
@@ -385,7 +410,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     const missingPlayers = [...new Set(fresh.filter((c) => !owners.get(c.owner.toLowerCase())).map((c) => c.owner))];
     if (missingPlayers.length > 0 && req.query.skipMissing !== '1') {
       res.status(409).json({
-        error: `No account here for: ${missingPlayers.join(', ')}. Add them first (npm run users -- add ${missingPlayers.join(' ')}), or load the backup without their characters.`,
+        error: t('No account here for: {names}. Add them first (npm run users -- add {list}), or load the backup without their characters.', { names: missingPlayers.join(', '), list: missingPlayers.join(' ') }),
         missingPlayers,
       });
       return;
@@ -422,7 +447,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       store.restoreCampaign({ id, name, ownerId: user.id, handouts, npcs: backup.npcs, log: backup.log, characters: restored });
     } catch (e) {
       for (const h of handouts) removeImage(h.imageUrl);
-      res.status(500).json({ error: `The backup could not be loaded: ${(e as Error).message}` });
+      res.status(500).json({ error: t('The backup could not be loaded: {reason}', { reason: (e as Error).message }) });
       return;
     }
     const summary: ImportSummary = {
@@ -531,9 +556,12 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
   };
 
   /** Ends a session socket-side: tells everyone, takes all sockets out of the room. */
-  const closeSession = (code: string, exceptSocketId?: string) => {
+  const closeSession = (code: string, exceptSocketId?: string, summary?: SessionSummary) => {
     const room = io.to(roomOf(code));
-    (exceptSocketId ? room.except(exceptSocketId) : room).emit('session:ended');
+    const everyone = exceptSocketId ? room.except(exceptSocketId) : room;
+    // Without a summary there is no argument at all: an `undefined` would arrive as null.
+    if (summary) everyone.emit('session:ended', summary);
+    else everyone.emit('session:ended');
     for (const s of io.sockets.sockets.values()) {
       if (s.data.code === code) {
         s.data.code = undefined;
@@ -546,6 +574,34 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
 
   io.on('connection', (socket) => {
     const user = socket.data.user;
+
+    // What arrives is untrusted, its shape included. Every handler below is written as
+    // (ack) or (input, ack): this puts each event into that shape whatever was sent (an
+    // extra argument, a missing answer function), so no handler ever calls something
+    // that is not a function. What is in `input` is checked by the handlers themselves.
+    socket.use((packet, next) => {
+      const [event, ...args] = packet as unknown as [string, ...unknown[]];
+      const last = args[args.length - 1];
+      const ack = typeof last === 'function' ? last : () => {};
+      const input = typeof args[0] === 'function' ? undefined : args[0];
+      (packet as unknown[]).length = 0;
+      if (ACK_ONLY_EVENTS.has(event)) (packet as unknown[]).push(event, ack);
+      else (packet as unknown[]).push(event, input, ack);
+      next();
+    });
+    // A handler that throws must not take the server down in the middle of a game night:
+    // the phone gets an answer, the rest of the table plays on.
+    const listen = socket.on.bind(socket) as (event: string, handler: (...args: unknown[]) => void) => unknown;
+    (socket as { on: unknown }).on = (event: string, handler: (...args: unknown[]) => void) =>
+      listen(event, (...args: unknown[]) => {
+        try {
+          handler(...args);
+        } catch (e) {
+          console.error(`[socket] ${event} failed:`, e);
+          const ack = args[args.length - 1];
+          if (typeof ack === 'function') (ack as (res: unknown) => void)({ ok: false, error: 'Something went wrong on the server. Try again.' });
+        }
+      });
 
     const leaveCurrent = () => {
       const code = socket.data.code;
@@ -781,7 +837,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
               : { kind: 'attack', name: String(req.name ?? '') };
         const spell = clean.kind === 'spell' ? t.ch.data.spells.find((x) => x.id === clean.spellId) : undefined;
         const def = spell?.ref ? gameContent().spell(spell.ref) : undefined;
-        const r = applyUse(t.ch.data, clean, { concentration: def?.concentration === true });
+        const r = applyUse(t.ch.data, clean, { concentration: def?.concentration === true }, gameContent());
         const character = store.updateCharacter(t.ch.id, {
           used: r.used,
           lastAction: { ...r.action, at: new Date().toISOString() },
@@ -805,6 +861,27 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
         concentration: input.action === 'end' ? null : { ...now, saveDc: null },
       });
       ack({ ok: true, character });
+      afterChange(character);
+    });
+
+    socket.on('character:inspiration', (input, ack) => {
+      const t = usable(input?.characterId);
+      if (!t.ok) return ack(t);
+      const action = input?.action;
+      if (action !== 'give' && action !== 'take' && action !== 'spend') return ack({ ok: false, error: 'Invalid action.' });
+      if (action !== 'spend' && !t.isDm) return ack({ ok: false, error: 'Only the DM hands out Heroic Inspiration.' });
+      const has = t.ch.data.inspiration;
+      if (action === 'give' && has) return ack({ ok: false, error: 'They already have Heroic Inspiration. Nobody can hold two.' });
+      if (action !== 'give' && !has) return ack({ ok: false, error: 'No Heroic Inspiration to use.' });
+      const character = store.updateCharacter(t.ch.id, {
+        inspiration: action === 'give',
+        ...(action === 'spend' ? { lastAction: { name: 'Heroic Inspiration', detail: 'reroll', kind: 'feature' as const, at: new Date().toISOString() } } : {}),
+      });
+      ack({ ok: true, character });
+      if (action !== 'take') logFor(character, { kind: 'inspiration', what: action === 'give' ? 'gained' : 'used' });
+      if (action === 'give' && character.inSession) {
+        io.to(roomOf(character.inSession)).emit('session:alert', { kind: 'inspiration', characterId: character.id });
+      }
       afterChange(character);
     });
 
@@ -876,12 +953,16 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const character = store.updateCharacter(t.ch.id, restPatch(t.ch, input.kind));
       ack({ ok: true, character });
       logFor(character, { kind: 'rest', what: input.kind });
+      // The DM rested one character: that player's phone shows it (see RestAlert on the client).
+      if (t.isDm && character.inSession) {
+        io.to(roomOf(character.inSession)).emit('session:alert', { kind: 'rest', rest: input.kind, characterId: character.id });
+      }
       afterChange(character);
     });
 
     /** A Short Rest in a session also lets the player spend Hit Dice on their own phone. */
     const restPatch = (ch: CharacterSummary, kind: 'short' | 'long'): Partial<CharacterData> => ({
-      ...applyRest(ch.data, kind),
+      ...applyRest(ch.data, kind, gameContent()),
       ...(kind === 'short' && ch.inSession ? { resting: canSpendHitDice(ch.data) } : {}),
     });
 
@@ -905,7 +986,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
         const r = spendHitDie(t.ch.data, die, roll);
         const character = store.updateCharacter(t.ch.id, {
           ...r.patch,
-          lastAction: { name: 'Hit Die', detail: `+${r.healed} HP`, at: new Date().toISOString() },
+          lastAction: { name: 'Hit Die', detail: `+${r.healed} HP`, kind: 'heal', at: new Date().toISOString() },
         });
         ack({ ok: true, character, spent: { die, roll, modifier: r.modifier, healed: r.healed } });
         logFor(character, { kind: 'heal', amount: r.healed, what: `Hit Die, ${character.data.hpCurrent}/${character.data.hpMax} HP` });
@@ -1082,7 +1163,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     });
 
     /** Fight entries for the chosen NPCs; several copies get numbered ("Goblin 2"). */
-    const npcCombatants = (campaignId: string, picks: unknown, existing: Combatant[]): Combatant[] => {
+    const npcCombatants = (campaignId: string, picks: unknown, existing: Combatant[], hidden = false): Combatant[] => {
       if (!Array.isArray(picks)) return [];
       const out: Combatant[] = [];
       for (const pick of picks.slice(0, 50) as { npcId?: unknown; count?: unknown }[]) {
@@ -1101,6 +1182,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
             d20: null,
             hp: { current: npc.hpMax, max: npc.hpMax },
             armorClass: npc.armorClass,
+            ...(hidden ? { hidden: true } : {}),
           });
         }
       }
@@ -1136,7 +1218,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const live = dmSession();
       if (!live) return ack(NOT_RUNNING);
       if (live.combat) log(live, { kind: 'fightEnd', who: '', amount: live.combat.round });
-      const npcs = npcCombatants(live.campaignId, input?.npcs, []);
+      const npcs = npcCombatants(live.campaignId, input?.npcs, [], input?.hidden === true);
       // A fight ends any Short Rest that is still open.
       for (const p of store.sessionPlayers(live.code)) {
         if (store.getCharacter(p.characterId)?.data.resting) store.updateCharacter(p.characterId, { resting: false });
@@ -1155,7 +1237,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const players = Array.isArray(input?.characterIds)
         ? playerCombatants(live.code, input.characterIds).filter((c) => !inFight.has(c.ref))
         : [];
-      const more = [...players, ...npcCombatants(live.campaignId, input?.npcs, live.combat.combatants)];
+      const more = [...players, ...npcCombatants(live.campaignId, input?.npcs, live.combat.combatants, input?.hidden === true)];
       if (live.combat.combatants.length + more.length > 100) return ack({ ok: false, error: 'That fight is too big.' });
       store.setCombat(live.code, addCombatants(live.combat, more));
       ack({ ok: true });
@@ -1259,12 +1341,16 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       }
       ack({ ok: true });
       broadcast(code);
+      // The title card, once per session and after the state, so the phones are on the session screen for it.
+      if (live?.sessionNo && !before?.started) io.to(roomOf(code)).emit('session:alert', { kind: 'start', session: live.sessionNo });
     });
 
     socket.on('session:leave', (ack) => {
-      const code = socket.data.code;
+      if (socket.data.code && socket.data.isHost) return ack({ ok: false, error: 'As the DM, end the session instead.' });
+      // Not in it on this phone (opened under another address, or the browser forgot):
+      // the session this player's character is still sitting in.
+      const code = socket.data.code ?? store.listCharacters(user.id).find((c) => c.inSession)?.inSession;
       if (!code) return ack({ ok: false, error: 'You are not in a session.' });
-      if (socket.data.isHost) return ack({ ok: false, error: 'As the DM, end the session instead.' });
       store.removeSessionPlayer(code, user.id);
       // Take every tab of this user out of the session.
       for (const s of io.sockets.sockets.values()) {
@@ -1285,13 +1371,22 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const code = socket.data.code;
       if (!code || !socket.data.isHost) return ack({ ok: false, error: 'Only the DM can end the session.' });
       const live = store.getSession(code);
+      let summary: SessionSummary | undefined;
       if (live?.started) {
         if (live.combat) log(live, { kind: 'fightEnd', who: '', amount: live.combat.round });
         log(live, { kind: 'end', who: '' });
+        // The evening in numbers, for every phone at the table.
+        const state = sessionState(code);
+        if (state && live.sessionNo) {
+          summary = buildSummary(store.listLog(live.campaignId, live.sessionNo), {
+            campaign: state.campaign.name,
+            players: state.players.map((p) => p.character.name),
+          }) ?? undefined;
+        }
       }
       store.endSession(code);
-      closeSession(code, socket.id);
-      ack({ ok: true });
+      closeSession(code, socket.id, summary);
+      ack({ ok: true, ...(summary ? { summary } : {}) });
     });
 
     socket.on('session:rest', (input, ack) => {
@@ -1300,11 +1395,12 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       if (input?.kind !== 'short' && input?.kind !== 'long') return ack({ ok: false, error: 'Short or long rest?' });
       for (const p of store.sessionPlayers(code)) {
         const ch = store.getCharacter(p.characterId);
-        if (ch) store.updateCharacter(ch.id, { ...applyRest(ch.data, input.kind), ...(input.kind === 'short' ? { resting: canSpendHitDice(ch.data) } : {}) });
+        if (ch) store.updateCharacter(ch.id, { ...applyRest(ch.data, input.kind, gameContent()), ...(input.kind === 'short' ? { resting: canSpendHitDice(ch.data) } : {}) });
       }
       const live = store.getSession(code);
       if (live?.started && live.sessionNo) store.addLog(live.campaignId, live.sessionNo, { kind: 'rest', who: '', what: input.kind });
       ack({ ok: true });
+      io.to(roomOf(code)).emit('session:alert', { kind: 'rest', rest: input.kind });
       broadcast(code);
     });
 

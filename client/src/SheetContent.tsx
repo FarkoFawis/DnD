@@ -18,11 +18,12 @@ import {
 import { Info } from './Info.tsx';
 import { PickerList, type PickerOption } from './Picker.tsx';
 import { spellPickerOptions } from './creator/CharacterCreator.tsx';
+import { msg, t, tx } from './i18n.tsx';
 
 export function spellEntry(content: Content | null, s: Spell): InfoEntry | null {
   const def = content && (s.ref ? content.spell(s.ref) : undefined) || content?.findByName('spells', s.name);
   if (def) return spellInfo(def);
-  if (s.description) return { title: s.name, subtitle: s.level === 0 ? 'Cantrip (homebrew)' : `Level ${s.level} (homebrew)`, body: s.description };
+  if (s.description) return { title: s.name, subtitle: s.level === 0 ? t('Cantrip (homebrew)') : t('Level {n} (homebrew)##spell', { n: s.level }), body: s.description };
   return null;
 }
 
@@ -30,32 +31,32 @@ export function spellEntry(content: Content | null, s: Spell): InfoEntry | null 
 export function spellGlance(content: Content | null, s: Spell): string {
   const def = content && (s.ref ? content.spell(s.ref) : undefined) || content?.findByName('spells', s.name);
   if (!def) return '';
-  return [def.castingTime, def.range, def.concentration && 'Concentration', def.ritual && 'Ritual'].filter(Boolean).join(' · ');
+  return [tx(def.castingTime), tx(def.range), def.concentration && t('Concentration'), def.ritual && t('Ritual')].filter(Boolean).join(' · ');
 }
 
 export function itemEntry(content: Content | null, i: Item): InfoEntry | null {
   const def = content && (i.ref ? content.item(i.ref) : undefined) || content?.findByName('items', i.name);
   if (def) {
     const e = itemInfo(def);
-    return i.notes ? { ...e, body: `${e.body}\n**Your notes.** ${i.notes}` } : e;
+    return i.notes ? { ...e, body: `${e.body}\n**${t('Your notes.')}** ${i.notes}` } : e;
   }
-  if (i.notes) return { title: i.name, subtitle: 'Custom item', body: i.notes };
+  if (i.notes) return { title: i.name, subtitle: t('Custom item'), body: i.notes };
   return null;
 }
 
 export function featureEntry(content: Content | null, f: CharacterFeature): InfoEntry | null {
   const fromRef = content && f.ref ? describeRef(content, f.ref) : null;
   if (fromRef) return fromRef;
-  if (f.description) return { title: f.name, subtitle: f.source, body: f.description };
+  if (f.description) return { title: f.name, subtitle: tx(f.source), body: f.description };
   return null;
 }
 
 const KIND_GROUP: Record<ItemDef['kind'], string> = {
-  weapon: 'Weapons',
-  armor: 'Armor',
-  gear: 'Adventuring gear',
-  tool: 'Tools',
-  magic: 'Magic items',
+  weapon: msg('Weapons'),
+  armor: msg('Armor'),
+  gear: msg('Adventuring gear'),
+  tool: msg('Tools'),
+  magic: msg('Magic items'),
 };
 
 /** "Add from the rulebook" + a custom item form. */
@@ -67,18 +68,18 @@ export function AddItem({ content, onAdd }: { content: Content | null; onAdd: (i
   const [notes, setNotes] = useState('');
   const options: PickerOption[] = content
     ? content.items
-        .map((d) => ({ value: d.id, label: d.name, hint: [d.rarity ?? d.category, d.summary, d.cost].filter(Boolean).join(' · '), group: KIND_GROUP[d.kind], info: itemInfo(d) }))
+        .map((d) => ({ value: d.id, label: d.name, hint: [tx(d.rarity ?? d.category), d.summary, d.cost && tx(d.cost)].filter(Boolean).join(' · '), group: t(KIND_GROUP[d.kind]), info: itemInfo(d) }))
         .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label))
     : [];
   return (
     <div className="add-box">
       <div className="add-buttons">
-        <button type="button" className="secondary grow" disabled={!content} onClick={() => setOpen(true)}>+ Add item from the rulebook</button>
-        <button type="button" className="secondary" onClick={() => setCustom(!custom)}>{custom ? 'Close' : 'Custom'}</button>
+        <button type="button" className="secondary grow" disabled={!content} onClick={() => setOpen(true)}>{t('+ Add item from the rulebook')}</button>
+        <button type="button" className="secondary" onClick={() => setCustom(!custom)}>{custom ? t('Close') : t('Custom')}</button>
       </div>
       {open && (
         <PickerList
-          title="Add an item"
+          title={t('Add an item')}
           value=""
           options={options}
           searchable
@@ -105,11 +106,11 @@ export function AddItem({ content, onAdd }: { content: Content | null; onAdd: (i
           }}
         >
           <div className="inline-form">
-            <label>Item name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Grandpa's lucky coin" maxLength={80} required /></label>
-            <label className="qty-input">Qty<input type="number" inputMode="numeric" min={1} value={qty} onChange={(e) => setQty(e.target.value)} /></label>
+            <label>{t('Item name')}<input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Grandpa's lucky coin")} maxLength={80} required /></label>
+            <label className="qty-input">{t('Qty')}<input type="number" inputMode="numeric" min={1} value={qty} onChange={(e) => setQty(e.target.value)} /></label>
           </div>
-          <label>Description (shown when held)<textarea rows={3} maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
-          <button className="secondary" type="submit">Add custom item</button>
+          <label>{t('Description (shown when held)')}<textarea rows={3} maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
+          <button className="secondary" type="submit">{t('Add custom item')}</button>
         </form>
       )}
     </div>
@@ -131,14 +132,14 @@ export function AddSpell({ content, character, onAdd }: { content: Content | nul
   return (
     <div className="add-box">
       <div className="add-buttons">
-        <button type="button" className="secondary grow" disabled={!content} onClick={() => setOpen(true)}>+ Add spell from the rulebook</button>
-        <button type="button" className="secondary" onClick={() => setCustom(!custom)}>{custom ? 'Close' : 'Homebrew'}</button>
+        <button type="button" className="secondary grow" disabled={!content} onClick={() => setOpen(true)}>{t('+ Add spell from the rulebook')}</button>
+        <button type="button" className="secondary" onClick={() => setCustom(!custom)}>{custom ? t('Close') : t('Homebrew')}</button>
       </div>
       {open && (
         <PickerList
-          title={cls && onlyClass ? `${cls.name} spells` : 'All spells'}
+          title={cls && onlyClass ? t('{name} spells', { name: tx(cls.name) }) : t('All spells')}
           value=""
-          options={cls ? [{ value: '__toggle', label: onlyClass ? `Show every class's spells` : `Show only ${cls.name} spells`, group: 'Filter' }, ...options] : options}
+          options={cls ? [{ value: '__toggle', label: onlyClass ? t("Show every class's spells") : t('Show only {name} spells', { name: tx(cls.name) }), group: t('Filter') }, ...options] : options}
           searchable
           onPick={(id) => {
             if (id === '__toggle') return setOnlyClass(!onlyClass);
@@ -162,15 +163,15 @@ export function AddSpell({ content, character, onAdd }: { content: Content | nul
           }}
         >
           <div className="inline-form">
-            <label>Spell name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Chromatic Orb" maxLength={80} required /></label>
-            <label className="qty-input">Level
+            <label>{t('Spell name')}<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Chromatic Orb" maxLength={80} required /></label>
+            <label className="qty-input">{t('Level##spell')}
               <select value={level} onChange={(e) => setLevel(Number(e.target.value))}>
-                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => <option key={l} value={l}>{l === 0 ? 'C' : l}</option>)}
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => <option key={l} value={l}>{l === 0 ? t('C##cantrip') : l}</option>)}
               </select>
             </label>
           </div>
-          <label>Description (shown when held)<textarea rows={4} maxLength={4000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-          <button className="secondary" type="submit">Add homebrew spell</button>
+          <label>{t('Description (shown when held)')}<textarea rows={4} maxLength={4000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+          <button className="secondary" type="submit">{t('Add homebrew spell')}</button>
         </form>
       )}
     </div>
@@ -195,21 +196,21 @@ export function Features({
   const list = character.features;
   return (
     <>
-      <h3>Features &amp; traits</h3>
+      <h3>{t('Features & traits')}</h3>
       {list.length === 0 ? (
-        <p className="muted small">None yet. Characters made with the guide get theirs automatically.</p>
+        <p className="muted small">{t('None yet. Characters made with the guide get theirs automatically.')}</p>
       ) : (
         <>
-          <p className="muted small hint">Tap one to read it.</p>
+          <p className="muted small hint">{t('Tap one to read it.')}</p>
           <ul className="items">
             {list.map((f) => (
               <li key={f.id}>
                 <Info entry={featureEntry(content, f)} className="grow" tapToOpen>
                   <span className="block">{f.name}</span>
-                  {f.source && <span className="muted small block">{f.source}</span>}
+                  {f.source && <span className="muted small block">{tx(f.source)}</span>}
                 </Info>
                 {!readOnly && (
-                  <button type="button" className="remove" aria-label={`Remove ${f.name}`} onClick={() => onChange(list.filter((x) => x.id !== f.id))}>✕</button>
+                  <button type="button" className="remove" aria-label={t('Remove {name}', { name: f.name })} onClick={() => onChange(list.filter((x) => x.id !== f.id))}>✕</button>
                 )}
               </li>
             ))}
@@ -229,15 +230,15 @@ export function Features({
               setAdding(false);
             }}
           >
-            <label>Feature name<input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} required /></label>
-            <label>Description<textarea rows={4} maxLength={4000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+            <label>{t('Feature name')}<input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} required /></label>
+            <label>{t('Description')}<textarea rows={4} maxLength={4000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
             <div className="add-buttons">
-              <button type="submit" className="secondary grow">Add feature</button>
-              <button type="button" className="secondary" onClick={() => setAdding(false)}>Cancel</button>
+              <button type="submit" className="secondary grow">{t('Add feature')}</button>
+              <button type="button" className="secondary" onClick={() => setAdding(false)}>{t('Cancel')}</button>
             </div>
           </form>
         ) : (
-          <button type="button" className="secondary add-feature" onClick={() => setAdding(true)}>+ Add a feature or feat</button>
+          <button type="button" className="secondary add-feature" onClick={() => setAdding(true)}>{t('+ Add a feature or feat')}</button>
         )
       )}
     </>

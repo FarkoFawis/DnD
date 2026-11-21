@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { buildRecap, describeLogEntry, recapLines, type LogEntry } from '@dnd/shared';
 import type { Game } from '../useGame.ts';
+import { getLanguage, t } from '../i18n.tsx';
 
 /** `active`: false while the log is on a page that is not open; it loads again when the page opens. */
 function useLog(game: Game, campaignId: string, active = true) {
@@ -17,8 +18,8 @@ function useLog(game: Game, campaignId: string, active = true) {
 }
 
 const toDate = (sqliteUtc: string) => new Date(sqliteUtc.replace(' ', 'T') + 'Z');
-const time = (at: string) => toDate(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-const day = (at: string) => toDate(at).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+const time = (at: string) => toDate(at).toLocaleTimeString(getLanguage(), { hour: '2-digit', minute: '2-digit' });
+const day = (at: string) => toDate(at).toLocaleDateString(getLanguage(), { weekday: 'long', day: 'numeric', month: 'long' });
 
 /** "Last time on ...": what happened in the previous session, ready to read out. Renders nothing if there is none. */
 export function Recap({ game, campaign }: { game: Game; campaign: { id: string; name: string } }) {
@@ -27,8 +28,8 @@ export function Recap({ game, campaign }: { game: Game; campaign: { id: string; 
   if (!log || !recap) return null;
   return (
     <section className="card recap">
-      <p className="muted small">Session {recap.session} · {day(recap.at)}</p>
-      <h2 className="card-title">Last time on {campaign.name}…</h2>
+      <p className="muted small">{t('Session {n} · {day}', { n: recap.session, day: day(recap.at) })}</p>
+      <h2 className="card-title">{t('Last time on {name}…', { name: campaign.name })}</h2>
       <RecapBody entries={log.previous} />
     </section>
   );
@@ -40,12 +41,12 @@ function RecapBody({ entries }: { entries: LogEntry[] }) {
   return (
     <>
       {lines.length === 0 ? (
-        <p className="muted">Nothing was recorded.</p>
+        <p className="muted">{t('Nothing was recorded.')}</p>
       ) : (
         <ul className="recap-lines">{lines.map((l) => <li key={l}>{l}</li>)}</ul>
       )}
       <details className="log-details">
-        <summary>Everything that happened ({entries.length})</summary>
+        <summary>{t('Everything that happened ({n})', { n: entries.length })}</summary>
         <LogList entries={entries} />
       </details>
     </>
@@ -68,26 +69,26 @@ function LogList({ entries }: { entries: LogEntry[] }) {
 /** The Log tab: tonight's session so far, and the recap of the one before. */
 export function SessionLog({ game, campaign, active }: { game: Game; campaign: { id: string; name: string }; active?: boolean }) {
   const { log, reload } = useLog(game, campaign.id, active);
-  if (!log) return <p className="muted">Loading…</p>;
+  if (!log) return <p className="muted">{t('Loading…')}</p>;
   const previous = buildRecap(log.previous);
   return (
     <>
       <p className="muted small hint">
-        Damage, healing, loot, fights and handouts are written down automatically while a session runs.
+        {t('Damage, healing, loot, fights and handouts are written down automatically while a session runs.')}
       </p>
       {log.current.length > 0 && (
         <>
-          <h3>This session <button className="link" onClick={() => void reload()}>Refresh</button></h3>
+          <h3>{t('This session')} <button className="link" onClick={() => void reload()}>{t('Refresh')}</button></h3>
           <LogList entries={[...log.current].reverse()} />
         </>
       )}
       {previous ? (
         <>
-          <h3>Last time · session {previous.session}, {day(previous.at)}</h3>
+          <h3>{t('Last time · session {n}, {day}', { n: previous.session, day: day(previous.at) })}</h3>
           <RecapBody entries={log.previous} />
         </>
       ) : (
-        log.current.length === 0 && <p className="muted mt">Nothing yet. The log starts with your first session.</p>
+        log.current.length === 0 && <p className="muted mt">{t('Nothing yet. The log starts with your first session.')}</p>
       )}
     </>
   );

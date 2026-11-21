@@ -6,6 +6,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { CharacterData } from '@dnd/shared';
 import { portraitUrl, removePortrait, uploadPortrait } from './api.ts';
+import { t, tx } from './i18n.tsx';
 
 /** Portraits are 2:3, like a playing card. */
 const WIDTH = 400;
@@ -23,7 +24,7 @@ export function DefaultPortrait({ character: c }: { character: Pick<CharacterDat
   const h = hue(c.className || c.name || 'adventurer');
   const initial = (c.name.trim()[0] ?? '?').toUpperCase();
   return (
-    <svg className="portrait-img" viewBox="0 0 200 300" preserveAspectRatio="xMidYMid slice" role="img" aria-label={`${c.name || 'Character'} (no portrait yet)`}>
+    <svg className="portrait-img" viewBox="0 0 200 300" preserveAspectRatio="xMidYMid slice" role="img" aria-label={t('{name} (no portrait yet)', { name: c.name || t('Character') })}>
       <defs>
         <radialGradient id={`${id}-bg`} cx="50%" cy="38%" r="75%">
           <stop offset="0%" stopColor={`hsl(${h} 45% 34%)`} />
@@ -38,7 +39,7 @@ export function DefaultPortrait({ character: c }: { character: Pick<CharacterDat
       {/* hooded figure: hood, face shadow, shoulders */}
       <path d="M100 62c-30 0-46 26-46 58 0 18 6 30 14 38-30 10-52 34-58 72v70h180v-70c-6-38-28-62-58-72 8-8 14-20 14-38 0-32-16-58-46-58z" fill={`url(#${id}-fig)`} />
       <path d="M100 84c-18 0-28 16-28 36 0 22 12 38 28 38s28-16 28-38c0-20-10-36-28-36z" fill={`hsl(${h} 40% 5%)`} />
-      <text x="100" y="134" textAnchor="middle" fontSize="40" fontFamily="Georgia, serif" fontWeight="700" fill={`hsl(${h} 60% 72%)`} opacity="0.9">{initial}</text>
+      <text x="100" y="134" textAnchor="middle" fontSize="40" style={{ fontFamily: 'var(--font-display)' }} fontWeight="700" fill={`hsl(${h} 60% 72%)`} opacity="0.9">{initial}</text>
     </svg>
   );
 }
@@ -50,7 +51,7 @@ export function Portrait({ characterId, character, className = '' }: { character
   return (
     <span className={`portrait ${className}`}>
       {url && failed !== url ? (
-        <img className="portrait-img" src={url} alt={`${character.name || 'Character'}'s portrait`} loading="lazy" onError={() => setFailed(url)} />
+        <img className="portrait-img" src={url} alt={t("{name}'s portrait", { name: character.name || t('Character') })} loading="lazy" onError={() => setFailed(url)} />
       ) : (
         <DefaultPortrait character={character} />
       )}
@@ -65,7 +66,7 @@ export async function shrinkPicture(file: Blob): Promise<Blob> {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const el = new Image();
       el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error('That file is not a picture this phone can read.'));
+      el.onerror = () => reject(new Error(t('That file is not a picture this phone can read.')));
       el.src = src;
     });
     const scale = Math.max(WIDTH / img.naturalWidth, HEIGHT / img.naturalHeight);
@@ -75,13 +76,13 @@ export async function shrinkPicture(file: Blob): Promise<Blob> {
     canvas.width = WIDTH;
     canvas.height = HEIGHT;
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Could not prepare the picture.');
+    if (!ctx) throw new Error(t('Could not prepare the picture.'));
     ctx.fillStyle = '#1c1917';
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
     // Keep the top of tall pictures (faces are usually there).
     ctx.drawImage(img, (WIDTH - w) / 2, Math.min(0, (HEIGHT - h) / 3), w, h);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
-    if (!blob) throw new Error('Could not prepare the picture.');
+    if (!blob) throw new Error(t('Could not prepare the picture.'));
     return blob;
   } finally {
     URL.revokeObjectURL(src);
@@ -109,7 +110,7 @@ export function PortraitInput({
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      setError(e instanceof Error ? e.message : t('Something went wrong.'));
     } finally {
       setBusy(false);
     }
@@ -118,7 +119,7 @@ export function PortraitInput({
     <div className="portrait-input">
       <div className="portrait-frame">{preview}</div>
       <div className="portrait-actions">
-        <span className="muted small">Portrait</span>
+        <span className="muted small">{t('Portrait')}</span>
         <input
           ref={input}
           type="file"
@@ -131,12 +132,12 @@ export function PortraitInput({
           }}
         />
         <button type="button" className="secondary" disabled={busy} onClick={() => input.current?.click()}>
-          {busy ? 'Saving…' : hasPicture ? 'Change picture' : 'Choose picture'}
+          {busy ? t('Saving…') : hasPicture ? t('Change picture') : t('Choose picture')}
         </button>
         {hasPicture && (
-          <button type="button" className="link" disabled={busy} onClick={() => void run(onRemove)}>Remove</button>
+          <button type="button" className="link" disabled={busy} onClick={() => void run(onRemove)}>{t('Remove')}</button>
         )}
-        {error && <span className="error small">{error}</span>}
+        {error && <span className="error small">{tx(error)}</span>}
       </div>
     </div>
   );
@@ -171,7 +172,7 @@ export function NewPortraitInput({ character, value, onChange }: { character: Pi
   }, [value]);
   return (
     <PortraitInput
-      preview={<span className="portrait">{url ? <img className="portrait-img" src={url} alt="Chosen portrait" /> : <DefaultPortrait character={character} />}</span>}
+      preview={<span className="portrait">{url ? <img className="portrait-img" src={url} alt={t('Chosen portrait')} /> : <DefaultPortrait character={character} />}</span>}
       hasPicture={value !== null}
       onPick={(picture) => onChange(picture)}
       onRemove={() => onChange(null)}
