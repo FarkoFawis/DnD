@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { BottomSheet } from './BottomSheet.tsx';
 import { burst } from './fx/fx.ts';
+import { t } from './i18n.tsx';
 
 export function InspirationStar({ className = '' }: { className?: string }) {
   return (
@@ -28,17 +29,17 @@ export function InspirationToken({ has, onSpend }: { has: boolean; onSpend: () =
         <button type="button" className="inspiration-token" onClick={() => setAsking(true)}>
           <InspirationStar />
           <span className="grow">
-            <strong>Heroic Inspiration</strong>
-            <span className="small block">Reroll one die. <span className="hint">Tap to use it.</span></span>
+            <strong>{t('Heroic Inspiration')}</strong>
+            <span className="small block">{t('Reroll one die.')} <span className="hint">{t('Tap to use it.')}</span></span>
           </span>
         </button>
       )}
       {asking && (
-        <BottomSheet label="Heroic Inspiration" onClose={() => setAsking(false)}>
+        <BottomSheet label={t('Heroic Inspiration')} onClose={() => setAsking(false)}>
           {(close) => (
             <>
-              <h2 className="info-title">Heroic Inspiration</h2>
-              <p className="insp-rule">Give it up to reroll one die right after you rolled it. You have to take the new roll.</p>
+              <h2 className="info-title">{t('Heroic Inspiration')}</h2>
+              <p className="insp-rule">{t('Give it up to reroll one die right after you rolled it. You have to take the new roll.')}</p>
               <button
                 type="button"
                 className="primary wide"
@@ -48,9 +49,9 @@ export function InspirationToken({ has, onSpend }: { has: boolean; onSpend: () =
                   if (await onSpend()) close();
                 }}
               >
-                Use it now
+                {t('Use it now')}
               </button>
-              <button type="button" className="ghost" onClick={close}>Keep it</button>
+              <button type="button" className="ghost" onClick={close}>{t('Keep it')}</button>
             </>
           )}
         </BottomSheet>

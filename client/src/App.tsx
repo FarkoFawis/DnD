@@ -11,6 +11,7 @@ import { SessionSummaryScreen } from './session/SessionSummary.tsx';
 import { SettingsScreen } from './SettingsScreen.tsx';
 import { StatusPill } from './StatusPill.tsx';
 import { useGame, type Status } from './useGame.ts';
+import { t, tx } from './i18n.tsx';
 
 type Auth = { token: string; user: PublicUser };
 
@@ -50,7 +51,7 @@ export function App() {
   if (checking) {
     return (
       <Shell>
-        <p className="muted">{unreachable ? 'Cannot reach the server. Retrying…' : 'Loading…'}</p>
+        <p className="muted">{unreachable ? t('Cannot reach the server. Retrying…') : t('Loading…')}</p>
       </Shell>
     );
   }
@@ -93,7 +94,7 @@ function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
     <Shell status={game.status} hideHeader={!inLobby} full={!game.session}>
       {game.error && (
         <p className="error" role="alert" onClick={() => game.setError(null)}>
-          {game.error}
+          {tx(game.error)}
         </p>
       )}
       {!game.session && screen !== 'home' && game.status !== 'online' && (
@@ -109,7 +110,7 @@ function LoggedIn({ auth, onSignOut }: { auth: Auth; onSignOut: () => void }) {
       {game.session ? (
         <SessionView game={game} session={game.session} myId={auth.user.id} />
       ) : game.rejoining ? (
-        <p className="muted">Getting you back into your session…</p>
+        <p className="muted">{t('Getting you back into your session…')}</p>
       ) : screen === 'characters' ? (
         <Characters game={game} onBack={homeNow} />
       ) : screen === 'settings' ? (

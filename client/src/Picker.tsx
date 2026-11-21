@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { InfoEntry } from '@dnd/shared';
 import { useClosing } from './fx/hooks.ts';
 import { Info } from './Info.tsx';
+import { t } from './i18n.tsx';
 
 export interface PickerOption {
   value: string;
@@ -27,9 +28,9 @@ export function Picker({
   value,
   options,
   onChange,
-  placeholder = 'Choose…',
+  placeholder = t('Choose…'),
   allowCustom = false,
-  customLabel = 'Homebrew / custom…',
+  customLabel = t('Homebrew / custom…'),
   searchable,
   disabled,
 }: {
@@ -59,7 +60,7 @@ export function Picker({
         <PickerList
           title={label}
           value={value}
-          options={allowCustom ? [...options, { value: CUSTOM_VALUE, label: customLabel, group: 'Not in the book list' }] : options}
+          options={allowCustom ? [...options, { value: CUSTOM_VALUE, label: customLabel, group: t('Not in the book list') }] : options}
           searchable={searchable ?? options.length > 12}
           onPick={onChange}
           closeOnPick
@@ -113,13 +114,13 @@ export function PickerList({
       <div className="picker-panel" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="picker-head">
           <strong className="grow">{title}</strong>
-          {multi && <span className="muted small">{multi.count} / {multi.max} picked</span>}
-          <button type="button" className="secondary" onClick={close}>{multi ? 'Done' : 'Close'}</button>
+          {multi && <span className="muted small">{t('{count} / {max} picked', { count: multi.count, max: multi.max })}</span>}
+          <button type="button" className="secondary" onClick={close}>{multi ? t('Done') : t('Close')}</button>
         </div>
         {searchable && (
-          <input ref={search} className="picker-search" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input ref={search} className="picker-search" placeholder={t('Search…')} value={q} onChange={(e) => setQ(e.target.value)} />
         )}
-        <p className="muted small picker-tip hint">Hold an option (or hover with the mouse) to read it.</p>
+        <p className="muted small picker-tip hint">{t('Hold an option (or hover with the mouse) to read it.')}</p>
         <ul className="picker-options">
           {filtered.map((o) => {
             const head = o.group !== lastGroup ? o.group : undefined;
@@ -148,7 +149,7 @@ export function PickerList({
               </li>
             );
           })}
-          {filtered.length === 0 && <li className="muted">Nothing matches “{q}”.</li>}
+          {filtered.length === 0 && <li className="muted">{t('Nothing matches “{q}”.', { q })}</li>}
         </ul>
       </div>
     </div>,
@@ -183,17 +184,17 @@ export function MultiPicker({
           <Info key={v} entry={byValue.get(v)?.info}>
             <span className="chip">
               {byValue.get(v)?.label ?? v}
-              <button type="button" aria-label={`Remove ${byValue.get(v)?.label ?? v}`} onClick={() => onChange(values.filter((x) => x !== v))}>✕</button>
+              <button type="button" aria-label={t('Remove {name}', { name: byValue.get(v)?.label ?? v })} onClick={() => onChange(values.filter((x) => x !== v))}>✕</button>
             </span>
           </Info>
         ))}
         {!full && (
           <button type="button" className="chip add" onClick={() => setOpen(true)}>
-            + {values.length === 0 ? `Choose ${max}` : 'Add'}
+            + {values.length === 0 ? t('Choose {max}', { max }) : t('Add')}
           </button>
         )}
         {full && (
-          <button type="button" className="chip add" onClick={() => setOpen(true)}>Change</button>
+          <button type="button" className="chip add" onClick={() => setOpen(true)}>{t('Change')}</button>
         )}
       </div>
       {open && (

@@ -102,7 +102,7 @@ describe('character creation', () => {
     const c = { ...wizard(), classSkills: ['athletics' as const], plus2: 'str' as const };
     expect(stepProblems('class', c, content)).toEqual(['Pick 2 class skills.']);
     expect(stepProblems('abilities', c, content)[0]).toMatch(/can only go to Constitution, Intelligence, Wisdom/);
-    expect(stepProblems('spells', { ...c, cantrips: [] }, content)).toEqual(['Pick 3 more cantrip(s).']);
+    expect(stepProblems('spells', { ...c, cantrips: [] }, content)).toEqual(['Pick 3 more cantrips.']);
     expect(stepProblems('class', { ...c, level: 3, classSkills: ['arcana', 'history'] }, content)).toEqual(['Pick a subclass (you are level 3).']);
   });
 

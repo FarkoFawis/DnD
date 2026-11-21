@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LANGUAGES, languageFor, setLanguage, type Language } from '@dnd/shared';
 
 /**
  * Settings of this phone, kept in localStorage (they are about how the app
@@ -29,10 +30,25 @@ export interface Settings {
    * motion" never gets them, whatever this says.
    */
   effects: boolean;
+  /**
+   * The language of the texts (shared/src/i18n.ts). A phone that never chose
+   * one gets its own language if we have it, English otherwise.
+   */
+  language: Language;
 }
 
 const KEY = 'dnd.settings';
-const DEFAULTS: Settings = { hints: true, dice: false, theme: 'default', effects: true };
+/** What the phone itself is set to: the first of its languages that we have texts for. */
+function phoneLanguage(): Language {
+  const wanted = typeof navigator === 'undefined' ? [] : (navigator.languages?.length ? navigator.languages : [navigator.language]);
+  for (const locale of wanted) {
+    const short = (locale ?? '').slice(0, 2).toLowerCase();
+    if (LANGUAGES.includes(short as Language)) return languageFor(locale);
+  }
+  return 'en';
+}
+
+const DEFAULTS: Settings = { hints: true, dice: false, theme: 'default', effects: true, language: phoneLanguage() };
 const listeners = new Set<(s: Settings) => void>();
 
 function load(): Settings {
@@ -44,6 +60,7 @@ function load(): Settings {
       dice: typeof saved.dice === 'boolean' ? saved.dice : DEFAULTS.dice,
       theme: THEMES.includes(saved.theme as Theme) ? (saved.theme as Theme) : DEFAULTS.theme,
       effects: typeof saved.effects === 'boolean' ? saved.effects : DEFAULTS.effects,
+      language: LANGUAGES.includes(saved.language as Language) ? (saved.language as Language) : DEFAULTS.language,
     };
   } catch {
     return { ...DEFAULTS };
@@ -58,6 +75,9 @@ const reducedMotion = typeof window.matchMedia === 'function' ? window.matchMedi
 /** Puts the settings on <html>, where styles.css reads them. index.html does the same for the theme before the app loads. */
 function apply(s: Settings) {
   const root = document.documentElement;
+  // Before anything is drawn: every t() from here on answers in this language.
+  setLanguage(s.language);
+  root.lang = s.language;
   root.dataset.hints = s.hints ? 'on' : 'off';
   root.dataset.theme = s.theme;
   // motion.css hangs every animation on this; effects in code ask motionOn().

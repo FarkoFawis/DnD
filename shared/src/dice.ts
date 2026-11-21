@@ -12,6 +12,7 @@ import type { CharacterData } from './protocol.ts';
 import type { Content } from './content/index.ts';
 import { weaponAttacks } from './content/attacks.ts';
 import { ABILITIES, ABILITY_NAMES, SKILLS, SKILL_KEYS, deriveStats, formatModifier, type Ability, type Skill } from './rules.ts';
+import { msg, t, tx } from './i18n.ts';
 
 export const ROLL_MODES = ['normal', 'advantage', 'disadvantage'] as const;
 export type RollMode = (typeof ROLL_MODES)[number];
@@ -80,46 +81,47 @@ export function planRoll(c: CharacterData, req: RollRequest, content: Content): 
   const stats = deriveStats(c);
   const pb = stats.proficiencyBonus;
   const d20 = (label: string, parts: RollPlan['parts']): RollPlan => {
-    const all = [...parts, { label: 'Exhaustion', value: -2 * c.exhaustion }].filter((p) => p.value !== 0);
+    const all = [...parts, { label: t('Exhaustion'), value: -2 * c.exhaustion }].filter((p) => p.value !== 0);
     return { kind: req.kind, label, count: 1, sides: 20, modifier: all.reduce((n, p) => n + p.value, 0), parts: all };
   };
-  const abilityPart = (a: Ability) => ({ label: ABILITY_NAMES[a], value: stats.modifiers[a] });
+  const abilityPart = (a: Ability) => ({ label: t(ABILITY_NAMES[a]), value: stats.modifiers[a] });
+  const proficiency = t('Proficiency');
   const validAbility = (a: unknown): a is Ability => ABILITIES.includes(a as Ability);
 
   switch (req?.kind) {
     case 'ability':
       if (!validAbility(req.ability)) break;
-      return d20(`${ABILITY_NAMES[req.ability]} check`, [abilityPart(req.ability)]);
+      return d20(t('{name} check', { name: t(ABILITY_NAMES[req.ability]) }), [abilityPart(req.ability)]);
     case 'save':
       if (!validAbility(req.ability)) break;
-      return d20(`${ABILITY_NAMES[req.ability]} save`, [
+      return d20(t('{name} save', { name: t(ABILITY_NAMES[req.ability]) }), [
         abilityPart(req.ability),
-        { label: 'Proficiency', value: c.saveProficiencies.includes(req.ability) ? pb : 0 },
+        { label: proficiency, value: c.saveProficiencies.includes(req.ability) ? pb : 0 },
       ]);
     case 'skill': {
       if (!SKILL_KEYS.includes(req.skill)) break;
       const skill = SKILLS[req.skill];
       const expert = c.skillExpertise.includes(req.skill);
       const mult = expert ? 2 : c.skillProficiencies.includes(req.skill) ? 1 : 0;
-      return d20(`${skill.name} check`, [abilityPart(skill.ability), { label: expert ? 'Expertise' : 'Proficiency', value: mult * pb }]);
+      return d20(t('{name} check', { name: t(skill.name) }), [abilityPart(skill.ability), { label: expert ? t('Expertise') : proficiency, value: mult * pb }]);
     }
     case 'initiative':
-      return d20('Initiative', [abilityPart('dex'), { label: 'Bonus', value: c.initiativeBonus }]);
+      return d20(t('Initiative'), [abilityPart('dex'), { label: t('Bonus'), value: c.initiativeBonus }]);
     case 'spellAttack':
-      if (!c.spellcastingAbility) throw new Error('This character casts no spells.');
-      return d20('Spell attack', [abilityPart(c.spellcastingAbility), { label: 'Proficiency', value: pb }]);
+      if (!c.spellcastingAbility) throw new Error(t('This character casts no spells.'));
+      return d20(t('Spell attack'), [abilityPart(c.spellcastingAbility), { label: proficiency, value: pb }]);
     case 'attack':
     case 'damage': {
       const w = weaponAttacks(c, content).find((a) => a.itemId === req.itemId);
-      if (!w) throw new Error('That weapon is not on your sheet.');
+      if (!w) throw new Error(t('That weapon is not on your sheet.'));
       if (req.kind === 'attack') {
-        return d20(`${w.name} attack`, [abilityPart(w.ability), { label: 'Proficiency', value: w.proficient ? pb : 0 }]);
+        return d20(t('{name} attack', { name: w.name }), [abilityPart(w.ability), { label: proficiency, value: w.proficient ? pb : 0 }]);
       }
       const dice = parseDice((req.twoHanded && w.versatileDice) || w.dice);
-      const parts = [{ label: ABILITY_NAMES[w.ability], value: w.modifier }].filter((p) => p.value !== 0);
+      const parts = [{ label: t(ABILITY_NAMES[w.ability]), value: w.modifier }].filter((p) => p.value !== 0);
       return {
         kind: 'damage',
-        label: `${w.name} ${req.crit ? 'critical damage' : 'damage'}`,
+        label: req.crit ? t('{name} critical damage', { name: w.name }) : t('{name} damage', { name: w.name }),
         // A weapon with flat damage (no dice) rolls nothing.
         count: dice ? dice.count * (req.crit ? 2 : 1) : 0,
         sides: dice?.sides ?? 0,
@@ -131,7 +133,7 @@ export function planRoll(c: CharacterData, req: RollRequest, content: Content): 
     default:
       break;
   }
-  throw new Error('Nothing to roll.');
+  throw new Error(t('Nothing to roll.'));
 }
 
 /** "1d8+3", "d20+5", "2d6". */
@@ -161,19 +163,27 @@ export function rollPlan(
   return { ...base, mode, rolls, kept, total: kept + plan.modifier, natural: kept === 20 ? 20 : kept === 1 ? 1 : null };
 }
 
-export const MODE_LABEL: Record<RollMode, string> = { normal: 'Normal', advantage: 'Advantage', disadvantage: 'Disadvantage' };
+/** In English; draw it with `t()`. */
+export const MODE_LABEL: Record<RollMode, string> = { normal: msg('Normal'), advantage: msg('Advantage'), disadvantage: msg('Disadvantage') };
 
 /** How the total came about: "14 + 5", "14 and 9, keeps 14 + 5", "6 + 2 + 3". */
 export function rollBreakdown(r: Pick<DiceRoll, 'kind' | 'rolls' | 'kept' | 'modifier'>): string {
   const mod = r.modifier === 0 ? '' : r.modifier > 0 ? ` + ${r.modifier}` : ` - ${-r.modifier}`;
   if (!isD20(r.kind)) return r.rolls.length > 0 ? `${r.rolls.join(' + ')}${mod}` : `${r.modifier}`;
-  return r.rolls.length > 1 ? `${r.rolls.join(' and ')}, keeps ${r.kept}${mod}` : `${r.kept}${mod}`;
+  return r.rolls.length > 1 ? `${r.rolls.join(` ${t('and')} `)}, ${t('keeps {n}', { n: r.kept })}${mod}` : `${r.kept}${mod}`;
+}
+
+/** What the d20 that counts showed, in words: "critical hit", "natural 1", "natural 20". */
+export function naturalText(r: Pick<DiceRoll, 'kind' | 'natural'>): string {
+  if (r.natural === null) return '';
+  if (r.natural === 20 && (r.kind === 'attack' || r.kind === 'spellAttack')) return t('critical hit');
+  return t('natural {n}', { n: r.natural });
 }
 
 /** One line for the DM and the log: "Stealth check: 19 (14 + 5)". */
 export function describeRoll(r: Pick<DiceRoll, 'kind' | 'label' | 'mode' | 'rolls' | 'kept' | 'modifier' | 'total' | 'natural' | 'note'>): string {
-  const mode = r.mode === 'normal' ? '' : `, ${MODE_LABEL[r.mode].toLowerCase()}`;
-  const natural = r.natural === null ? '' : r.kind === 'attack' || r.kind === 'spellAttack' ? (r.natural === 20 ? ', critical hit' : ', natural 1') : `, natural ${r.natural}`;
-  const note = r.note ? ` ${r.note.toLowerCase()}` : '';
-  return `${r.label}: ${r.total}${note} (${rollBreakdown(r)}${mode}${natural})`;
+  const mode = r.mode === 'normal' ? '' : `, ${t(r.mode)}`;
+  const natural = r.natural === null ? '' : `, ${naturalText(r)}`;
+  const note = r.note ? ` ${tx(r.note.toLowerCase())}` : '';
+  return `${tx(r.label)}: ${r.total}${note} (${rollBreakdown(r)}${mode}${natural})`;
 }

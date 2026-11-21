@@ -33,22 +33,23 @@ import { Info } from '../Info.tsx';
 import { CUSTOM_VALUE, MultiPicker, Picker } from '../Picker.tsx';
 import { useContent } from '../content/useContent.ts';
 import { spellPickerOptions } from './CharacterCreator.tsx';
+import { msg, plural, t, tj, tx } from '../i18n.tsx';
 
 const TITLES: Record<LevelUpStep, string> = {
-  overview: 'Level up!',
-  hp: 'Hit points',
-  subclass: 'Subclass',
-  feat: 'Feat',
-  spells: 'New spells',
-  review: 'Review',
+  overview: msg('Level up!'),
+  hp: msg('Hit points'),
+  subclass: msg('Subclass'),
+  feat: msg('Feat'),
+  spells: msg('New spells'),
+  review: msg('Review'),
 };
 const TAGLINES: Record<LevelUpStep, string> = {
-  overview: 'Here is what the new level brings.',
-  hp: 'You get tougher with every level.',
-  subclass: 'Time to choose your path.',
-  feat: 'Sharpen an ability, or learn something new.',
-  spells: 'Your magic grows.',
-  review: 'Check everything, then level up.',
+  overview: msg('Here is what the new level brings.'),
+  hp: msg('You get tougher with every level.'),
+  subclass: msg('Time to choose your path.'),
+  feat: msg('Sharpen an ability, or learn something new.'),
+  spells: msg('Your magic grows.'),
+  review: msg('Check everything, then level up.'),
 };
 
 export function LevelUp({
@@ -78,8 +79,8 @@ export function LevelUp({
 
   const plan = content ? levelUpPlan(from, content) : null;
   let body: ReactNode;
-  if (!content) body = <p className="muted">Loading the rulebook…</p>;
-  else if (!plan) body = <p className="muted">Level 20 is the highest level.</p>;
+  if (!content) body = <p className="muted">{t('Loading the rulebook…')}</p>;
+  else if (!plan) body = <p className="muted">{t('Level 20 is the highest level.')}</p>;
   else {
     const steps = plan.steps;
     const step = steps[Math.min(stepIndex, steps.length - 1)]!;
@@ -92,21 +93,21 @@ export function LevelUp({
     const props: StepProps = { c: from, plan, choices, set, content };
     body = (
       <>
-        <div className="progress" aria-label={`Step ${stepIndex + 1} of ${steps.length}`}>
+        <div className="progress" aria-label={t('Step {n} of {total}', { n: stepIndex + 1, total: steps.length })}>
           {steps.map((s, i) => (
             <button
               key={s}
               type="button"
               className={`progress-seg ${i === stepIndex ? 'now' : i < stepIndex ? 'done' : ''}`}
-              aria-label={`Step ${i + 1}: ${TITLES[s]}`}
+              aria-label={t('Step {n}: {title}', { n: i + 1, title: t(TITLES[s]) })}
               disabled={i > stepIndex}
               onClick={() => setStepIndex(i)}
             />
           ))}
         </div>
         <div key={step} className={`step-body slide-${direction}`}>
-          <p className="step-count">Step {stepIndex + 1} of {steps.length}</p>
-          <h3 className="step-title">{step === 'overview' ? `Level ${plan.newLevel}!` : TITLES[step]}</h3>
+          <p className="step-count">{t('Step {n} of {total}', { n: stepIndex + 1, total: steps.length })}</p>
+          <h3 className="step-title">{step === 'overview' ? t('Level {n}!', { n: plan.newLevel }) : t(TITLES[step])}</h3>
           <p className="step-tagline">{TAGLINES[step]}</p>
           {step === 'overview' && <Overview {...props} />}
           {step === 'hp' && <HpStep {...props} />}
@@ -117,7 +118,7 @@ export function LevelUp({
         </div>
         {problems.length > 0 && (
           <ul className="todo">
-            {problems.map((p) => <li key={p}>{p}</li>)}
+            {problems.map((p) => <li key={p}>{tx(p)}</li>)}
           </ul>
         )}
         <div className="creator-nav">
@@ -135,11 +136,11 @@ export function LevelUp({
                 }
               }}
             >
-              ✦ Level up to {plan.newLevel}
+              {t('✦ Level up to {n}', { n: plan.newLevel })}
             </button>
           ) : (
             <button type="button" className="primary next-button" disabled={problems.length > 0} onClick={() => setStepIndex(stepIndex + 1)}>
-              Next: {TITLES[steps[stepIndex + 1]!]} ›
+              {t('Next: {step}', { step: t(TITLES[steps[stepIndex + 1]!]) })} ›
             </button>
           )}
         </div>
@@ -148,16 +149,16 @@ export function LevelUp({
   }
 
   return createPortal(
-    <div className="levelup-overlay" role="dialog" aria-modal aria-label={`Level up ${from.name}`}>
+    <div className="levelup-overlay" role="dialog" aria-modal aria-label={t('Level up {name}', { name: from.name })}>
       <section className="card creator levelup">
         <div className="creator-head">
           {stepIndex > 0 ? (
-            <button type="button" className="link back-link" onClick={() => { setDirection('back'); setStepIndexRaw(stepIndex - 1); }}>‹ Back</button>
+            <button type="button" className="link back-link" onClick={() => { setDirection('back'); setStepIndexRaw(stepIndex - 1); }}>{t('‹ Back')}</button>
           ) : (
-            <span className="muted small">{from.name || 'Character'}</span>
+            <span className="muted small">{from.name || t('Character')}</span>
           )}
           <span className="grow" />
-          <button type="button" className="link" onClick={onCancel}>Cancel</button>
+          <button type="button" className="link" onClick={onCancel}>{t('Cancel')}</button>
         </div>
         {body}
       </section>
@@ -183,14 +184,12 @@ function Row({ k, children }: { k: ReactNode; children: ReactNode }) {
   );
 }
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
 function FeatureChips({ plan }: { plan: LevelUpPlan }) {
   const all = [
-    ...plan.features.map((f) => ({ f, from: plan.cls?.name ?? '' })),
-    ...plan.subclassFeatures.map((f) => ({ f, from: plan.subclass?.name ?? '' })),
+    ...plan.features.map((f) => ({ f, from: tx(plan.cls?.name ?? '') })),
+    ...plan.subclassFeatures.map((f) => ({ f, from: tx(plan.subclass?.name ?? '') })),
   ];
-  if (all.length === 0) return <span className="muted small">No new features at this level.</span>;
+  if (all.length === 0) return <span className="muted small">{t('No new features at this level.')}</span>;
   return (
     <>
       {all.map(({ f, from }) => (
@@ -205,32 +204,32 @@ function FeatureChips({ plan }: { plan: LevelUpPlan }) {
 function Overview({ c, plan }: StepProps) {
   return (
     <div className="review">
-      <Row k="Level">
-        <strong>{c.className || 'Character'} {c.level} → {plan.newLevel}</strong>
+      <Row k={t('Level')}>
+        <strong>{tx(c.className) || t('Character')} {c.level} → {plan.newLevel}</strong>
       </Row>
-      <Row k="Hit points">One more d{plan.hitDie} Hit Die: roll it or take {plan.fixedHp}, plus your Constitution modifier.</Row>
+      <Row k={t('Hit points')}>{t('One more d{die} Hit Die: roll it or take {fixed}, plus your Constitution modifier.', { die: plan.hitDie, fixed: plan.fixedHp })}</Row>
       {plan.pbTo !== plan.pbFrom && (
-        <Row k="Proficiency bonus">{formatModifier(plan.pbFrom)} → <strong>{formatModifier(plan.pbTo)}</strong></Row>
+        <Row k={t('Proficiency bonus')}>{formatModifier(plan.pbFrom)} → <strong>{formatModifier(plan.pbTo)}</strong></Row>
       )}
-      <Row k={<>New features <span className="hint">(tap to read)</span></>}><FeatureChips plan={plan} /></Row>
-      {plan.needsSubclass && <Row k="Subclass">You choose your subclass.</Row>}
+      <Row k={<>{t('New features')} <span className="hint">{t('(tap to read)')}</span></>}><FeatureChips plan={plan} /></Row>
+      {plan.needsSubclass && <Row k={t('Subclass')}>{t('You choose your subclass.')}</Row>}
       {plan.feat && (
-        <Row k="Feat">{plan.feat === 'epic-boon' ? 'You choose an Epic Boon.' : 'You choose a feat, such as Ability Score Improvement.'}</Row>
+        <Row k={t('Feat')}>{plan.feat === 'epic-boon' ? t('You choose an Epic Boon.') : t('You choose a feat, such as Ability Score Improvement.')}</Row>
       )}
       {plan.slots.length > 0 && (
-        <Row k="Spell slots">
-          {plan.slots.map((s) => `${s.pact ? 'Pact ' : ''}${ordinal(s.level)}: ${s.max}`).join(' · ')}
+        <Row k={t('Spell slots')}>
+          {plan.slots.map((s) => `${s.pact ? `${t('Pact')} ` : ''}${t('{nth} level', { nth: ordinal(s.level) })}: ${s.max}`).join(' · ')}
         </Row>
       )}
       {plan.spells && plan.spells.newCantrips + plan.spells.newPrepared > 0 && (
-        <Row k="Spells">
-          {[plan.spells.newCantrips > 0 && plural(plan.spells.newCantrips, 'new cantrip'), plan.spells.newPrepared > 0 && plural(plan.spells.newPrepared, 'more prepared spell')]
+        <Row k={t('Spells')}>
+          {[plan.spells.newCantrips > 0 && plural(plan.spells.newCantrips, '{n} new cantrip', '{n} new cantrips'), plan.spells.newPrepared > 0 && plural(plan.spells.newPrepared, '{n} more prepared spell', '{n} more prepared spells')]
             .filter(Boolean)
-            .join(' and ')}
+            .join(` ${t('and')} `)}
         </Row>
       )}
       {!plan.cls && (
-        <p className="notice">This class isn't in the rulebook data, so only level and hit points are filled in. Add its new features on the sheet.</p>
+        <p className="notice">{t("This class isn't in the rulebook data, so only level and hit points are filled in. Add its new features on the sheet.")}</p>
       )}
     </div>
   );
@@ -243,19 +242,19 @@ function HpStep({ c, plan, choices, set }: StepProps) {
   const gain = valid ? hpGain(c, plan, choices) : null;
   return (
     <>
-      <div className="choice-cards" role="radiogroup" aria-label="How to gain hit points">
+      <div className="choice-cards" role="radiogroup" aria-label={t('How to gain hit points')}>
         <button type="button" role="radio" aria-checked={!rolled} className={`choice-card ${!rolled ? 'on' : ''}`} onClick={() => set({ hpRoll: null })}>
-          <strong>Take {plan.fixedHp}</strong>
-          <span className="muted small">The fixed value. No risk.</span>
+          <strong>{t('Take {n}', { n: plan.fixedHp })}</strong>
+          <span className="muted small">{t('The fixed value. No risk.')}</span>
         </button>
         <button type="button" role="radio" aria-checked={rolled} className={`choice-card ${rolled ? 'on' : ''}`} onClick={() => !rolled && set({ hpRoll: plan.fixedHp })}>
-          <strong>Roll the d{plan.hitDie}</strong>
-          <span className="muted small">Roll your die at the table and enter it.</span>
+          <strong>{t('Roll the d{die}', { die: plan.hitDie })}</strong>
+          <span className="muted small">{t('Roll your die at the table and enter it.')}</span>
         </button>
       </div>
       {rolled && (
         <label>
-          What did you roll on the d{plan.hitDie}?
+          {t('What did you roll on the d{die}?', { die: plan.hitDie })}
           <input
             type="number"
             inputMode="numeric"
@@ -268,7 +267,7 @@ function HpStep({ c, plan, choices, set }: StepProps) {
       )}
       {gain !== null && (
         <p className="notice good">
-          {rolled ? choices.hpRoll : plan.fixedHp} {con >= 0 ? '+' : '−'} {Math.abs(con)} (Constitution) = <strong>+{gain} HP</strong>. Maximum {c.hpMax} → <strong>{c.hpMax + gain}</strong>.
+          {rolled ? choices.hpRoll : plan.fixedHp} {con >= 0 ? '+' : '−'} {tj('{con} (Constitution) = {gain}. Maximum {before} → {after}.', { con: Math.abs(con), gain: <strong>{t('+{n} HP', { n: gain })}</strong>, before: c.hpMax, after: <strong>{c.hpMax + gain}</strong> })}
         </p>
       )}
     </>
@@ -280,23 +279,23 @@ function SubclassStep({ plan, choices, set, content }: StepProps) {
   return (
     <>
       <Picker
-        label={`${plan.cls?.name ?? ''} subclass`}
+        label={t('{name} subclass', { name: tx(plan.cls?.name ?? '') })}
         value={choices.subclassId}
         allowCustom
-        options={plan.subclassOptions.map((s) => ({ value: s.id, label: s.name, hint: s.summary, info: subclassInfo(s) }))}
+        options={plan.subclassOptions.map((s) => ({ value: s.id, label: tx(s.name), hint: s.summary, info: subclassInfo(s) }))}
         onChange={(subclassId) => set({ subclassId })}
       />
       {choices.subclassId === CUSTOM_VALUE && (
         <>
-          <label>Subclass name<input value={choices.customSubclass} maxLength={40} onChange={(e) => set({ customSubclass: e.target.value })} /></label>
-          <p className="muted small hint">Add its features on the sheet's Features tab afterwards.</p>
+          <label>{t('Subclass name')}<input value={choices.customSubclass} maxLength={40} onChange={(e) => set({ customSubclass: e.target.value })} /></label>
+          <p className="muted small hint">{t("Add its features on the sheet's Features tab afterwards.")}</p>
         </>
       )}
       {sub && (
         <div className="review">
-          <Row k={<>You get <span className="hint">(tap to read)</span></>}>
+          <Row k={<>{t('You get')} <span className="hint">{t('(tap to read)')}</span></>}>
             {sub.features.filter((f) => f.level <= plan.newLevel).map((f) => (
-              <Info key={f.name} entry={{ title: f.name, subtitle: `${sub.name} ${f.level}`, body: f.description }} tapToOpen>
+              <Info key={f.name} entry={{ title: f.name, subtitle: `${tx(sub.name)} ${f.level}`, body: f.description }} tapToOpen>
                 <span className="chip">{f.name}</span>
               </Info>
             ))}
@@ -304,7 +303,7 @@ function SubclassStep({ plan, choices, set, content }: StepProps) {
         </div>
       )}
       {plan.subclassOptions.length <= 1 && content.packs.length <= 1 && (
-        <p className="muted small hint">The free SRD has one subclass per class. Others from your Player's Handbook can be added later, or use Homebrew.</p>
+        <p className="muted small hint">{t("The free SRD has one subclass per class. Others from your Player's Handbook can be added later, or use Homebrew.")}</p>
       )}
     </>
   );
@@ -319,34 +318,34 @@ function FeatStep({ c, plan, choices, set, content }: StepProps) {
   return (
     <>
       <Picker
-        label={plan.feat === 'epic-boon' ? 'Epic Boon or feat' : 'Feat'}
+        label={plan.feat === 'epic-boon' ? t('Epic Boon or feat') : t('Feat')}
         value={choices.featId}
         allowCustom
-        customLabel="Another feat (from your book or homebrew)"
+        customLabel={t('Another feat (from your book or homebrew)')}
         options={options.map((f) => ({
           value: f.id,
           label: f.name,
-          hint: f.prerequisite ? `Needs: ${f.prerequisite}` : undefined,
-          group: f.category === 'epic-boon' ? 'Epic Boons' : 'General feats',
+          hint: f.prerequisite ? t('Needs: {what}', { what: f.prerequisite }) : undefined,
+          group: f.category === 'epic-boon' ? t('Epic Boons') : t('General feats'),
           info: featInfo(f),
         }))}
         onChange={(featId) => set({ featId, asi: {} })}
       />
       {choices.featId === CUSTOM_VALUE && (
-        <label>Feat name<input value={choices.customFeat} maxLength={80} placeholder="e.g. Great Weapon Master" onChange={(e) => set({ customFeat: e.target.value })} /></label>
+        <label>{t('Feat name')}<input value={choices.customFeat} maxLength={80} placeholder={t('e.g. Great Weapon Master')} onChange={(e) => set({ customFeat: e.target.value })} /></label>
       )}
       {isAsi && (
         <>
-          <p className="muted small">Raise one ability by 2, or two abilities by 1 (20 at most). {2 - points > 0 ? `${2 - points} left.` : 'Done.'}</p>
+          <p className="muted small">{t('Raise one ability by 2, or two abilities by 1 (20 at most).')} {2 - points > 0 ? t('{n} left.', { n: 2 - points }) : t('Done.')}</p>
           <ul className="asi-list">
             {ABILITIES.map((a) => {
               const add = choices.asi[a] ?? 0;
               return (
                 <li key={a}>
-                  <span className="grow">{ABILITY_NAMES[a]}</span>
-                  <button type="button" aria-label={`Lower ${ABILITY_NAMES[a]}`} disabled={add === 0} onClick={() => bump(a, -1)}>−</button>
+                  <span className="grow">{t(ABILITY_NAMES[a])}</span>
+                  <button type="button" aria-label={t('Lower {ability}', { ability: t(ABILITY_NAMES[a]) })} disabled={add === 0} onClick={() => bump(a, -1)}>−</button>
                   <span className={`asi-score ${add > 0 ? 'up' : ''}`}>{c.abilities[a] + add}</span>
-                  <button type="button" aria-label={`Raise ${ABILITY_NAMES[a]}`} disabled={points >= 2 || c.abilities[a] + add >= 20} onClick={() => bump(a, 1)}>+</button>
+                  <button type="button" aria-label={t('Raise {ability}', { ability: t(ABILITY_NAMES[a]) })} disabled={points >= 2 || c.abilities[a] + add >= 20} onClick={() => bump(a, 1)}>+</button>
                 </li>
               );
             })}
@@ -355,11 +354,11 @@ function FeatStep({ c, plan, choices, set, content }: StepProps) {
       )}
       {choices.featId && !isAsi && (
         <label>
-          Does the feat raise an ability by 1? (Most do; read the feat.)
+          {t('Does the feat raise an ability by 1? (Most do; read the feat.)')}
           <select value={single} onChange={(e) => set({ asi: e.target.value ? { [e.target.value]: 1 } : {} })}>
-            <option value="">No ability increase</option>
+            <option value="">{t('No ability increase')}</option>
             {ABILITIES.map((a) => (
-              <option key={a} value={a}>{ABILITY_NAMES[a]} {c.abilities[a]} → {c.abilities[a] + 1}</option>
+              <option key={a} value={a}>{t(ABILITY_NAMES[a])} {c.abilities[a]} → {c.abilities[a] + 1}</option>
             ))}
           </select>
         </label>
@@ -377,12 +376,11 @@ function SpellsStep({ c, plan, choices, set, content }: StepProps) {
   return (
     <>
       <p className="muted small">
-        At level {plan.newLevel} you have {plural(sp.cantrips, 'cantrip')} and {plural(sp.prepared, 'prepared spell')}, up to {ordinal(sp.maxLevel)}-level spells.
-        You can pick fewer now and add the rest on the sheet's Spells tab.
+        {t("At level {level} you have {cantrips} and {prepared}, spells up to level {max}. You can pick fewer now and add the rest on the sheet's Spells tab.", { level: plan.newLevel, cantrips: plural(sp.cantrips, '{n} cantrip', '{n} cantrips'), prepared: plural(sp.prepared, '{n} prepared spell', '{n} prepared spells'), max: sp.maxLevel })}
       </p>
       {sp.newCantrips > 0 && (
         <MultiPicker
-          label={plural(sp.newCantrips, 'new cantrip')}
+          label={plural(sp.newCantrips, '{n} new cantrip', '{n} new cantrips')}
           max={sp.newCantrips}
           values={cantrips}
           options={spellPickerOptions(options.filter((s) => s.level === 0))}
@@ -391,7 +389,7 @@ function SpellsStep({ c, plan, choices, set, content }: StepProps) {
       )}
       {sp.newPrepared > 0 && (
         <MultiPicker
-          label={plural(sp.newPrepared, 'new prepared spell')}
+          label={plural(sp.newPrepared, '{n} new prepared spell', '{n} new prepared spells')}
           max={sp.newPrepared}
           values={leveled}
           options={spellPickerOptions(options.filter((s) => s.level > 0))}
@@ -410,17 +408,17 @@ function Review({ c, plan, choices, content }: StepProps) {
   const feat = content.feat(choices.featId);
   return (
     <div className="review">
-      <Row k="Level"><strong>{c.className} {plan.newLevel}</strong></Row>
-      <Row k="Hit points">+{gain} HP, maximum <strong>{c.hpMax + gain}</strong></Row>
-      {plan.pbTo !== plan.pbFrom && <Row k="Proficiency bonus"><strong>{formatModifier(plan.pbTo)}</strong></Row>}
-      {plan.needsSubclass && <Row k="Subclass"><strong>{sub?.name ?? choices.customSubclass}</strong></Row>}
-      {plan.feat && <Row k="Feat"><strong>{feat?.name ?? choices.customFeat}</strong></Row>}
+      <Row k={t('Level')}><strong>{tx(c.className)} {plan.newLevel}</strong></Row>
+      <Row k={t('Hit points')}>{tj('+{gain} HP, maximum {max}', { gain, max: <strong>{c.hpMax + gain}</strong> })}</Row>
+      {plan.pbTo !== plan.pbFrom && <Row k={t('Proficiency bonus')}><strong>{formatModifier(plan.pbTo)}</strong></Row>}
+      {plan.needsSubclass && <Row k={t('Subclass')}><strong>{sub ? tx(sub.name) : choices.customSubclass}</strong></Row>}
+      {plan.feat && <Row k={t('Feat')}><strong>{feat?.name ?? choices.customFeat}</strong></Row>}
       {raised.length > 0 && (
-        <Row k="Abilities">{raised.map((a) => `${ABILITY_NAMES[a]} ${c.abilities[a]} → ${after[a]}`).join(' · ')}</Row>
+        <Row k={t('Abilities')}>{raised.map((a) => `${t(ABILITY_NAMES[a])} ${c.abilities[a]} → ${after[a]}`).join(' · ')}</Row>
       )}
-      <Row k="New features"><FeatureChips plan={plan} /></Row>
+      <Row k={t('New features')}><FeatureChips plan={plan} /></Row>
       {choices.spells.length > 0 && (
-        <Row k="New spells">
+        <Row k={t('New spells')}>
           {choices.spells.map((id) => <span key={id} className="chip">{content.spell(id)?.name ?? id}</span>)}
         </Row>
       )}

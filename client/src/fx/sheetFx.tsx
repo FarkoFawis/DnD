@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { CharacterData, Content } from '@dnd/shared';
 import { KIND_TINT, actionTint, burst, move, screenFx, tappedJustNow } from './fx.ts';
 import { useChanges, useDelta, useTween } from './hooks.ts';
+import { t } from '../i18n.tsx';
 
 /** A number that counts to its new value instead of jumping there. */
 export function Num({ value }: { value: number }) {
@@ -84,7 +85,7 @@ export function useCharacterFx(
 
   const level = useDelta(c.level);
   useEffect(() => {
-    if (level.n > 0 && level.delta > 0) screenFx('level', { title: `Level ${c.level}`, sub: c.name });
+    if (level.n > 0 && level.delta > 0) screenFx('level', { title: t('Level {n}', { n: c.level }), sub: c.name });
   }, [level.n]);
 
   const used = useChanges(c.lastAction?.at);

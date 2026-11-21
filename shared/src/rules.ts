@@ -2,6 +2,7 @@
  * Pure D&D 5e (2024) rules helpers. See CLAUDE.md Part 2 for the formulas.
  * Everything here must be deterministic and unit tested.
  */
+import { t } from './i18n.ts';
 
 export const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 export type Ability = (typeof ABILITIES)[number];
@@ -14,6 +15,9 @@ export const ABILITY_NAMES: Record<Ability, string> = {
   wis: 'Wisdom',
   cha: 'Charisma',
 };
+
+/** "STR", "DEX", ... in the language of this phone. */
+export const abilityShort = (a: Ability): string => t(a.toUpperCase());
 
 export const SKILLS = {
   acrobatics: { name: 'Acrobatics', ability: 'dex' },
@@ -132,11 +136,11 @@ export type PartyCheck = `skill:${Skill}` | `save:${Ability}` | `passive:${'perc
 export const PASSIVE_SKILLS = ['perception', 'insight', 'investigation'] as const satisfies readonly Skill[];
 
 export function partyCheckName(check: PartyCheck): string {
-  if (check === 'initiative') return 'Initiative';
+  if (check === 'initiative') return t('Initiative');
   const [kind, key] = check.split(':') as [string, string];
-  if (kind === 'save') return `${ABILITY_NAMES[key as Ability]} save`;
-  if (kind === 'passive') return `Passive ${SKILLS[key as Skill].name}`;
-  return SKILLS[key as Skill].name;
+  if (kind === 'save') return t('{name} save', { name: t(ABILITY_NAMES[key as Ability]) });
+  if (kind === 'passive') return t('Passive {name}', { name: t(SKILLS[key as Skill].name) });
+  return t(SKILLS[key as Skill].name);
 }
 
 /** A character's number for that check: the bonus, or the score itself for a passive one. */

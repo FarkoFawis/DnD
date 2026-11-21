@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { t } from '../i18n.tsx';
 
 /** Phones buzz like a heartbeat. iPhones have no web vibration, they only get the alert. */
 const BUZZ = [220, 120, 220, 120, 320];
@@ -41,7 +42,7 @@ export function FightAlert({ count }: { count: number }) {
   if (!active) return null;
   return (
     <div key={count} className="fight-alert" role="alert">
-      <span className="sr-only">A fight starts!</span>
+      <span className="sr-only">{t('A fight starts!')}</span>
       <span className="fa-tint" aria-hidden />
       <div className="fa-band" aria-hidden>
         <span className="fa-line" />

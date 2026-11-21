@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { t } from '../i18n.tsx';
 
 /** A little longer than the animation in motion.css (2.4 s). */
 const ALERT_MS = 2500;
@@ -41,8 +42,8 @@ export function RestAlert({ count, rest }: { count: number; rest: 'short' | 'lon
           )}
         </svg>
         <p className="ra-text">
-          <strong>{rest === 'long' ? 'Long rest' : 'Short rest'}</strong>
-          <span>{rest === 'long' ? 'Hit points, spell slots and features are back.' : 'Short-rest features are back.'}</span>
+          <strong>{rest === 'long' ? t('Long rest') : t('Short rest')}</strong>
+          <span>{rest === 'long' ? t('Hit points, spell slots and features are back.') : t('Short-rest features are back.')}</span>
         </p>
       </div>
     </div>

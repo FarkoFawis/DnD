@@ -9,6 +9,7 @@ import type { ClassDef, Feature, FeatDef, SpellDef, SubclassDef } from './conten
 import type { CharacterData, CharacterFeature, Spell } from './protocol.ts';
 import { ABILITIES, ABILITY_NAMES, abilityModifier, proficiencyBonus, type Ability } from './rules.ts';
 import { spellSlots } from './resources.ts';
+import { plural, t } from './i18n.ts';
 
 /** Same marker as in creation.ts: "my own / homebrew" in a dropdown. */
 const CUSTOM = 'custom';
@@ -171,42 +172,42 @@ export function levelUpProblems(step: LevelUpStep, c: CharacterData, plan: Level
   switch (step) {
     case 'hp': {
       const r = choices.hpRoll;
-      if (r !== null && !(Number.isInteger(r) && r >= 1 && r <= plan.hitDie)) p.push(`A d${plan.hitDie} roll is between 1 and ${plan.hitDie}.`);
+      if (r !== null && !(Number.isInteger(r) && r >= 1 && r <= plan.hitDie)) p.push(t('A d{die} roll is between 1 and {die}.', { die: plan.hitDie }));
       break;
     }
     case 'subclass': {
       if (!plan.needsSubclass) break;
-      if (!choices.subclassId) p.push('Pick a subclass.');
+      if (!choices.subclassId) p.push(t('Pick a subclass.'));
       else if (choices.subclassId === CUSTOM) {
-        if (!choices.customSubclass.trim()) p.push('Name your homebrew subclass.');
-      } else if (!plan.subclassOptions.some((s) => s.id === choices.subclassId)) p.push('That subclass is not available for your class.');
+        if (!choices.customSubclass.trim()) p.push(t('Name your homebrew subclass.'));
+      } else if (!plan.subclassOptions.some((s) => s.id === choices.subclassId)) p.push(t('That subclass is not available for your class.'));
       break;
     }
     case 'feat': {
       if (!plan.feat) break;
-      if (!choices.featId) return ['Pick a feat.'];
+      if (!choices.featId) return [t('Pick a feat.')];
       if (choices.featId === CUSTOM) {
-        if (!choices.customFeat.trim()) p.push('Name your feat.');
-      } else if (!featOptions(plan, content).some((f) => f.id === choices.featId)) p.push('That feat is not available at this level.');
+        if (!choices.customFeat.trim()) p.push(t('Name your feat.'));
+      } else if (!featOptions(plan, content).some((f) => f.id === choices.featId)) p.push(t('That feat is not available at this level.'));
       const points = ABILITIES.reduce((n, a) => n + (choices.asi[a] ?? 0), 0);
       const isAsi = choices.featId === ASI_FEAT;
       const cap = content.feat(choices.featId)?.category === 'epic-boon' ? 30 : 20;
-      if (ABILITIES.some((a) => !Number.isInteger(choices.asi[a] ?? 0) || (choices.asi[a] ?? 0) < 0 || (choices.asi[a] ?? 0) > 2)) p.push('Invalid ability increase.');
-      else if (isAsi && points !== 2) p.push('Raise one ability by 2, or two abilities by 1.');
-      else if (!isAsi && points > (choices.featId === CUSTOM ? 2 : 1)) p.push('This feat raises one ability by 1 at most.');
+      if (ABILITIES.some((a) => !Number.isInteger(choices.asi[a] ?? 0) || (choices.asi[a] ?? 0) < 0 || (choices.asi[a] ?? 0) > 2)) p.push(t('Invalid ability increase.'));
+      else if (isAsi && points !== 2) p.push(t('Raise one ability by 2, or two abilities by 1.'));
+      else if (!isAsi && points > (choices.featId === CUSTOM ? 2 : 1)) p.push(t('This feat raises one ability by 1 at most.'));
       const after = scoresAfter(c, choices);
-      for (const a of ABILITIES) if ((choices.asi[a] ?? 0) > 0 && after[a] > cap) p.push(`${ABILITY_NAMES[a]} can't go above ${cap}.`);
+      for (const a of ABILITIES) if ((choices.asi[a] ?? 0) > 0 && after[a] > cap) p.push(t("{ability} can't go above {cap}.", { ability: t(ABILITY_NAMES[a]), cap }));
       break;
     }
     case 'spells': {
       if (!plan.spells) break;
       const options = levelUpSpellOptions(c, plan, content);
       const picked = choices.spells.map((id) => options.find((s) => s.id === id));
-      if (picked.some((s) => !s) || new Set(choices.spells).size !== choices.spells.length) p.push('Pick spells from the list.');
+      if (picked.some((s) => !s) || new Set(choices.spells).size !== choices.spells.length) p.push(t('Pick spells from the list.'));
       const cantrips = picked.filter((s) => s?.level === 0).length;
       const leveled = picked.filter((s) => s && s.level > 0).length;
-      if (cantrips > plan.spells.newCantrips) p.push(`Pick ${plan.spells.newCantrips} new cantrip${plan.spells.newCantrips === 1 ? '' : 's'} at most.`);
-      if (leveled > plan.spells.newPrepared) p.push(`Pick ${plan.spells.newPrepared} new spell${plan.spells.newPrepared === 1 ? '' : 's'} at most.`);
+      if (cantrips > plan.spells.newCantrips) p.push(plural(plan.spells.newCantrips, 'Pick {n} new cantrip at most.', 'Pick {n} new cantrips at most.'));
+      if (leveled > plan.spells.newPrepared) p.push(plural(plan.spells.newPrepared, 'Pick {n} new spell at most.', 'Pick {n} new spells at most.'));
       break;
     }
     case 'overview':
@@ -223,7 +224,7 @@ export function allLevelUpProblems(c: CharacterData, plan: LevelUpPlan, choices:
 /** The sheet changes of a level-up. Throws an Error with the first problem when the choices aren't valid. */
 export function applyLevelUp(c: CharacterData, choices: LevelUpChoices, content: Content, newId: () => string): Partial<CharacterData> {
   const plan = levelUpPlan(c, content);
-  if (!plan) throw new Error(`Level ${MAX_LEVEL} is the highest level.`);
+  if (!plan) throw new Error(t('Level {n} is the highest level.', { n: MAX_LEVEL }));
   const problems = allLevelUpProblems(c, plan, choices, content);
   if (problems.length > 0) throw new Error(problems[0]);
 

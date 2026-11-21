@@ -69,6 +69,7 @@ import {
   type PublicUser,
   type ServerToClientEvents,
   type SessionState,
+  t,
 } from '@dnd/shared';
 import { SRD } from '@dnd/shared/srd';
 import { loadContentPacks } from './content.ts';
@@ -165,7 +166,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     }
     const status = store.accountStatus(username);
     if (status.exists && !status.hasPassword && (password.length < PASSWORD_MIN_LENGTH || password.length > 200)) {
-      res.status(400).json({ error: `Choose a password with at least ${PASSWORD_MIN_LENGTH} characters.` });
+      res.status(400).json({ error: t('Choose a password with at least {n} characters.', { n: PASSWORD_MIN_LENGTH }) });
       return;
     }
     const result = store.login(username, password);
@@ -387,7 +388,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     const missingPlayers = [...new Set(fresh.filter((c) => !owners.get(c.owner.toLowerCase())).map((c) => c.owner))];
     if (missingPlayers.length > 0 && req.query.skipMissing !== '1') {
       res.status(409).json({
-        error: `No account here for: ${missingPlayers.join(', ')}. Add them first (npm run users -- add ${missingPlayers.join(' ')}), or load the backup without their characters.`,
+        error: t('No account here for: {names}. Add them first (npm run users -- add {list}), or load the backup without their characters.', { names: missingPlayers.join(', '), list: missingPlayers.join(' ') }),
         missingPlayers,
       });
       return;
@@ -424,7 +425,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       store.restoreCampaign({ id, name, ownerId: user.id, handouts, npcs: backup.npcs, log: backup.log, characters: restored });
     } catch (e) {
       for (const h of handouts) removeImage(h.imageUrl);
-      res.status(500).json({ error: `The backup could not be loaded: ${(e as Error).message}` });
+      res.status(500).json({ error: t('The backup could not be loaded: {reason}', { reason: (e as Error).message }) });
       return;
     }
     const summary: ImportSummary = {

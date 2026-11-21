@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Ack, CampaignSummary, CharacterData, CharacterSummary, DiceRoll, HitDieSpent, Item, DeathSaveResult, LevelUpChoices, RollMode, RollRequest, SessionState, SessionSummary, UseRequest } from '@dnd/shared';
 import { saveCode, savedCode } from './api.ts';
 import { createSocket, type AppSocket } from './socket.ts';
+import { t } from './i18n.tsx';
 
 export type Status = 'connecting' | 'online' | 'offline';
 
@@ -34,7 +35,7 @@ export function useGame(token: string, onUnauthorized: () => void) {
   const call = useCallback(<T,>(fn: (s: AppSocket, done: (res: Ack<T>) => void) => void) => {
     return new Promise<Ack<T>>((resolve) => {
       const s = socketRef.current;
-      if (!s?.connected) return resolve({ ok: false, error: 'Not connected. Check your internet.' });
+      if (!s?.connected) return resolve({ ok: false, error: t('Not connected. Check your internet.') });
       fn(s, resolve);
     });
   }, []);
@@ -85,7 +86,7 @@ export function useGame(token: string, onUnauthorized: () => void) {
       setSession(null);
       // A session that was played ends on its summary; a lobby that is closed just says so.
       if (ended) setSummary(ended);
-      else setError('The DM ended the session. Your character is saved.');
+      else setError(t('The DM ended the session. Your character is saved.'));
       void refreshCharacters();
     });
     return () => {

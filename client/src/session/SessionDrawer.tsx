@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { StatusPill } from '../StatusPill.tsx';
 import type { Game } from '../useGame.ts';
+import { t } from '../i18n.tsx';
 
 /**
  * The sidebar that slides in from the left: about a third of the screen,
@@ -22,7 +23,7 @@ export function Drawer(props: { game: Game; open: boolean; onClose: () => void; 
       <aside className={`drawer ${open ? 'open' : ''}`} aria-hidden={!open} inert={!open}>
         <div className="drawer-head">
           <h1>DnD Table</h1>
-          <button className="drawer-close" aria-label="Close menu" onClick={onClose}>✕</button>
+          <button className="drawer-close" aria-label={t('Close menu')} onClick={onClose}>✕</button>
         </div>
         <StatusPill status={props.game.status} />
         {props.children}
@@ -50,9 +51,9 @@ export function SessionDrawer(props: {
   return (
     <>
       <div className="dm-topbar">
-        <button className="menu-toggle" aria-label="Open menu" aria-expanded={open} onClick={() => setOpen(true)}>
+        <button className="menu-toggle" aria-label={t('Open menu')} aria-expanded={open} onClick={() => setOpen(true)}>
           <span /><span /><span />
-          {props.attention && <i className="menu-dot" aria-label="New" />}
+          {props.attention && <i className="menu-dot" aria-label={t('New')} />}
         </button>
         <span className="dm-topbar-title">{props.title}</span>
       </div>
