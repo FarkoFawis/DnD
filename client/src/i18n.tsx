@@ -1,7 +1,7 @@
 import { Fragment, createElement, type ReactNode } from 'react';
 import { t } from '@dnd/shared';
 
-export { getLanguage, listing, msg, plural, t, tx } from '@dnd/shared';
+export { diceText, getLanguage, listing, msg, plural, t, tx } from '@dnd/shared';
 
 /**
  * `t()` for a sentence with something drawn inside it (a bold name, an icon):

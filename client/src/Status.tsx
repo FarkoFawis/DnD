@@ -202,7 +202,7 @@ export function StatusChips({ character: c }: { character: CharacterData }) {
           {c.concentration.saveDc !== null && ` · ${t('CON save DC {n}', { n: c.concentration.saveDc })}`}
         </span>
       )}
-      {c.conditions.map((id) => <span key={id} className="status-chip cond">{conditionName(id)}</span>)}
+      {c.conditions.map((id) => <span key={id} className="status-chip cond">{tx(conditionName(id))}</span>)}
       {c.exhaustion > 0 && <span className="status-chip cond">{t('Exhaustion {n}', { n: c.exhaustion })}</span>}
     </span>
   );

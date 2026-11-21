@@ -36,7 +36,7 @@ import { featureEntry, itemEntry, spellEntry, spellGlance } from './SheetContent
 import { useContent } from './content/useContent.ts';
 import { ConcentrationBanner, ConditionBadges, DeathSaves } from './Status.tsx';
 import { CastButton, SlotTracker, UsesList, actionText } from './Uses.tsx';
-import { t, tj, tx } from './i18n.tsx';
+import { diceText, t, tj, tx } from './i18n.tsx';
 
 export function ClassicSheet({
   character: c,
@@ -238,7 +238,7 @@ export function ClassicSheet({
           <div className="cs-stat"><span className="cs-big">{Math.max(0, c.speed - 5 * c.exhaustion)}<small> ft</small></span><span className="cs-label">{c.exhaustion > 0 ? t('Speed (exhausted)') : t('Speed')}</span></div>
         </div>
         <div className="cs-stat hitdice-stat">
-          <span className="cs-mid">{hitDiceLeft(c)} / {c.level} <small>d{hitDieSize(c, content)}</small></span>
+          <span className="cs-mid">{hitDiceLeft(c)} / {c.level} <small>{diceText(`d${hitDieSize(c, content)}`)}</small></span>
           <span className="cs-label">{t('Hit dice')}</span>
         </div>
       </section>
@@ -275,7 +275,7 @@ export function ClassicSheet({
         )}
         {stats.spellSaveDc !== null && (
           <p className="cs-spellline">
-            {tj('Spell save DC {strong} ·', { strong: <strong>{stats.spellSaveDc}</strong> })}
+            {tj('Spell save DC {strong} ·', { strong: <strong>{stats.spellSaveDc}</strong> })}{' '}
             {roller ? (
               <button type="button" className="link rollable" onClick={() => roller({ kind: 'spellAttack' })}>
                 {tj('Spell attack {strong}', { strong: <strong>{formatModifier(stats.spellAttack!)}</strong> })}

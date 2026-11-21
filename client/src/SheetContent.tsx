@@ -207,7 +207,7 @@ export function Features({
               <li key={f.id}>
                 <Info entry={featureEntry(content, f)} className="grow" tapToOpen>
                   <span className="block">{f.name}</span>
-                  {f.source && <span className="muted small block">{f.source}</span>}
+                  {f.source && <span className="muted small block">{tx(f.source)}</span>}
                 </Info>
                 {!readOnly && (
                   <button type="button" className="remove" aria-label={t('Remove {name}', { name: f.name })} onClick={() => onChange(list.filter((x) => x.id !== f.id))}>✕</button>

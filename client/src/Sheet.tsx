@@ -247,7 +247,7 @@ export function Sheet({
               <NumInput value={draft.armorClass} onChange={(v) => { const n = num(v, 0, 99); if (n !== null) set('armorClass', n); }} />
             </Stat>
             <Stat label={t('Initiative')}>{formatModifier(stats.initiative)}</Stat>
-            <Stat label={t('Speed')}>
+            <Stat label={t('Speed##tile')}>
               <NumInput value={draft.speed} onChange={(v) => { const n = num(v, 0, 999); if (n !== null) set('speed', n); }} />
             </Stat>
             <Stat label={t('Prof.')}>{formatModifier(stats.proficiencyBonus)}</Stat>

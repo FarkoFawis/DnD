@@ -188,7 +188,7 @@ describe('tx()', () => {
     expect(tx('The STR score must be a whole number from 1 to 30.')).toBe('STÄ-Wert: Das muss eine ganze Zahl von 1 bis 30 sein.');
     expect(tx('Strength can\'t go above 20.')).toBe('Stärke kann nicht über 20 steigen.');
     expect(tx('Pick 2 more cantrips.')).toBe('Wähle noch 2 Zaubertricks.');
-    expect(tx('The backup could not be loaded: disk full')).toBe('Die Sicherung konnte nicht geladen werden: disk full');
+    expect(tx('The backup could not be loaded: disk full')).toBe('Das Backup konnte nicht geladen werden: disk full');
   });
 
   it('reads a roll the way the phone would have written it itself', () => {

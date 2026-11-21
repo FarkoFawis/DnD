@@ -83,6 +83,9 @@ export function plural(n: number, one: string, many: string, vars?: Vars): strin
   return t(n === 1 ? one : many, { n, ...vars });
 }
 
+/** Dice as the language writes them: "2d6+3", German "2W6+3" (W for Würfel). */
+export const diceText = (dice: string): string => (current === 'de' ? dice.replace(/\b(\d*)d(\d+)\b/g, '$1W$2') : dice);
+
 const ORDINALS = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
 /** "1st", "2nd", ... as far as spell levels go; German writes "1." */
 export const ordinal = (n: number): string => (current === 'de' ? `${n}.` : (ORDINALS[n] ?? `${n}th`));

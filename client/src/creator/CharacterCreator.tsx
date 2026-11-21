@@ -49,7 +49,7 @@ import { Info } from '../Info.tsx';
 import { NewPortraitInput } from '../Portrait.tsx';
 import { MultiPicker, Picker, type PickerOption } from '../Picker.tsx';
 import { useContent } from '../content/useContent.ts';
-import { msg, t, tj, tx } from '../i18n.tsx';
+import { diceText, msg, t, tj, tx } from '../i18n.tsx';
 
 /** In English (like STEP_TAGLINES): drawn with t(). */
 const STEP_TITLES: Record<Step, string> = {
@@ -229,7 +229,7 @@ function ClassStep({ c, set, content }: StepProps) {
         label={t('Class')}
         value={c.classId}
         allowCustom
-        options={content.classes.map((x) => ({ value: x.id, label: tx(x.name), hint: `d${x.hitDie} · ${tx(x.primaryAbility)}`, info: withSource(classInfo(x), content, 'classes', x.id) }))}
+        options={content.classes.map((x) => ({ value: x.id, label: tx(x.name), hint: `${diceText(`d${x.hitDie}`)} · ${tx(x.primaryAbility)}`, info: withSource(classInfo(x), content, 'classes', x.id) }))}
         onChange={(classId) => set({ classId, subclassId: '', classSkills: [], classEquipment: '', equipmentPicks: {}, cantrips: [], preparedSpells: [] })}
       />
       {c.classId === CUSTOM && (

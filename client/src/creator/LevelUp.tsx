@@ -108,7 +108,7 @@ export function LevelUp({
         <div key={step} className={`step-body slide-${direction}`}>
           <p className="step-count">{t('Step {n} of {total}', { n: stepIndex + 1, total: steps.length })}</p>
           <h3 className="step-title">{step === 'overview' ? t('Level {n}!', { n: plan.newLevel }) : t(TITLES[step])}</h3>
-          <p className="step-tagline">{TAGLINES[step]}</p>
+          <p className="step-tagline">{t(TAGLINES[step])}</p>
           {step === 'overview' && <Overview {...props} />}
           {step === 'hp' && <HpStep {...props} />}
           {step === 'subclass' && <SubclassStep {...props} />}

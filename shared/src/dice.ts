@@ -12,7 +12,7 @@ import type { CharacterData } from './protocol.ts';
 import type { Content } from './content/index.ts';
 import { weaponAttacks } from './content/attacks.ts';
 import { ABILITIES, ABILITY_NAMES, SKILLS, SKILL_KEYS, deriveStats, formatModifier, type Ability, type Skill } from './rules.ts';
-import { msg, t, tx } from './i18n.ts';
+import { diceText, msg, t, tx } from './i18n.ts';
 
 export const ROLL_MODES = ['normal', 'advantage', 'disadvantage'] as const;
 export type RollMode = (typeof ROLL_MODES)[number];
@@ -138,7 +138,7 @@ export function planRoll(c: CharacterData, req: RollRequest, content: Content): 
 
 /** "1d8+3", "d20+5", "2d6". */
 export function planFormula(p: Pick<RollPlan, 'count' | 'sides' | 'modifier'>): string {
-  const dice = p.count > 0 ? `${p.count === 1 && p.sides === 20 ? '' : p.count}d${p.sides}` : '';
+  const dice = p.count > 0 ? diceText(`${p.count === 1 && p.sides === 20 ? '' : p.count}d${p.sides}`) : '';
   if (!dice) return `${p.modifier}`;
   return p.modifier === 0 ? dice : `${dice}${formatModifier(p.modifier)}`;
 }

@@ -276,7 +276,7 @@ function HandoutEditor(props: { game: Game; campaignId: string; prep: Prep; hand
 // ---------- NPCs & opponents ----------
 
 export function npcSummary(n: Npc): string {
-  return `AC ${n.armorClass} · HP ${n.hpMax} · Initiative ${formatModifier(npcInitiative(n))}`;
+  return `${t('AC {n}', { n: n.armorClass })} · ${n.hpMax} ${t('HP')} · ${t('Initiative')} ${formatModifier(npcInitiative(n))}`;
 }
 
 function Npcs({ prep, npcs }: { prep: Prep; npcs: Npc[] }) {
@@ -337,8 +337,8 @@ function NpcEditor({ prep, npc, onDone }: { prep: Prep; npc?: Npc; onDone: () =>
         </select>
       </label>
       <div className="grid3">
-        <label>{t('Armor Class')}<NumberField value={draft.armorClass} min={0} max={40} onChange={(v) => set('armorClass', v)} /></label>
-        <label>{t('Hit points')}<NumberField value={draft.hpMax} min={1} max={9999} onChange={(v) => set('hpMax', v)} /></label>
+        <label>{t('Armor Class##npc')}<NumberField value={draft.armorClass} min={0} max={40} onChange={(v) => set('armorClass', v)} /></label>
+        <label>{t('Hit points##npc')}<NumberField value={draft.hpMax} min={1} max={9999} onChange={(v) => set('hpMax', v)} /></label>
         <label>{t('Speed (ft)')}<NumberField value={draft.speed} min={0} max={500} onChange={(v) => set('speed', v)} /></label>
       </div>
       <div>
