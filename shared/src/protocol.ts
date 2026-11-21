@@ -18,9 +18,11 @@ export interface AccountStatus {
   exists: boolean;
   /** false = pre-made account that still needs its owner to choose a password. */
   hasPassword: boolean;
+  /** Choosing that first password needs the invite code of this server (set where the app is hosted online). */
+  needsInvite?: boolean;
 }
 
-/** POST /api/auth/login { username, password } -> LoginResult (200) or { error } (4xx) */
+/** POST /api/auth/login { username, password, invite? } -> LoginResult (200) or { error } (4xx) */
 export interface LoginResult {
   token: string;
   user: PublicUser;
@@ -449,7 +451,7 @@ export interface ClientToServerEvents {
   'session:ready': (input: { ready: boolean }, ack: (res: Ack<object>) => void) => void;
   /** DM: start the session. The client warns first if not everyone is ready. */
   'session:start': (ack: (res: Ack<object>) => void) => void;
-  /** Player leaves the session (their character stays saved). */
+  /** Player leaves the session (their character stays saved). Also works from a phone that is not in it right now: it leaves the session the player's character is still in. */
   'session:leave': (ack: (res: Ack<object>) => void) => void;
   /**
    * DM ends the session for everyone (all characters stay saved). A session

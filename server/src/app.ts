@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from 'node:crypto';
+import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, unlink, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { createServer, type Server as HttpServer } from 'node:http';
@@ -93,6 +93,12 @@ export interface AppOptions {
   contentDir?: string;
   /** Folder for pictures the DM uploads for handouts. Without it, uploads are switched off. */
   uploadsDir?: string;
+  /**
+   * When set, choosing an account's first password needs this code. For servers
+   * on the internet, where otherwise anyone who guesses the name of an account
+   * that has not logged in yet could take it.
+   */
+  inviteCode?: string;
 }
 
 const IMAGE_TYPES: Record<string, string> = {
@@ -125,10 +131,18 @@ function cleanText(value: unknown, max: number): string | null {
   return text.length > 0 && text.length <= max ? text : null;
 }
 
+/** Compares a typed code with the real one without giving away how much of it was right. */
+function sameText(given: unknown, expected: string): boolean {
+  if (typeof given !== 'string') return false;
+  const a = createHash('sha256').update(given.trim()).digest();
+  const b = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(a, b);
+}
+
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_MS = 5 * 60 * 1000;
 
-export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDir }: AppOptions): {
+export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDir, inviteCode }: AppOptions): {
   httpServer: HttpServer;
   io: IoServer;
 } {
@@ -148,7 +162,8 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
 
   app.post('/api/auth/status', (req, res) => {
     const username = cleanText(req.body?.username, LIMITS.usernameMaxLength);
-    res.json(username ? store.accountStatus(username) : { exists: false, hasPassword: false });
+    const status = username ? store.accountStatus(username) : { exists: false, hasPassword: false };
+    res.json(status.exists && !status.hasPassword && inviteCode ? { ...status, needsInvite: true } : status);
   });
 
   app.post('/api/auth/login', (req, res) => {
@@ -169,13 +184,17 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       res.status(400).json({ error: t('Choose a password with at least {n} characters.', { n: PASSWORD_MIN_LENGTH }) });
       return;
     }
-    const result = store.login(username, password);
-    if (!result) {
+    const fail = (code: number, error: string) => {
       const count = (failed && failed.until > Date.now() ? failed.count : 0) + 1;
       failedLogins.set(key, { count, until: Date.now() + LOCKOUT_MS });
-      res.status(401).json({ error: 'Wrong username or password.' });
-      return;
+      res.status(code).json({ error });
+    };
+    // A first password on a server with an invite code: only with that code. Wrong codes count like wrong passwords.
+    if (status.exists && !status.hasPassword && inviteCode && !sameText(req.body?.invite, inviteCode)) {
+      return fail(403, 'That is not the invite code. Ask your DM for it.');
     }
+    const result = store.login(username, password);
+    if (!result) return fail(401, 'Wrong username or password.');
     failedLogins.delete(key);
     res.json(result);
   });
@@ -1296,9 +1315,11 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     });
 
     socket.on('session:leave', (ack) => {
-      const code = socket.data.code;
+      if (socket.data.code && socket.data.isHost) return ack({ ok: false, error: 'As the DM, end the session instead.' });
+      // Not in it on this phone (opened under another address, or the browser forgot):
+      // the session this player's character is still sitting in.
+      const code = socket.data.code ?? store.listCharacters(user.id).find((c) => c.inSession)?.inSession;
       if (!code) return ack({ ok: false, error: 'You are not in a session.' });
-      if (socket.data.isHost) return ack({ ok: false, error: 'As the DM, end the session instead.' });
       store.removeSessionPlayer(code, user.id);
       // Take every tab of this user out of the session.
       for (const s of io.sockets.sockets.values()) {

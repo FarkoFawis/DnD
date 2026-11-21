@@ -42,8 +42,8 @@ async function post<T>(path: string, body: unknown, token?: string): Promise<T> 
 }
 
 export const accountStatus = (username: string) => post<AccountStatus>('/api/auth/status', { username });
-export const login = (username: string, password: string) =>
-  post<LoginResult>('/api/auth/login', { username, password });
+export const login = (username: string, password: string, invite?: string) =>
+  post<LoginResult>('/api/auth/login', { username, password, invite });
 export const logout = (token: string) => post('/api/auth/logout', {}, token).catch(() => undefined);
 
 export async function me(token: string): Promise<PublicUser | null> {
