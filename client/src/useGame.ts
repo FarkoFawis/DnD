@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Ack, CampaignSummary, CharacterData, CharacterSummary, DiceRoll, HitDieSpent, Item, DeathSaveResult, LevelUpChoices, RollMode, RollRequest, SessionState, UseRequest } from '@dnd/shared';
+import type { Ack, CampaignSummary, CharacterData, CharacterSummary, DiceRoll, HitDieSpent, Item, DeathSaveResult, LevelUpChoices, RollMode, RollRequest, SessionState, SessionSummary, UseRequest } from '@dnd/shared';
 import { saveCode, savedCode } from './api.ts';
 import { createSocket, type AppSocket } from './socket.ts';
+import { t } from './i18n.tsx';
 
 export type Status = 'connecting' | 'online' | 'offline';
 
@@ -20,13 +21,21 @@ export function useGame(token: string, onUnauthorized: () => void) {
   const [error, setError] = useState<string | null>(null);
   /** Counts "Initiate fight" alerts from the DM; each one pulses the screen (see FightAlert). */
   const [fightAlerts, setFightAlerts] = useState(0);
+  /** The latest rest the DM called; `n` goes up with each one (see RestAlert). */
+  const [restAlert, setRestAlert] = useState<{ n: number; rest: 'short' | 'long'; characterId?: string } | null>(null);
+  /** The DM started the session: `n` goes up with it, `session` is its number in the campaign (the title card). */
+  const [startAlert, setStartAlert] = useState<{ n: number; session: number } | null>(null);
+  /** The latest Heroic Inspiration the DM gave out. */
+  const [inspirationAlert, setInspirationAlert] = useState<{ n: number; characterId: string } | null>(null);
+  /** The session the DM just ended, in numbers, until the summary screen is closed. */
+  const [summary, setSummary] = useState<SessionSummary | null>(null);
   /** DM: the latest rolls the players made with the dice roller, oldest first. */
   const [rolls, setRolls] = useState<DiceRoll[]>([]);
 
   const call = useCallback(<T,>(fn: (s: AppSocket, done: (res: Ack<T>) => void) => void) => {
     return new Promise<Ack<T>>((resolve) => {
       const s = socketRef.current;
-      if (!s?.connected) return resolve({ ok: false, error: 'Not connected. Check your internet.' });
+      if (!s?.connected) return resolve({ ok: false, error: t('Not connected. Check your internet.') });
       fn(s, resolve);
     });
   }, []);
@@ -67,12 +76,17 @@ export function useGame(token: string, onUnauthorized: () => void) {
     s.on('session:state', setSession);
     s.on('session:alert', (alert) => {
       if (alert.kind === 'fight') setFightAlerts((n) => n + 1);
+      else if (alert.kind === 'rest') setRestAlert((last) => ({ n: (last?.n ?? 0) + 1, rest: alert.rest, characterId: alert.characterId }));
+      else if (alert.kind === 'start') setStartAlert((last) => ({ n: (last?.n ?? 0) + 1, session: alert.session }));
+      else if (alert.kind === 'inspiration') setInspirationAlert((last) => ({ n: (last?.n ?? 0) + 1, characterId: alert.characterId }));
     });
     s.on('session:roll', (roll) => setRolls((list) => [...list.slice(-19), roll]));
-    s.on('session:ended', () => {
+    s.on('session:ended', (ended) => {
       saveCode(null);
       setSession(null);
-      setError('The DM ended the session. Your character is saved.');
+      // A session that was played ends on its summary; a lobby that is closed just says so.
+      if (ended) setSummary(ended);
+      else setError(t('The DM ended the session. Your character is saved.'));
       void refreshCharacters();
     });
     return () => {
@@ -105,6 +119,11 @@ export function useGame(token: string, onUnauthorized: () => void) {
     /** For features that talk to the server themselves (campaign prep, fights, log). */
     call,
     fightAlerts,
+    restAlert,
+    startAlert,
+    inspirationAlert,
+    summary,
+    closeSummary: () => setSummary(null),
     rolls,
     status,
     session,
@@ -131,10 +150,11 @@ export function useGame(token: string, onUnauthorized: () => void) {
       void refreshCharacters();
     },
     end: async () => {
-      const res = await call<object>((s, done) => s.emit('session:end', done));
+      const res = await call<{ summary?: SessionSummary }>((s, done) => s.emit('session:end', done));
       if (!res.ok) return setError(res.error);
       saveCode(null);
       setSession(null);
+      if (res.summary) setSummary(res.summary);
       void refreshCampaigns();
     },
     updateCharacter: (characterId: string, patch: Partial<CharacterData>) =>
@@ -157,6 +177,9 @@ export function useGame(token: string, onUnauthorized: () => void) {
       charCall((s, done) => s.emit('character:deathSave', { characterId, result }, done)),
     levelUp: (characterId: string, choices: LevelUpChoices) =>
       charCall((s, done) => s.emit('character:levelUp', { characterId, choices }, done)),
+    /** Heroic Inspiration: the DM gives it or takes it back, the player spends it. */
+    inspiration: (characterId: string, action: 'give' | 'take' | 'spend') =>
+      charCall((s, done) => s.emit('character:inspiration', { characterId, action }, done)),
     /** Give back one spent slot or use. */
     restore: (characterId: string, id: string) =>
       charCall((s, done) => s.emit('character:restore', { characterId, id }, done)),

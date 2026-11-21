@@ -1,10 +1,31 @@
 import { useState } from 'react';
+import type { CharacterSummary } from '@dnd/shared';
 import { GearIcon, PersonIcon } from './icons.tsx';
 import { Portrait } from './Portrait.tsx';
 import { Drawer } from './session/SessionDrawer.tsx';
 import type { Game } from './useGame.ts';
+import { plural, t, tx } from './i18n.tsx';
 
 export type HomeTarget = 'play' | 'characters' | 'settings';
+
+/** The hero of the home screen: the newest character with a picture of its own, else the newest one. */
+function heroOf(characters: CharacterSummary[]): CharacterSummary | undefined {
+  return [...characters].reverse().find((c) => c.data.portrait) ?? characters.at(-1);
+}
+
+/**
+ * The picture behind the home screen. It lives outside `Home` (App.tsx puts it
+ * behind both the home screen and Play) so it can stay and glide sideways,
+ * like a camera moving along a scene, while the screens in front change.
+ */
+export function HeroBackdrop({ game }: { game: Game }) {
+  const hero = heroOf(game.characters ?? []);
+  return (
+    <div className="home-hero" aria-hidden>
+      {hero ? <Portrait characterId={hero.id} character={hero.data} className="home-hero-art" /> : <HeroDie />}
+    </div>
+  );
+}
 
 /**
  * The screen after logging in. Top left: who you are (tap for the sidebar
@@ -12,36 +33,44 @@ export type HomeTarget = 'play' | 'characters' | 'settings';
  * Settings as round buttons. On the right, behind them: one of your
  * characters as the picture of the screen. Bottom right: Play.
  */
-export function Home({ game, username, onPick, onSignOut }: { game: Game; username: string; onPick: (t: HomeTarget) => void; onSignOut: () => void }) {
+export function Home({
+  game,
+  username,
+  onPick,
+  onSignOut,
+  leaving,
+}: {
+  game: Game;
+  username: string;
+  onPick: (t: HomeTarget) => void;
+  onSignOut: () => void;
+  /** Another screen is about to open: everything slides off to its side first. */
+  leaving?: boolean;
+}) {
   const [menu, setMenu] = useState(false);
   const characters = game.characters ?? [];
-  // The hero of the screen: the newest character with a picture of its own, else the newest one.
-  const hero = [...characters].reverse().find((c) => c.data.portrait) ?? characters.at(-1);
+  const hero = heroOf(characters);
   const count = characters.length;
 
   return (
-    <section className="home">
+    <section className={`home ${leaving ? 'leaving' : ''}`}>
       <Drawer game={game} open={menu} onClose={() => setMenu(false)}>
-        <p className="muted small drawer-label">Logged in as</p>
+        <p className="muted small drawer-label">{t('Logged in as')}</p>
         <p className="drawer-campaign">{username}</p>
-        <p className="muted small drawer-label">Characters</p>
+        <p className="muted small drawer-label">{t('Characters')}</p>
         <p className="drawer-campaign">{game.characters === null ? '…' : count}</p>
         <div className="drawer-spacer" />
         <button
           className="ghost"
           onClick={() => {
-            if (window.confirm(`Log out ${username}?`)) onSignOut();
+            if (window.confirm(t('Log out {username}?', { username }))) onSignOut();
           }}
         >
-          Log out
+          {t('Log out')}
         </button>
       </Drawer>
 
-      <div className="home-hero" aria-hidden>
-        {hero ? <Portrait characterId={hero.id} character={hero.data} className="home-hero-art" /> : <HeroDie />}
-      </div>
-
-      <button type="button" className="home-user" aria-label={`${username}: open the menu`} aria-expanded={menu} onClick={() => setMenu(true)}>
+      <button type="button" className="home-user" aria-label={t('{username}: open the menu', { username })} aria-expanded={menu} onClick={() => setMenu(true)}>
         <span className="home-avatar">
           {(username.trim()[0] ?? '?').toUpperCase()}
           <i className={`home-status status-${game.status}`} aria-label={game.status} />
@@ -49,14 +78,14 @@ export function Home({ game, username, onPick, onSignOut }: { game: Game; userna
         <span className="home-username">{username}</span>
       </button>
 
-      <nav className="home-nav" aria-label="Menu">
+      <nav className="home-nav" aria-label={t('Menu')}>
         <button type="button" className="home-item" onClick={() => onPick('characters')}>
           <span className="home-icon" aria-hidden>
             <PersonIcon />
           </span>
           <span className="home-label">
-            Characters
-            <span className="home-sub">{game.characters === null ? ' ' : count === 0 ? 'Create your first one' : `${count} ${count === 1 ? 'character' : 'characters'}`}</span>
+            {t('Characters')}
+            <span className="home-sub">{game.characters === null ? ' ' : count === 0 ? t('Create your first one') : plural(count, '{n} character', '{n} characters')}</span>
           </span>
         </button>
         <button type="button" className="home-item" onClick={() => onPick('settings')}>
@@ -64,8 +93,8 @@ export function Home({ game, username, onPick, onSignOut }: { game: Game; userna
             <GearIcon />
           </span>
           <span className="home-label">
-            Settings
-            <span className="home-sub hint">Themes, helper texts, dice roller</span>
+            {t('Settings')}
+            <span className="home-sub hint">{t('Themes, language, dice roller')}</span>
           </span>
         </button>
       </nav>
@@ -73,15 +102,15 @@ export function Home({ game, username, onPick, onSignOut }: { game: Game; userna
       <div className="home-bottom">
         {hero ? (
           <button type="button" className="home-hero-tag" onClick={() => onPick('characters')}>
-            <strong>{hero.data.name || 'Unnamed'}</strong>
-            <span className="muted small">{[hero.data.species, hero.data.className].filter(Boolean).join(' ') || 'Adventurer'} · Level {hero.data.level}</span>
+            <strong>{hero.data.name || t('Unnamed')}</strong>
+            <span className="muted small">{[tx(hero.data.species), tx(hero.data.className)].filter(Boolean).join(' ') || t('Adventurer')} · {t('Level {n}', { n: hero.data.level })}</span>
           </button>
         ) : (
           <span />
         )}
         <button type="button" className="home-play" onClick={() => onPick('play')}>
-          Play
-          <span className="home-play-sub hint">Join or host</span>
+          {t('Play')}
+          <span className="home-play-sub hint">{t('Join or host')}</span>
         </button>
       </div>
     </section>

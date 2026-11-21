@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CampaignPrep, Handout, Npc } from '@dnd/shared';
 import type { Game } from '../useGame.ts';
+import { t } from '../i18n.tsx';
 
 /** A campaign's handouts and NPCs, with save/delete. Only works for the campaign's DM. */
 export function usePrep(game: Game, campaignId: string) {
@@ -21,7 +22,7 @@ export function usePrep(game: Game, campaignId: string) {
   /** Runs a change, then reloads. Returns whether it worked. */
   const change = async (run: () => Promise<{ ok: boolean; error?: string }>) => {
     const res = await run();
-    setError(res.ok ? null : (res.error ?? 'Something went wrong.'));
+    setError(res.ok ? null : (res.error ?? t('Something went wrong.')));
     if (res.ok) await reload();
     return res.ok;
   };

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { PASSWORD_MIN_LENGTH, type LoginResult } from '@dnd/shared';
 import { accountStatus, login } from './api.ts';
+import { t, tx } from './i18n.tsx';
 
 /**
  * Accounts are pre-made by the admin. Step 1: username. Step 2: the password,
@@ -21,17 +22,17 @@ export function Login({ onLoggedIn }: { onLoggedIn: (r: LoginResult) => void }) 
     try {
       if (step === 'username') {
         const status = await accountStatus(username);
-        if (!status.exists) setError('There is no account with that name. Ask the DM to add you.');
+        if (!status.exists) setError(t('There is no account with that name. Ask the DM to add you.'));
         else setStep(status.hasPassword ? 'password' : 'choose');
       } else {
         if (step === 'choose' && password !== confirm) {
-          setError('The two passwords are different.');
+          setError(t('The two passwords are different.'));
           return;
         }
         onLoggedIn(await login(username, password));
       }
     } catch (err) {
-      setError((err as Error).message === 'Failed to fetch' ? 'Cannot reach the server.' : (err as Error).message);
+      setError((err as Error).message === 'Failed to fetch' ? t('Cannot reach the server.') : (err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -40,14 +41,14 @@ export function Login({ onLoggedIn }: { onLoggedIn: (r: LoginResult) => void }) 
   return (
     <section className="card">
       <h2 className="card-title">
-        {step === 'username' ? 'Log in' : step === 'choose' ? `Welcome, ${username}!` : `Hi ${username}`}
+        {step === 'username' ? t('Log in') : step === 'choose' ? t('Welcome, {username}!', { username }) : t('Hi {username}', { username })}
       </h2>
-      {step === 'choose' && <p className="muted mb">First time here. Choose a password for your account.</p>}
-      {error && <p className="error" role="alert">{error}</p>}
+      {step === 'choose' && <p className="muted mb">{t('First time here. Choose a password for your account.')}</p>}
+      {error && <p className="error" role="alert">{tx(error)}</p>}
       <form onSubmit={submit}>
         {step === 'username' ? (
           <label>
-            Username
+            {t('Username')}
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -62,7 +63,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: (r: LoginResult) => void }) 
           <>
             <input type="hidden" autoComplete="username" value={username} readOnly />
             <label>
-              {step === 'choose' ? 'New password' : 'Password'}
+              {step === 'choose' ? t('New password') : t('Password')}
               <input
                 type="password"
                 value={password}
@@ -75,7 +76,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: (r: LoginResult) => void }) 
             </label>
             {step === 'choose' && (
               <label>
-                Repeat password
+                {t('Repeat password')}
                 <input
                   type="password"
                   value={confirm}
@@ -88,7 +89,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: (r: LoginResult) => void }) 
           </>
         )}
         <button className="primary" type="submit" disabled={busy}>
-          {step === 'username' ? 'Continue' : step === 'choose' ? 'Save password and log in' : 'Log in'}
+          {step === 'username' ? t('Continue') : step === 'choose' ? t('Save password and log in') : t('Log in')}
         </button>
         {step !== 'username' && (
           <button
@@ -101,7 +102,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: (r: LoginResult) => void }) 
               setError(null);
             }}
           >
-            Not {username}?
+            {t('Not {username}?', { username })}
           </button>
         )}
       </form>

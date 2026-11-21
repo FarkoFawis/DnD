@@ -5,6 +5,7 @@
  */
 import type { CharacterData } from './protocol.ts';
 import { applyHpChange } from './rules.ts';
+import { msg, t } from './i18n.ts';
 
 /** The 14 on/off conditions. Exhaustion is a level (CharacterData.exhaustion). */
 export const CONDITIONS = [
@@ -92,17 +93,17 @@ export function afterConditionsSet(c: CharacterData, conditions: string[]): Part
 export type DeathSaveResult = 'nat1' | 'fail' | 'success' | 'nat20';
 
 export const DEATH_SAVE_LABEL: Record<DeathSaveResult, string> = {
-  nat1: 'rolled a 1 (two failures)',
-  fail: 'failure',
-  success: 'success',
-  nat20: 'rolled a 20 (back up with 1 HP)',
+  nat1: msg('rolled a 1 (two failures)'),
+  fail: msg('failure'),
+  success: msg('success'),
+  nat20: msg('rolled a 20 (back up with 1 HP)'),
 };
 
 /** Records one death saving throw. Throws when the character isn't rolling them. */
 export function applyDeathSave(c: CharacterData, result: DeathSaveResult): Partial<CharacterData> {
-  if (c.hpCurrent > 0) throw new Error('Death saves are only rolled at 0 HP.');
-  if (isDead(c)) throw new Error('This character is dead.');
-  if (isStable(c)) throw new Error('This character is stable and rolls no more death saves.');
+  if (c.hpCurrent > 0) throw new Error(t('Death saves are only rolled at 0 HP.'));
+  if (isDead(c)) throw new Error(t('This character is dead.'));
+  if (isStable(c)) throw new Error(t('This character is stable and rolls no more death saves.'));
   const { successes, failures } = c.deathSaves;
   switch (result) {
     case 'nat20':
@@ -114,6 +115,6 @@ export function applyDeathSave(c: CharacterData, result: DeathSaveResult): Parti
     case 'nat1':
       return { deathSaves: { successes, failures: Math.min(3, failures + 2) } };
     default:
-      throw new Error('Invalid death save.');
+      throw new Error(t('Invalid death save.'));
   }
 }

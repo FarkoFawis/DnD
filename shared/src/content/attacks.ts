@@ -1,6 +1,7 @@
 import { abilityModifier, proficiencyBonus, type Ability } from '../rules.ts';
 import type { CharacterData } from '../protocol.ts';
 import type { Content } from './index.ts';
+import { diceText, t, tx } from '../i18n.ts';
 
 export interface WeaponAttack {
   itemId: string;
@@ -51,12 +52,12 @@ export function weaponAttacks(c: CharacterData, content: Content): WeaponAttack[
       itemId: item.id,
       name: def.name,
       toHit: m + (proficient ? pb : 0),
-      damage: `${w.damage}${bonus} ${w.damageType}`.trim(),
+      damage: `${diceText(w.damage)}${bonus} ${tx(w.damageType)}`.trim(),
       notes: [
-        w.versatile && `two-handed ${w.versatile}${bonus}`,
-        w.range && `range ${w.range}`,
-        w.mastery && `mastery: ${w.mastery}`,
-        !proficient && 'not proficient',
+        w.versatile && t('two-handed {dice}', { dice: `${diceText(w.versatile)}${bonus}` }),
+        w.range && t('range {range}', { range: w.range }),
+        w.mastery && t('mastery: {name}', { name: tx(w.mastery) }),
+        !proficient && t('not proficient'),
       ]
         .filter(Boolean)
         .join(' · '),

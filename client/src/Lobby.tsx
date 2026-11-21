@@ -4,6 +4,7 @@ import { Portrait } from './Portrait.tsx';
 import { CampaignConfig } from './prep/CampaignConfig.tsx';
 import { Recap } from './prep/SessionLog.tsx';
 import type { Game } from './useGame.ts';
+import { t, tx } from './i18n.tsx';
 
 /**
  * Where the slots around the DM go, in the order players join: the DM's card
@@ -71,16 +72,16 @@ export function Lobby({ game, session, myId }: { game: Game; session: SessionSta
     if (!allReady) {
       const msg =
         total === 0
-          ? 'No players have joined yet. Start anyway?'
-          : `Only ${readyCount} of ${total} players are ready. Start anyway?`;
+          ? t('No players have joined yet. Start anyway?')
+          : t('Only {ready} of {total} players are ready. Start anyway?', { ready: readyCount, total });
       if (!window.confirm(msg)) return;
     }
     void game.start();
   };
   const leave = () => {
     if (isHost) {
-      if (window.confirm('Close the lobby for everyone? All characters stay saved.')) void game.end();
-    } else if (window.confirm('Leave the lobby?')) {
+      if (window.confirm(t('Close the lobby for everyone? All characters stay saved.'))) void game.end();
+    } else if (window.confirm(t('Leave the lobby?'))) {
       void game.leave();
     }
   };
@@ -90,27 +91,27 @@ export function Lobby({ game, session, myId }: { game: Game; session: SessionSta
       <div className="lobby-head">
         <h2 className="lobby-title">{session.campaign.name}</h2>
         <span className={`muted small ${allReady ? 'ok-text' : ''}`} role="status">
-          {total === 0 ? 'Waiting for players…' : allReady ? 'Everyone is ready' : `${readyCount}/${total} ready`}
+          {total === 0 ? t('Waiting for players…') : allReady ? t('Everyone is ready') : t('{ready}/{total} ready', { ready: readyCount, total })}
         </span>
       </div>
 
       <div className={`lobby-grid ${stacked ? 'stacked' : 'around'}`} style={stacked ? undefined : { gridAutoRows: `${Math.round(seatHeight)}px` }}>
-        <section className={`lobby-dm ${session.host.online ? '' : 'away'}`} aria-label="Dungeon Master">
+        <section className={`lobby-dm ${session.host.online ? '' : 'away'}`} aria-label={t('Dungeon Master')}>
           <div className="lobby-dm-part">
             <Crown />
-            <span className="lobby-dm-label">Dungeon Master</span>
+            <span className="lobby-dm-label">{t('Dungeon Master')}</span>
             <strong className="lobby-dm-name">
               {session.host.username}
-              {isHost && <span className="muted small"> (you)</span>}
+              {isHost && <span className="muted small"> {t('(you)')}</span>}
             </strong>
-            {!session.host.online && <span className="muted small">reconnecting…</span>}
+            {!session.host.online && <span className="muted small">{t('reconnecting…')}</span>}
           </div>
           <div className="lobby-dm-part">
-            <span className="lobby-dm-label">{isHost ? 'Players join with' : 'Session code'}</span>
-            <span className="lobby-code" aria-label="Session code">{session.code}</span>
+            <span className="lobby-dm-label">{isHost ? t('Players join with') : t('Session code')}</span>
+            <span className="lobby-code" aria-label={t('Session code')}>{session.code}</span>
             {isHost && (
               <button type="button" className="secondary lobby-configure" onClick={() => setConfiguring(true)}>
-                ⚙ Configure
+                {t('⚙ Configure')}
               </button>
             )}
           </div>
@@ -119,30 +120,30 @@ export function Lobby({ game, session, myId }: { game: Game; session: SessionSta
           const at = stacked ? undefined : AROUND[i];
           const style: CSSProperties | undefined = at && { gridColumn: at.col, gridRow: at.row };
           const p = players[i];
-          return p ? <Seat key={p.user.id} player={p} isMe={p.user.id === myId} style={style} /> : <div key={`free-${i}`} className="lobby-slot empty" style={style} aria-label="Free seat">+</div>;
+          return p ? <Seat key={p.user.id} player={p} isMe={p.user.id === myId} style={style} /> : <div key={`free-${i}`} className="lobby-slot empty" style={style} aria-label={t('Free seat')}>+</div>;
         })}
       </div>
 
       {me &&
         (me.ready ? (
-          <p className="muted small center mt">Waiting for the DM to start the session.</p>
+          <p className="muted small center mt">{t('Waiting for the DM to start the session.')}</p>
         ) : (
-          <p className="muted small center mt hint">Tap Ready when you are set.</p>
+          <p className="muted small center mt hint">{t('Tap Ready when you are set.')}</p>
         ))}
-      {isHost && total === 0 && <p className="muted small center mt hint">Tell your players the code. They pick a character and sit down here.</p>}
+      {isHost && total === 0 && <p className="muted small center mt hint">{t('Tell your players the code. They pick a character and sit down here.')}</p>}
       {isHost && <Recap game={game} campaign={session.campaign} />}
 
       <div className="lobby-bar">
-        <button type="button" className="lobby-leave" aria-label={isHost ? 'Close the lobby' : 'Leave the lobby'} onClick={leave}>✕</button>
+        <button type="button" className="lobby-leave" aria-label={isHost ? t('Close the lobby') : t('Leave the lobby')} onClick={leave}>✕</button>
         {isHost ? (
           <button type="button" className={`primary lobby-go ${allReady ? 'pulse' : 'dim'}`} onClick={start}>
-            <span>Start <span aria-hidden>›</span></span>
+            <span>{t('Start')} <span aria-hidden>›</span></span>
           </button>
         ) : (
           me && (
             <button type="button" className={`primary lobby-go ${me.ready ? 'is-ready' : ''}`} aria-pressed={me.ready} onClick={() => void game.setReady(!me.ready)}>
-              {me.ready ? 'Ready ✓' : 'Ready'}
-              {me.ready && <span className="lobby-go-sub hint">tap to undo</span>}
+              {me.ready ? t('Ready ✓') : t('Ready')}
+              {me.ready && <span className="lobby-go-sub hint">{t('tap to undo')}</span>}
             </button>
           )
         )}
@@ -157,12 +158,12 @@ function Seat({ player, isMe, style }: { player: SessionPlayer; isMe: boolean; s
     <div className={`lobby-slot ${player.ready ? 'ready' : ''} ${player.online ? '' : 'away'}`} style={style}>
       <Portrait characterId={player.characterId} character={c} className="lobby-art" />
       <span className="lobby-shade" aria-hidden />
-      {isMe && <span className="party-you">You</span>}
+      {isMe && <span className="party-you">{t('You')}</span>}
       <span className="lobby-info">
         <span className="lobby-name">{c.name || player.user.username}</span>
         <span className="lobby-player">{player.user.username}</span>
-        <span className="lobby-sub">{[c.className, `Lv ${c.level}`].filter(Boolean).join(' · ')}</span>
-        <span className="lobby-ready">{!player.online ? 'Offline' : player.ready ? 'Ready ✓' : 'Not ready'}</span>
+        <span className="lobby-sub">{[tx(c.className), t('Lv {n}', { n: c.level })].filter(Boolean).join(' · ')}</span>
+        <span className="lobby-ready">{!player.online ? t('Offline') : player.ready ? t('Ready ✓') : t('Not ready')}</span>
       </span>
     </div>
   );

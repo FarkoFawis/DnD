@@ -10,6 +10,7 @@
 import type { CharacterData, Concentration, LastAction } from './protocol.ts';
 import { abilityModifier, proficiencyBonus } from './rules.ts';
 import { applyDamageOrHealing, isDead } from './status.ts';
+import { msg, ordinal, t } from './i18n.ts';
 
 /** How a rest refreshes something. `shortOne`: one use back on a Short Rest, all on a Long Rest. */
 export type ResetOn = 'short' | 'shortOne' | 'long';
@@ -202,8 +203,7 @@ export type UseRequest =
   | { kind: 'feature'; useId: string; amount?: number }
   | { kind: 'attack'; name: string };
 
-const ORD = ['', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
-export const ordinal = (n: number) => ORD[n] ?? `${n}th`;
+export { ordinal };
 
 /**
  * Spends what a use needs and returns the new `used` map plus what to show the
@@ -218,34 +218,34 @@ export function applyUse(
   const next = { ...c.used };
   if (req.kind === 'attack') {
     const name = req.name.trim().slice(0, 80);
-    if (!name) throw new Error('Nothing to use.');
-    return { used: next, action: { name, detail: 'attack' } };
+    if (!name) throw new Error(t('Nothing to use.'));
+    return { used: next, action: { name, detail: 'attack', kind: 'attack' } };
   }
   if (req.kind === 'spell') {
     const spell = c.spells.find((s) => s.id === req.spellId);
-    if (!spell) throw new Error('That spell is not on your sheet.');
+    if (!spell) throw new Error(t('That spell is not on your sheet.'));
     // A new concentration spell replaces the one being held.
     const conc = spellInfo.concentration
       ? { concentration: { name: spell.name, ...(spell.ref ? { ref: spell.ref } : {}), saveDc: null } }
       : {};
-    if (spell.level === 0) return { used: next, action: { name: spell.name, detail: 'cantrip' }, ...conc };
-    if (req.ritual) return { used: next, action: { name: spell.name, detail: 'ritual' }, ...conc };
+    if (spell.level === 0) return { used: next, action: { name: spell.name, detail: 'cantrip', kind: 'spell' }, ...conc };
+    if (req.ritual) return { used: next, action: { name: spell.name, detail: 'ritual', kind: 'spell' }, ...conc };
     const slot = spellSlots(c).find((s) => s.id === (req.slot ?? castOptions(c, spell.level)[0]?.id));
-    if (!slot) throw new Error(`No spell slots of level ${spell.level} or higher left.`);
-    if (slot.level < spell.level) throw new Error(`${spell.name} needs a level ${spell.level} slot or higher.`);
-    if (used(c, slot.id) >= slot.max) throw new Error(`No level ${slot.level} slots left.`);
+    if (!slot) throw new Error(t('No spell slots of level {n} or higher left.', { n: spell.level }));
+    if (slot.level < spell.level) throw new Error(t('{spell} needs a level {n} slot or higher.', { spell: spell.name, n: spell.level }));
+    if (used(c, slot.id) >= slot.max) throw new Error(t('No level {n} slots left.', { n: slot.level }));
     next[slot.id] = used(c, slot.id) + 1;
-    return { used: next, action: { name: spell.name, detail: `${ordinal(slot.level)}-level slot` }, ...conc };
+    return { used: next, action: { name: spell.name, detail: t('{nth}-level slot', { nth: ordinal(slot.level) }), kind: 'spell' }, ...conc };
   }
   const u = limitedUses(c).find((x) => x.id === req.useId);
-  if (!u) throw new Error('That feature has no limited uses.');
+  if (!u) throw new Error(t('That feature has no limited uses.'));
   const amount = u.pool ? Math.floor(req.amount ?? 1) : 1;
-  if (!(amount >= 1)) throw new Error('Invalid amount.');
+  if (!(amount >= 1)) throw new Error(t('Invalid amount.'));
   const left = u.max - used(c, u.id);
-  if (left <= 0) throw new Error(`No uses of ${u.name} left. It comes back after a ${u.resetOn === 'long' ? 'Long' : 'Short or Long'} Rest.`);
-  if (amount > left) throw new Error(`Only ${left} left.`);
+  if (left <= 0) throw new Error(u.resetOn === 'long' ? t('No uses of {name} left. It comes back after a Long Rest.', { name: u.name }) : t('No uses of {name} left. It comes back after a Short or Long Rest.', { name: u.name }));
+  if (amount > left) throw new Error(t('Only {n} left.', { n: left }));
   next[u.id] = used(c, u.id) + amount;
-  return { used: next, action: { name: u.name.replace(/ \(.*\)$/, ''), detail: u.pool ? `${amount}` : undefined } };
+  return { used: next, action: { name: u.name.replace(/ \(.*\)$/, ''), detail: u.pool ? `${amount}` : undefined, kind: 'feature' } };
 }
 
 /**
@@ -266,6 +266,8 @@ export function applyRest(c: CharacterData, kind: 'short' | 'long'): Partial<Cha
       concentration: null,
       deathSaves: { successes: 0, failures: 0 },
       resting: false,
+      // Humans (the Resourceful trait) get Heroic Inspiration with every Long Rest.
+      ...(c.features.some((f) => f.name.trim().toLowerCase() === 'resourceful') ? { inspiration: true } : {}),
     };
   }
   const next = { ...c.used };
@@ -306,10 +308,10 @@ export const hitDiceLeft = (c: Pick<CharacterData, 'level' | 'used'>) => Math.ma
  * isn't possible. A rest that has nothing more to give ends by itself.
  */
 export function spendHitDie(c: CharacterData, die: number, roll: number): { patch: Partial<CharacterData>; healed: number; modifier: number } {
-  if (isDead(c)) throw new Error('This character is dead.');
-  if (hitDiceLeft(c) <= 0) throw new Error('No Hit Dice left. They come back after a Long Rest.');
-  if (c.hpCurrent >= c.hpMax) throw new Error('Already at full HP.');
-  if (!Number.isInteger(roll) || roll < 1 || roll > die) throw new Error(`A d${die} roll is between 1 and ${die}.`);
+  if (isDead(c)) throw new Error(t('This character is dead.'));
+  if (hitDiceLeft(c) <= 0) throw new Error(t('No Hit Dice left. They come back after a Long Rest.'));
+  if (c.hpCurrent >= c.hpMax) throw new Error(t('Already at full HP.'));
+  if (!Number.isInteger(roll) || roll < 1 || roll > die) throw new Error(t('A d{die} roll is between 1 and {die}.', { die }));
   const modifier = abilityModifier(c.abilities.con);
   const heal = applyDamageOrHealing(c, Math.max(1, roll + modifier));
   const usedNow = { ...c.used, [HIT_DICE_ID]: used(c, HIT_DICE_ID) + 1 };
@@ -325,9 +327,10 @@ export function spendHitDie(c: CharacterData, die: number, roll: number): { patc
 export const canSpendHitDice = (c: Pick<CharacterData, 'level' | 'used' | 'hpCurrent' | 'hpMax' | 'deathSaves' | 'exhaustion'>) =>
   !isDead(c) && hitDiceLeft(c) > 0 && c.hpCurrent < c.hpMax;
 
+/** In English; draw it with `t()`. */
 export const RESET_LABEL: Record<ResetOn, string> = {
-  short: 'Back after a Short or Long Rest',
-  shortOne: 'One back per Short Rest, all after a Long Rest',
-  long: 'Back after a Long Rest',
+  short: msg('Back after a Short or Long Rest'),
+  shortOne: msg('One back per Short Rest, all after a Long Rest'),
+  long: msg('Back after a Long Rest'),
 };
 

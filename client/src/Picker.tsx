@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { InfoEntry } from '@dnd/shared';
+import { useClosing } from './fx/hooks.ts';
 import { Info } from './Info.tsx';
+import { t } from './i18n.tsx';
 
 export interface PickerOption {
   value: string;
@@ -26,9 +28,9 @@ export function Picker({
   value,
   options,
   onChange,
-  placeholder = 'Choose…',
+  placeholder = t('Choose…'),
   allowCustom = false,
-  customLabel = 'Homebrew / custom…',
+  customLabel = t('Homebrew / custom…'),
   searchable,
   disabled,
 }: {
@@ -58,12 +60,10 @@ export function Picker({
         <PickerList
           title={label}
           value={value}
-          options={allowCustom ? [...options, { value: CUSTOM_VALUE, label: customLabel, group: 'Not in the book list' }] : options}
+          options={allowCustom ? [...options, { value: CUSTOM_VALUE, label: customLabel, group: t('Not in the book list') }] : options}
           searchable={searchable ?? options.length > 12}
-          onPick={(v) => {
-            onChange(v);
-            setOpen(false);
-          }}
+          onPick={onChange}
+          closeOnPick
           onClose={() => setOpen(false)}
         />
       )}
@@ -79,6 +79,7 @@ export function PickerList({
   onPick,
   onClose,
   multi,
+  closeOnPick,
 }: {
   title: string;
   value: string | string[];
@@ -88,16 +89,20 @@ export function PickerList({
   onClose: () => void;
   /** For multi-select: "2 / 4 picked" in the header. */
   multi?: { count: number; max: number };
+  /** Choosing an option also closes the list (it slides away; `onClose` follows). */
+  closeOnPick?: boolean;
 }) {
   const [q, setQ] = useState('');
   const search = useRef<HTMLInputElement>(null);
+  // The list slides back down before it is gone.
+  const { closing, close } = useClosing(onClose);
   useEffect(() => {
     // Don't pop the phone keyboard open; only focus search on devices with a mouse.
     if (searchable && window.matchMedia('(pointer: fine)').matches) search.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [searchable, onClose]);
+  }, [searchable, close]);
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     return t ? options.filter((o) => o.label.toLowerCase().includes(t) || o.hint?.toLowerCase().includes(t)) : options;
@@ -105,17 +110,17 @@ export function PickerList({
   const selected = new Set(Array.isArray(value) ? value : [value]);
   let lastGroup: string | undefined;
   return createPortal(
-    <div className="picker-backdrop" onClick={onClose}>
+    <div className={`picker-backdrop ${closing ? 'closing' : ''}`} onClick={close}>
       <div className="picker-panel" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="picker-head">
           <strong className="grow">{title}</strong>
-          {multi && <span className="muted small">{multi.count} / {multi.max} picked</span>}
-          <button type="button" className="secondary" onClick={onClose}>{multi ? 'Done' : 'Close'}</button>
+          {multi && <span className="muted small">{t('{count} / {max} picked', { count: multi.count, max: multi.max })}</span>}
+          <button type="button" className="secondary" onClick={close}>{multi ? t('Done') : t('Close')}</button>
         </div>
         {searchable && (
-          <input ref={search} className="picker-search" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input ref={search} className="picker-search" placeholder={t('Search…')} value={q} onChange={(e) => setQ(e.target.value)} />
         )}
-        <p className="muted small picker-tip hint">Hold an option (or hover with the mouse) to read it.</p>
+        <p className="muted small picker-tip hint">{t('Hold an option (or hover with the mouse) to read it.')}</p>
         <ul className="picker-options">
           {filtered.map((o) => {
             const head = o.group !== lastGroup ? o.group : undefined;
@@ -129,7 +134,10 @@ export function PickerList({
                     className="picker-option"
                     aria-selected={selected.has(o.value)}
                     disabled={o.disabled && !selected.has(o.value)}
-                    onClick={() => onPick(o.value)}
+                    onClick={() => {
+                      onPick(o.value);
+                      if (closeOnPick) close();
+                    }}
                   >
                     <span className="check">{selected.has(o.value) ? '✓' : ''}</span>
                     <span className="grow">
@@ -141,7 +149,7 @@ export function PickerList({
               </li>
             );
           })}
-          {filtered.length === 0 && <li className="muted">Nothing matches “{q}”.</li>}
+          {filtered.length === 0 && <li className="muted">{t('Nothing matches “{q}”.', { q })}</li>}
         </ul>
       </div>
     </div>,
@@ -176,17 +184,17 @@ export function MultiPicker({
           <Info key={v} entry={byValue.get(v)?.info}>
             <span className="chip">
               {byValue.get(v)?.label ?? v}
-              <button type="button" aria-label={`Remove ${byValue.get(v)?.label ?? v}`} onClick={() => onChange(values.filter((x) => x !== v))}>✕</button>
+              <button type="button" aria-label={t('Remove {name}', { name: byValue.get(v)?.label ?? v })} onClick={() => onChange(values.filter((x) => x !== v))}>✕</button>
             </span>
           </Info>
         ))}
         {!full && (
           <button type="button" className="chip add" onClick={() => setOpen(true)}>
-            + {values.length === 0 ? `Choose ${max}` : 'Add'}
+            + {values.length === 0 ? t('Choose {max}', { max }) : t('Add')}
           </button>
         )}
         {full && (
-          <button type="button" className="chip add" onClick={() => setOpen(true)}>Change</button>
+          <button type="button" className="chip add" onClick={() => setOpen(true)}>{t('Change')}</button>
         )}
       </div>
       {open && (

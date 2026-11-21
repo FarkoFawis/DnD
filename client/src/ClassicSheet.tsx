@@ -5,7 +5,7 @@
  * adapted to a phone. Read-only, except HP and items when the DM unlocked them.
  * Tap anything with a description (spell, item, feature, attack) to read it.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ABILITIES,
   ABILITY_NAMES,
@@ -20,9 +20,14 @@ import {
   weaponAttacks,
   type CharacterData,
   type RollRequest,
+  abilityShort,
 } from '@dnd/shared';
 import { RollSheet } from './Dice.tsx';
+import { burst } from './fx/fx.ts';
+import { useFresh } from './fx/hooks.ts';
+import { FlashNum, HpBar, HpFx, Num } from './fx/sheetFx.tsx';
 import { HitDice } from './HitDice.tsx';
+import { InspirationToken } from './Inspiration.tsx';
 import { useSettings } from './settings.ts';
 import { Info } from './Info.tsx';
 import { LevelUp } from './creator/LevelUp.tsx';
@@ -31,6 +36,7 @@ import { featureEntry, itemEntry, spellEntry, spellGlance } from './SheetContent
 import { useContent } from './content/useContent.ts';
 import { ConcentrationBanner, ConditionBadges, DeathSaves } from './Status.tsx';
 import { CastButton, SlotTracker, UsesList, actionText } from './Uses.tsx';
+import { diceText, t, tj, tx } from './i18n.tsx';
 
 export function ClassicSheet({
   character: c,
@@ -62,28 +68,46 @@ export function ClassicSheet({
   const [levelling, setLevelling] = useState(false);
   const canLevelUp = c.levelUpReady && c.level < 20;
 
-  // Short confirmation after something is used ("Magic Missile · 1st-level slot").
-  const [flash, setFlash] = useState<string | null>(null);
+  // Short confirmation after something is used ("Magic Missile · 1st-level slot")
+  // or handed over by the DM ("Received: Potion of Healing").
+  const [flash, setFlash] = useState<{ text: string; got?: boolean } | null>(null);
+  const flashEl = useRef<HTMLParagraphElement>(null);
   const lastAt = c.lastAction?.at;
-  const [seenAt, setSeenAt] = useState(lastAt);
+  const seenAt = useRef(lastAt);
   useEffect(() => {
-    if (lastAt === seenAt) return;
-    setSeenAt(lastAt);
+    if (lastAt === seenAt.current) return;
+    seenAt.current = lastAt;
     // A roll of the dice roller has its own result sheet.
     if (c.lastAction?.roll) return;
-    setFlash(actionText(c.lastAction));
-    const t = setTimeout(() => setFlash(null), 2500);
-    return () => clearTimeout(t);
-  }, [lastAt, seenAt, c.lastAction]);
+    const text = actionText(c.lastAction);
+    setFlash(text ? { text: t('Used: {what}', { what: text }) } : null);
+    const timer = setTimeout(() => setFlash(null), 2500);
+    return () => clearTimeout(timer);
+    // Only a new action (its time) starts this: the object is a new one with every update from the
+    // server, and running again would cancel the timer that takes the line away.
+  }, [lastAt]);
+  /** Items that arrived while the sheet was open slide in and are announced. */
+  const freshItems = useFresh(c.inventory.map((i) => i.id));
+  const newest = c.inventory.findLast((i) => freshItems.has(i.id));
+  useEffect(() => {
+    if (!newest || unlocked) return;
+    setFlash({ text: t('Received: {what}', { what: `${newest.qty > 1 ? `${newest.qty}× ` : ''}${newest.name}` }), got: true });
+    const timer = setTimeout(() => setFlash(null), 3000);
+    return () => clearTimeout(timer);
+    // Once per item: its id says whether it is a new one.
+  }, [newest?.id]);
+  useEffect(() => {
+    if (flash?.got) burst('item', flashEl.current);
+  }, [flash]);
 
   return (
-    <article className="classic" aria-label={`${c.name}'s character sheet`}>
-      {flash && <p className="use-flash" role="status">Used: {flash}</p>}
+    <article className="classic" aria-label={t("{name}'s character sheet", { name: c.name })}>
+      {flash && <p key={flash.text} ref={flashEl} className={`use-flash ${flash.got ? 'got' : ''}`} role="status">{flash.text}</p>}
       {canLevelUp && (
         <button type="button" className="levelup-banner" onClick={() => setLevelling(true)}>
           <span className="grow">
-            <strong>You reached level {c.level + 1}!</strong>
-            <span className="small block">Tap to level up {c.name || 'your character'}.</span>
+            <strong>{t('You reached level {n}!', { n: c.level + 1 })}</strong>
+            <span className="small block">{t('Tap to level up {name}.', { name: c.name || t('your character') })}</span>
           </span>
           <span aria-hidden>⬆</span>
         </button>
@@ -105,43 +129,44 @@ export function ClassicSheet({
       <header className={`cs-banner ${portrait ? 'with-portrait' : ''}`}>
         {portrait && <div className="cs-portrait">{portrait}</div>}
         <div className="cs-name">
-          <span className="cs-name-value">{c.name || 'Unnamed'}</span>
-          <span className="cs-label">Character name</span>
+          <span className="cs-name-value">{c.name || t('Unnamed')}</span>
+          <span className="cs-label">{t('Character name')}</span>
         </div>
         <dl className="cs-ident">
-          <Field label="Class & level" value={`${c.className || '—'} ${c.level}${c.subclass ? ` (${c.subclass})` : ''}`} />
-          <Field label="Background" value={c.background || '—'} />
-          <Field label="Species" value={`${c.species || '—'}${c.subspecies ? ` (${c.subspecies})` : ''}`} />
-          <Field label="Player" value={playerName} />
+          <Field label={t('Class & level')} value={`${tx(c.className) || '—'} ${c.level}${c.subclass ? ` (${tx(c.subclass)})` : ''}`} />
+          <Field label={t('Background')} value={tx(c.background) || '—'} />
+          <Field label={t('Species')} value={`${tx(c.species) || '—'}${c.subspecies ? ` (${tx(c.subspecies)})` : ''}`} />
+          <Field label={t('Player')} value={playerName} />
         </dl>
       </header>
 
-      <section className="cs-hpblock" aria-label="Hit points">
+      <section className="cs-hpblock" aria-label={t('Hit points')}>
         {unlocked ? (
           <>
             <HpBox character={c} onHp={actions.adjustHp} onTemp={(v) => void actions.update({ hpTemp: v })} />
-            <p className="cs-unlocked">Your DM lets you track your own HP and items.</p>
+            <p className="cs-unlocked">{t('Your DM lets you track your own HP and items.')}</p>
           </>
         ) : (
           <div className="cs-hp">
-            <span className="cs-label">Hit points</span>
+            <HpFx value={c.hpCurrent} />
+            <span className="cs-label">{t('Hit points')}</span>
             <span className="cs-hp-line">
-              <span className={`cs-hp-now ${c.hpCurrent === 0 ? 'down' : c.hpCurrent <= c.hpMax / 4 ? 'low' : ''}`}>{c.hpCurrent}</span>
-              {c.hpTemp > 0 && <span className="cs-hp-temp" aria-label={`plus ${c.hpTemp} temporary hit points`}>+{c.hpTemp}</span>}
+              <span className={`cs-hp-now ${c.hpCurrent === 0 ? 'down' : c.hpCurrent <= c.hpMax / 4 ? 'low' : ''}`} aria-label={`${c.hpCurrent}`}><Num value={c.hpCurrent} /></span>
+              {c.hpTemp > 0 && <span className="cs-hp-temp" aria-label={t('plus {n} temporary hit points', { n: c.hpTemp })}>+{c.hpTemp}</span>}
               <span className="cs-hp-max">/ {c.hpMax}</span>
             </span>
-            <span className="hpbar" aria-hidden>
-              <span style={{ width: `${Math.max(0, Math.min(100, (c.hpCurrent / c.hpMax) * 100))}%` }} className={c.hpCurrent <= c.hpMax / 4 ? 'low' : ''} />
-            </span>
+            <HpBar current={c.hpCurrent} max={c.hpMax} />
           </div>
         )}
       </section>
 
+      <InspirationToken has={c.inspiration} onSpend={() => actions.inspiration('spend')} />
+
       {c.resting && (
-        <section className="cs-rest" aria-label="Short rest">
-          <strong className="cs-rest-title">Short rest</strong>
+        <section className="cs-rest" aria-label={t('Short rest')}>
+          <strong className="cs-rest-title">{t('Short rest')}</strong>
           <HitDice character={c} content={content} canRoll={dice} onSpend={actions.spendHitDie} />
-          <button type="button" className="secondary" onClick={() => void actions.endRest()}>Done resting</button>
+          <button type="button" className="secondary" onClick={() => void actions.endRest()}>{t('Done resting')}</button>
         </section>
       )}
 
@@ -149,48 +174,48 @@ export function ClassicSheet({
       <ConcentrationBanner character={c} content={content} onAction={(a) => void actions.concentration(a)} />
       <ConditionBadges character={c} content={content} />
 
-      {roller && <p className="cs-hint hint">Dice roller: tap an ability, a save, a skill, Initiative or an attack to roll it.</p>}
+      {roller && <p className="cs-hint hint">{t('Dice roller: tap an ability, a save, a skill, Initiative or an attack to roll it.')}</p>}
       <div className="cs-cols">
         <div className="cs-abilities">
           {ABILITIES.map((a) => {
             const body = (
               <>
-                <span className="cs-label">{ABILITY_NAMES[a]}</span>
+                <span className="cs-label">{t(ABILITY_NAMES[a])}</span>
                 <span className="cs-ability-mod">{formatModifier(stats.modifiers[a])}</span>
                 <span className="cs-ability-score">{c.abilities[a]}</span>
               </>
             );
             return roller ? (
-              <button key={a} type="button" className="cs-ability rollable" aria-label={`Roll a ${ABILITY_NAMES[a]} check`} onClick={() => roller({ kind: 'ability', ability: a })}>{body}</button>
+              <button key={a} type="button" className="cs-ability rollable" aria-label={t('Roll: {what}', { what: t('{name} check', { name: t(ABILITY_NAMES[a]) }) })} onClick={() => roller({ kind: 'ability', ability: a })}>{body}</button>
             ) : (
               <div key={a} className="cs-ability">{body}</div>
             );
           })}
         </div>
         <div className="cs-right">
-          <div className="cs-pill"><span className="cs-pill-value">{formatModifier(stats.proficiencyBonus)}</span><span className="cs-label">Proficiency bonus</span></div>
-          <Box label="Saving throws">
+          <div className="cs-pill"><span className="cs-pill-value">{formatModifier(stats.proficiencyBonus)}</span><span className="cs-label">{t('Proficiency bonus')}</span></div>
+          <Box label={t('Saving throws')}>
             <ul className="cs-checks">
               {ABILITIES.map((a) => (
                 <Check
                   key={a}
                   level={c.saveProficiencies.includes(a) ? 1 : 0}
                   bonus={stats.saves[a]}
-                  name={ABILITY_NAMES[a]}
+                  name={t(ABILITY_NAMES[a])}
                   onRoll={roller && (() => roller({ kind: 'save', ability: a }))}
                 />
               ))}
             </ul>
           </Box>
-          <Box label="Skills">
+          <Box label={t('Skills')}>
             <ul className="cs-checks">
               {SKILL_KEYS.map((s) => (
                 <Check
                   key={s}
                   level={c.skillExpertise.includes(s) ? 2 : c.skillProficiencies.includes(s) ? 1 : 0}
                   bonus={stats.skills[s]}
-                  name={SKILLS[s].name}
-                  hint={SKILLS[s].ability.slice(0, 1).toUpperCase() + SKILLS[s].ability.slice(1)}
+                  name={t(SKILLS[s].name)}
+                  hint={abilityShort(SKILLS[s].ability).slice(0, 1) + abilityShort(SKILLS[s].ability).slice(1).toLowerCase()}
                   onRoll={roller && (() => roller({ kind: 'skill', skill: s }))}
                 />
               ))}
@@ -198,31 +223,31 @@ export function ClassicSheet({
           </Box>
         </div>
       </div>
-      <div className="cs-pill wide"><span className="cs-pill-value">{stats.passivePerception}</span><span className="cs-label">Passive Wisdom (Perception)</span></div>
+      <div className="cs-pill wide"><span className="cs-pill-value">{stats.passivePerception}</span><span className="cs-label">{t('Passive Wisdom (Perception)')}</span></div>
 
       <section className="cs-combat">
         <div className="cs-trio">
-          <div className="cs-shield"><span className="cs-big">{c.armorClass}</span><span className="cs-label">Armor class</span></div>
+          <div className="cs-shield"><span className="cs-big">{c.armorClass}</span><span className="cs-label">{t('Armor class')}</span></div>
           {roller ? (
-            <button type="button" className="cs-stat rollable" aria-label="Roll Initiative" onClick={() => roller({ kind: 'initiative' })}>
-              <span className="cs-big">{formatModifier(stats.initiative)}</span><span className="cs-label">Initiative</span>
+            <button type="button" className="cs-stat rollable" aria-label={t('Roll Initiative')} onClick={() => roller({ kind: 'initiative' })}>
+              <span className="cs-big">{formatModifier(stats.initiative)}</span><span className="cs-label">{t('Initiative')}</span>
             </button>
           ) : (
-            <div className="cs-stat"><span className="cs-big">{formatModifier(stats.initiative)}</span><span className="cs-label">Initiative</span></div>
+            <div className="cs-stat"><span className="cs-big">{formatModifier(stats.initiative)}</span><span className="cs-label">{t('Initiative')}</span></div>
           )}
-          <div className="cs-stat"><span className="cs-big">{Math.max(0, c.speed - 5 * c.exhaustion)}<small> ft</small></span><span className="cs-label">Speed{c.exhaustion > 0 ? ' (exhausted)' : ''}</span></div>
+          <div className="cs-stat"><span className="cs-big">{Math.max(0, c.speed - 5 * c.exhaustion)}<small> ft</small></span><span className="cs-label">{c.exhaustion > 0 ? t('Speed (exhausted)') : t('Speed')}</span></div>
         </div>
         <div className="cs-stat hitdice-stat">
-          <span className="cs-mid">{hitDiceLeft(c)} / {c.level} <small>d{hitDieSize(c, content)}</small></span>
-          <span className="cs-label">Hit dice</span>
+          <span className="cs-mid">{hitDiceLeft(c)} / {c.level} <small>{diceText(`d${hitDieSize(c, content)}`)}</small></span>
+          <span className="cs-label">{t('Hit dice')}</span>
         </div>
       </section>
 
-      <Box label="Attacks & spellcasting">
+      <Box label={t('Attacks & spellcasting')}>
         {attacks.length > 0 && (
           <table className="cs-attacks">
             <thead>
-              <tr><th>Name</th><th>Atk</th><th>Damage / type</th><th><span className="sr-only">Use</span></th></tr>
+              <tr><th>{t('Name')}</th><th>{t('Atk')}</th><th>{t('Damage / type')}</th><th><span className="sr-only">{t('Use')}</span></th></tr>
             </thead>
             <tbody>
               {attacks.map((a) => {
@@ -239,7 +264,7 @@ export function ClassicSheet({
                         className="use-button"
                         onClick={() => (roller ? roller({ kind: 'attack', itemId: a.itemId }) : void actions.use({ kind: 'attack', name: a.name }))}
                       >
-                        {roller ? 'Roll' : 'Attack'}
+                        {roller ? t('Roll') : t('Attack')}
                       </button>
                     </td>
                   </tr>
@@ -250,26 +275,26 @@ export function ClassicSheet({
         )}
         {stats.spellSaveDc !== null && (
           <p className="cs-spellline">
-            Spell save DC <strong>{stats.spellSaveDc}</strong> ·{' '}
+            {tj('Spell save DC {strong} ·', { strong: <strong>{stats.spellSaveDc}</strong> })}{' '}
             {roller ? (
               <button type="button" className="link rollable" onClick={() => roller({ kind: 'spellAttack' })}>
-                Spell attack <strong>{formatModifier(stats.spellAttack!)}</strong>
+                {tj('Spell attack {strong}', { strong: <strong>{formatModifier(stats.spellAttack!)}</strong> })}
               </button>
             ) : (
-              <>Spell attack <strong>{formatModifier(stats.spellAttack!)}</strong></>
+              <>{tj('Spell attack {strong}', { strong: <strong>{formatModifier(stats.spellAttack!)}</strong> })}</>
             )}{' '}
-            · {ABILITY_NAMES[c.spellcastingAbility!]}
+            · {t(ABILITY_NAMES[c.spellcastingAbility!])}
           </p>
         )}
         <SlotTracker character={c} />
         {levels.map((lvl) => (
           <div key={lvl} className="cs-spells">
-            <span className="cs-sublabel">{lvl === 0 ? 'Cantrips' : `Level ${lvl}`}</span>
+            <span className="cs-sublabel">{lvl === 0 ? t('Cantrips') : t('Level {n}##spell', { n: lvl })}</span>
             <ul>
               {spellsByLevel.filter((s) => s.level === lvl).map((s) => (
                 <li key={s.id} className={`cs-spell ${s.prepared || s.level === 0 ? '' : 'unprepared'}`}>
                   <Info entry={spellEntry(content, s)} tapToOpen className="grow">
-                    <span className="block">{s.name}{!s.prepared && s.level > 0 && <span className="muted small"> (not prepared)</span>}</span>
+                    <span className="block">{s.name}{!s.prepared && s.level > 0 && <span className="muted small">{' '}{t('(not prepared)')}</span>}</span>
                     {spellGlance(content, s) && <span className="cs-note">{spellGlance(content, s)}</span>}
                   </Info>
                   {(s.prepared || s.level === 0) && <CastButton character={c} spell={s} content={content} onUse={actions.use} />}
@@ -278,26 +303,26 @@ export function ClassicSheet({
             </ul>
           </div>
         ))}
-        {attacks.length === 0 && c.spells.length === 0 && <p className="muted small">No weapons or spells.</p>}
-        {(attacks.length > 0 || c.spells.length > 0) && <p className="cs-hint hint">Tap a name to read what it does.</p>}
+        {attacks.length === 0 && c.spells.length === 0 && <p className="muted small">{t('No weapons or spells.')}</p>}
+        {(attacks.length > 0 || c.spells.length > 0) && <p className="cs-hint hint">{t('Tap a name to read what it does.')}</p>}
       </Box>
 
-      <Box label="Equipment">
+      <Box label={t('Equipment')}>
         {unlocked ? (
           <Items character={c} actions={actions} onCoins={(coins) => void actions.update({ coins })} readOnly={false} content={content} />
         ) : (
           <div className="cs-equipment">
             <ul className="cs-coins">
               {COINS.map((k) => (
-                <li key={k}><span className="cs-coin">{k.toUpperCase()}</span><span>{c.coins[k]}</span></li>
+                <li key={k}><span className="cs-coin">{t(k).toUpperCase()}</span><FlashNum value={c.coins[k]} /></li>
               ))}
             </ul>
             <ul className="cs-items">
-              {c.inventory.length === 0 && <li className="muted small">Nothing yet.</li>}
+              {c.inventory.length === 0 && <li className="muted small">{t('Nothing yet.')}</li>}
               {c.inventory.map((i) => (
-                <li key={i.id}>
+                <li key={i.id} className={freshItems.has(i.id) ? 'fresh' : undefined}>
                   <Info entry={itemEntry(content, i)} tapToOpen>
-                    {i.qty > 1 && <span className="cs-qty">{i.qty}×</span>} {i.name}
+                    {i.qty > 1 && <span className="cs-qty"><FlashNum value={i.qty} />×</span>} {i.name}
                   </Info>
                 </li>
               ))}
@@ -307,20 +332,20 @@ export function ClassicSheet({
       </Box>
 
       {hasUses && (
-        <Box label="Limited uses">
+        <Box label={t('Limited uses')}>
           <UsesList character={c} content={content} onUse={actions.use} />
         </Box>
       )}
 
-      <Box label="Features & traits">
+      <Box label={t('Features & traits')}>
         {c.features.length === 0 ? (
-          <p className="muted small">None listed.</p>
+          <p className="muted small">{t('None listed.')}</p>
         ) : (
           <ul className="cs-features">
             {c.features.map((f) => (
               <li key={f.id}>
                 <Info entry={featureEntry(content, f)} tapToOpen>
-                  <strong>{f.name}</strong> <span className="cs-note inline">{f.source}</span>
+                  <strong>{f.name}</strong> <span className="cs-note inline">{tx(f.source)}</span>
                 </Info>
               </li>
             ))}
@@ -328,7 +353,7 @@ export function ClassicSheet({
         )}
       </Box>
 
-      <Box label="Other proficiencies & languages">
+      <Box label={t('Other proficiencies & languages')}>
         {c.notes ? <p className="cs-notes">{c.notes}</p> : <p className="muted small">—</p>}
       </Box>
     </article>
@@ -356,7 +381,7 @@ function Box({ label, children }: { label: string; children: ReactNode }) {
 function Check({ level, bonus, name, hint, onRoll }: { level: 0 | 1 | 2; bonus: number; name: string; hint?: string; onRoll?: () => void }) {
   const body = (
     <>
-      <span className={`cs-dot lvl${level}`} aria-label={['not proficient', 'proficient', 'expertise'][level]} />
+      <span className={`cs-dot lvl${level}`} aria-label={[t('not proficient'), t('proficient'), t('expertise')][level]} />
       <span className="cs-bonus">{formatModifier(bonus)}</span>
       <span className="grow">{name}{hint && <span className="cs-hintab"> ({hint})</span>}</span>
     </>

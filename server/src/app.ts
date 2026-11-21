@@ -25,6 +25,8 @@ import {
   type Handout,
   type LogEvent,
   type Npc,
+  type SessionSummary,
+  buildSummary,
   Content,
   afterConditionsSet,
   afterHpSet,
@@ -67,6 +69,7 @@ import {
   type PublicUser,
   type ServerToClientEvents,
   type SessionState,
+  t,
 } from '@dnd/shared';
 import { SRD } from '@dnd/shared/srd';
 import { loadContentPacks } from './content.ts';
@@ -163,7 +166,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     }
     const status = store.accountStatus(username);
     if (status.exists && !status.hasPassword && (password.length < PASSWORD_MIN_LENGTH || password.length > 200)) {
-      res.status(400).json({ error: `Choose a password with at least ${PASSWORD_MIN_LENGTH} characters.` });
+      res.status(400).json({ error: t('Choose a password with at least {n} characters.', { n: PASSWORD_MIN_LENGTH }) });
       return;
     }
     const result = store.login(username, password);
@@ -385,7 +388,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     const missingPlayers = [...new Set(fresh.filter((c) => !owners.get(c.owner.toLowerCase())).map((c) => c.owner))];
     if (missingPlayers.length > 0 && req.query.skipMissing !== '1') {
       res.status(409).json({
-        error: `No account here for: ${missingPlayers.join(', ')}. Add them first (npm run users -- add ${missingPlayers.join(' ')}), or load the backup without their characters.`,
+        error: t('No account here for: {names}. Add them first (npm run users -- add {list}), or load the backup without their characters.', { names: missingPlayers.join(', '), list: missingPlayers.join(' ') }),
         missingPlayers,
       });
       return;
@@ -422,7 +425,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       store.restoreCampaign({ id, name, ownerId: user.id, handouts, npcs: backup.npcs, log: backup.log, characters: restored });
     } catch (e) {
       for (const h of handouts) removeImage(h.imageUrl);
-      res.status(500).json({ error: `The backup could not be loaded: ${(e as Error).message}` });
+      res.status(500).json({ error: t('The backup could not be loaded: {reason}', { reason: (e as Error).message }) });
       return;
     }
     const summary: ImportSummary = {
@@ -531,9 +534,12 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
   };
 
   /** Ends a session socket-side: tells everyone, takes all sockets out of the room. */
-  const closeSession = (code: string, exceptSocketId?: string) => {
+  const closeSession = (code: string, exceptSocketId?: string, summary?: SessionSummary) => {
     const room = io.to(roomOf(code));
-    (exceptSocketId ? room.except(exceptSocketId) : room).emit('session:ended');
+    const everyone = exceptSocketId ? room.except(exceptSocketId) : room;
+    // Without a summary there is no argument at all: an `undefined` would arrive as null.
+    if (summary) everyone.emit('session:ended', summary);
+    else everyone.emit('session:ended');
     for (const s of io.sockets.sockets.values()) {
       if (s.data.code === code) {
         s.data.code = undefined;
@@ -808,6 +814,27 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       afterChange(character);
     });
 
+    socket.on('character:inspiration', (input, ack) => {
+      const t = usable(input?.characterId);
+      if (!t.ok) return ack(t);
+      const action = input?.action;
+      if (action !== 'give' && action !== 'take' && action !== 'spend') return ack({ ok: false, error: 'Invalid action.' });
+      if (action !== 'spend' && !t.isDm) return ack({ ok: false, error: 'Only the DM hands out Heroic Inspiration.' });
+      const has = t.ch.data.inspiration;
+      if (action === 'give' && has) return ack({ ok: false, error: 'They already have Heroic Inspiration. Nobody can hold two.' });
+      if (action !== 'give' && !has) return ack({ ok: false, error: 'No Heroic Inspiration to use.' });
+      const character = store.updateCharacter(t.ch.id, {
+        inspiration: action === 'give',
+        ...(action === 'spend' ? { lastAction: { name: 'Heroic Inspiration', detail: 'reroll', kind: 'feature' as const, at: new Date().toISOString() } } : {}),
+      });
+      ack({ ok: true, character });
+      if (action !== 'take') logFor(character, { kind: 'inspiration', what: action === 'give' ? 'gained' : 'used' });
+      if (action === 'give' && character.inSession) {
+        io.to(roomOf(character.inSession)).emit('session:alert', { kind: 'inspiration', characterId: character.id });
+      }
+      afterChange(character);
+    });
+
     socket.on('character:deathSave', (input, ack) => {
       const t = usable(input?.characterId);
       if (!t.ok) return ack(t);
@@ -876,6 +903,10 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const character = store.updateCharacter(t.ch.id, restPatch(t.ch, input.kind));
       ack({ ok: true, character });
       logFor(character, { kind: 'rest', what: input.kind });
+      // The DM rested one character: that player's phone shows it (see RestAlert on the client).
+      if (t.isDm && character.inSession) {
+        io.to(roomOf(character.inSession)).emit('session:alert', { kind: 'rest', rest: input.kind, characterId: character.id });
+      }
       afterChange(character);
     });
 
@@ -905,7 +936,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
         const r = spendHitDie(t.ch.data, die, roll);
         const character = store.updateCharacter(t.ch.id, {
           ...r.patch,
-          lastAction: { name: 'Hit Die', detail: `+${r.healed} HP`, at: new Date().toISOString() },
+          lastAction: { name: 'Hit Die', detail: `+${r.healed} HP`, kind: 'heal', at: new Date().toISOString() },
         });
         ack({ ok: true, character, spent: { die, roll, modifier: r.modifier, healed: r.healed } });
         logFor(character, { kind: 'heal', amount: r.healed, what: `Hit Die, ${character.data.hpCurrent}/${character.data.hpMax} HP` });
@@ -1082,7 +1113,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
     });
 
     /** Fight entries for the chosen NPCs; several copies get numbered ("Goblin 2"). */
-    const npcCombatants = (campaignId: string, picks: unknown, existing: Combatant[]): Combatant[] => {
+    const npcCombatants = (campaignId: string, picks: unknown, existing: Combatant[], hidden = false): Combatant[] => {
       if (!Array.isArray(picks)) return [];
       const out: Combatant[] = [];
       for (const pick of picks.slice(0, 50) as { npcId?: unknown; count?: unknown }[]) {
@@ -1101,6 +1132,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
             d20: null,
             hp: { current: npc.hpMax, max: npc.hpMax },
             armorClass: npc.armorClass,
+            ...(hidden ? { hidden: true } : {}),
           });
         }
       }
@@ -1136,7 +1168,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const live = dmSession();
       if (!live) return ack(NOT_RUNNING);
       if (live.combat) log(live, { kind: 'fightEnd', who: '', amount: live.combat.round });
-      const npcs = npcCombatants(live.campaignId, input?.npcs, []);
+      const npcs = npcCombatants(live.campaignId, input?.npcs, [], input?.hidden === true);
       // A fight ends any Short Rest that is still open.
       for (const p of store.sessionPlayers(live.code)) {
         if (store.getCharacter(p.characterId)?.data.resting) store.updateCharacter(p.characterId, { resting: false });
@@ -1155,7 +1187,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const players = Array.isArray(input?.characterIds)
         ? playerCombatants(live.code, input.characterIds).filter((c) => !inFight.has(c.ref))
         : [];
-      const more = [...players, ...npcCombatants(live.campaignId, input?.npcs, live.combat.combatants)];
+      const more = [...players, ...npcCombatants(live.campaignId, input?.npcs, live.combat.combatants, input?.hidden === true)];
       if (live.combat.combatants.length + more.length > 100) return ack({ ok: false, error: 'That fight is too big.' });
       store.setCombat(live.code, addCombatants(live.combat, more));
       ack({ ok: true });
@@ -1259,6 +1291,8 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       }
       ack({ ok: true });
       broadcast(code);
+      // The title card, once per session and after the state, so the phones are on the session screen for it.
+      if (live?.sessionNo && !before?.started) io.to(roomOf(code)).emit('session:alert', { kind: 'start', session: live.sessionNo });
     });
 
     socket.on('session:leave', (ack) => {
@@ -1285,13 +1319,22 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const code = socket.data.code;
       if (!code || !socket.data.isHost) return ack({ ok: false, error: 'Only the DM can end the session.' });
       const live = store.getSession(code);
+      let summary: SessionSummary | undefined;
       if (live?.started) {
         if (live.combat) log(live, { kind: 'fightEnd', who: '', amount: live.combat.round });
         log(live, { kind: 'end', who: '' });
+        // The evening in numbers, for every phone at the table.
+        const state = sessionState(code);
+        if (state && live.sessionNo) {
+          summary = buildSummary(store.listLog(live.campaignId, live.sessionNo), {
+            campaign: state.campaign.name,
+            players: state.players.map((p) => p.character.name),
+          }) ?? undefined;
+        }
       }
       store.endSession(code);
-      closeSession(code, socket.id);
-      ack({ ok: true });
+      closeSession(code, socket.id, summary);
+      ack({ ok: true, ...(summary ? { summary } : {}) });
     });
 
     socket.on('session:rest', (input, ack) => {
@@ -1305,6 +1348,7 @@ export function createApp({ store, clientDist, corsOrigin, contentDir, uploadsDi
       const live = store.getSession(code);
       if (live?.started && live.sessionNo) store.addLog(live.campaignId, live.sessionNo, { kind: 'rest', who: '', what: input.kind });
       ack({ ok: true });
+      io.to(roomOf(code)).emit('session:alert', { kind: 'rest', rest: input.kind });
       broadcast(code);
     });
 

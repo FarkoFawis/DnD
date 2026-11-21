@@ -10,10 +10,14 @@
     <link rel="apple-touch-icon" href="/icon.svg" />
     <title>DnD Table</title>
     <script>
-      // The saved theme, before anything is drawn (client/src/settings.ts takes over afterwards).
+      // The saved theme and language, before anything is drawn (client/src/settings.ts takes over afterwards).
       try {
-        var t = JSON.parse(localStorage.getItem('dnd.settings') || '{}').theme;
+        var saved = JSON.parse(localStorage.getItem('dnd.settings') || '{}');
+        var t = saved.theme;
         if (t === 'light' || t === 'black') document.documentElement.dataset.theme = t;
+        // The language too, so the browser doesn't offer to translate a page that already is.
+        var l = saved.language || (navigator.language || '').slice(0, 2).toLowerCase();
+        if (l === 'de' || l === 'en') document.documentElement.lang = l;
       } catch (e) {}
     </script>
   </head>
