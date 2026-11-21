@@ -8,6 +8,7 @@ import { announce } from './session/moments.ts';
 import { PlayerSession } from './session/PlayerSession.tsx';
 import { RestAlert } from './session/RestAlert.tsx';
 import type { Game } from './useGame.ts';
+import { t } from './i18n.tsx';
 
 export function SessionView({ game, session, myId }: { game: Game; session: SessionState; myId: string }) {
   const isHost = session.host.id === myId;
@@ -22,7 +23,7 @@ export function SessionView({ game, session, myId }: { game: Game; session: Sess
   useEffect(() => {
     if (!started || started.n === seenStart.current) return;
     seenStart.current = started.n;
-    announce({ tone: 'title', kicker: `Session ${started.session}`, title: campaignName, sub: started.session === 1 ? 'The adventure begins' : 'The adventure continues' });
+    announce({ tone: 'title', kicker: t('Session {n}', { n: started.session }), title: campaignName, sub: started.session === 1 ? t('The adventure begins') : t('The adventure continues') });
   }, [started, campaignName]);
   // Heroic Inspiration from the DM: only that player's phone says so.
   const inspired = game.inspirationAlert;
@@ -33,7 +34,7 @@ export function SessionView({ game, session, myId }: { game: Game; session: Sess
     seenInspired.current = inspired.n;
     if (inspired.characterId !== myCharacterId) return;
     navigator.vibrate?.(60);
-    announce({ tone: 'star', kicker: 'Your DM awards you', title: 'Heroic Inspiration', sub: 'Give it up to reroll a die' });
+    announce({ tone: 'star', kicker: t('Your DM awards you'), title: t('Heroic Inspiration'), sub: t('Give it up to reroll a die') });
   }, [inspired, myCharacterId]);
   const alerts = (
     <>

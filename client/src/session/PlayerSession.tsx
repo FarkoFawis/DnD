@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Combat, Combatant, SessionPlayer, SessionState } from '@dnd/shared';
+import { shownName, type Combat, type Combatant, type SessionPlayer, type SessionState } from '@dnd/shared';
 import { ClassicSheet } from '../ClassicSheet.tsx';
 import { RollSheet } from '../Dice.tsx';
 import { useContent } from '../content/useContent.ts';
@@ -15,6 +15,7 @@ import { PagerPill } from './PagerPill.tsx';
 import { SessionDrawer } from './SessionDrawer.tsx';
 import { useFightMoments } from './moments.ts';
 import { usePager } from './usePager.ts';
+import { t } from '../i18n.tsx';
 
 /**
  * A player's screen during a running session. Three pages side by side,
@@ -60,20 +61,20 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
       <SessionDrawer game={game} title={session.campaign.name} attention={handout !== null && !handoutOpen}>
         {(close) => (
           <>
-            <p className="muted small drawer-label">Campaign</p>
+            <p className="muted small drawer-label">{t('Campaign')}</p>
             <p className="drawer-campaign">{session.campaign.name}</p>
-            <p className="muted small drawer-label">Dungeon Master</p>
+            <p className="muted small drawer-label">{t('Dungeon Master')}</p>
             <p className="drawer-campaign">
               {session.host.username}
-              {!session.host.online && <span className="muted small"> (reconnecting…)</span>}
+              {!session.host.online && <span className="muted small"> {t('(reconnecting…)')}</span>}
             </p>
-            <p className="muted small drawer-label">Playing as</p>
+            <p className="muted small drawer-label">{t('Playing as')}</p>
             <p className="drawer-campaign">{me.character.name} <span className="muted small">· {me.user.username}</span></p>
-            <p className="muted small drawer-label">Session code</p>
-            <p className="drawer-code small-code" aria-label="Session code">{session.code}</p>
+            <p className="muted small drawer-label">{t('Session code')}</p>
+            <p className="drawer-code small-code" aria-label={t('Session code')}>{session.code}</p>
             {handout && (
               <>
-                <p className="muted small drawer-label">From the DM</p>
+                <p className="muted small drawer-label">{t('From the DM')}</p>
                 <button
                   className="secondary drawer-action"
                   onClick={() => {
@@ -89,10 +90,10 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
             <button
               className="ghost"
               onClick={() => {
-                if (window.confirm('Leave the session? Your character stays saved.')) void game.leave();
+                if (window.confirm(t('Leave the session? Your character stays saved.'))) void game.leave();
               }}
             >
-              Leave session
+              {t('Leave session')}
             </button>
           </>
         )}
@@ -109,16 +110,16 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
       {combat && (
         <Page side="left" shown={-fightAt} dragging={dragging} open={page === -1}>
           <div className="party-panel-head narrow">
-            <h2 className="party-title grow">Fight</h2>
-            <button type="button" className="link back-link" onClick={() => setPage(0)}>My sheet ›</button>
+            <h2 className="party-title grow">{t('Fight')}</h2>
+            <button type="button" className="link back-link" onClick={() => setPage(0)}>{t('My sheet')} ›</button>
           </div>
           <FightPage combat={combat} me={me} game={game} />
         </Page>
       )}
       <Page side="right" shown={partyAt} dragging={dragging} open={page === 1}>
         <div className="party-panel-head">
-          <button type="button" className="link back-link" onClick={() => setPage(0)}>‹ My sheet</button>
-          <h2 className="party-title grow">Party</h2>
+          <button type="button" className="link back-link" onClick={() => setPage(0)}>‹ {t('My sheet')}</button>
+          <h2 className="party-title grow">{t('Party')}</h2>
           <span className="muted small">{session.campaign.name}</span>
         </div>
         <PartyGrid players={session.players} myId={me.user.id} content={content} />
@@ -130,9 +131,9 @@ export function PlayerSession({ game, session, me }: { game: Game; session: Sess
         dragging={dragging}
         onPage={setPage}
         tabs={[
-          ...(combat ? [{ page: -1, label: `‹ ${myTurn ? 'Your turn!' : 'Fight'}`, className: myTurn && page !== -1 ? 'alert' : '' }] : []),
-          { page: 0, label: 'My sheet' },
-          { page: 1, label: 'Party ›' },
+          ...(combat ? [{ page: -1, label: `‹ ${myTurn ? t('Your turn!') : t('Fight')}`, className: myTurn && page !== -1 ? 'alert' : '' }] : []),
+          { page: 0, label: t('My sheet') },
+          { page: 1, label: `${t('Party')} ›` },
         ]}
       />
 
@@ -151,7 +152,7 @@ function HandoutOverlay({ handout, onClose }: { handout: NonNullable<SessionStat
         {handout.imageUrl && <img className="handout-image" src={handout.imageUrl} alt={handout.title} />}
         {handout.text && <p className="handout-text">{handout.text}</p>}
       </div>
-      <button className="primary handout-close" onClick={close}>Close</button>
+      <button className="primary handout-close" onClick={close}>{t('Close')}</button>
     </div>
   );
 }
@@ -176,24 +177,24 @@ function FightPage({ combat, me, game }: { combat: Combat; me: SessionPlayer; ga
       {/* Keyed by whose turn it is: the line comes in anew with every turn. */}
       <p key={active?.id ?? 'none'} className={`fight-status ${isMe(active) ? 'mine' : ''}`} role="status">
         {isMe(active)
-          ? "It's your turn!"
+          ? t("It's your turn!")
           : active
-            ? `${active.name}'s turn`
+            ? t("{name}'s turn", { name: shownName(active.name) })
             : rolled
-              ? 'The DM is about to start the first turn.'
-              : 'Roll for initiative!'}
+              ? t('The DM is about to start the first turn.')
+              : t('Roll for initiative!')}
         {active ? (
           <span className="muted small block">
-            Round {combat.round}
-            {next && !isMe(active) && (isMe(next) ? ' · You are next' : ` · Next: ${next.name}`)}
+            {t('Round {n}', { n: combat.round })}
+            {next && !isMe(active) && (isMe(next) ? ` · ${t('You are next')}` : ` · ${t('Next: {name}', { name: shownName(next.name) })}`)}
           </span>
         ) : (
-          <span className="muted small block hint">Your DM rolls for everyone, or asks you for your roll.</span>
+          <span className="muted small block hint">{t('Your DM rolls for everyone, or asks you for your roll.')}</span>
         )}
       </p>
       {(canRoll || rolling) && (
         <button type="button" className="primary roll-initiative" disabled={!canRoll} onClick={() => setRolling(true)}>
-          Roll my initiative
+          {t('Roll my initiative')}
         </button>
       )}
       {rolling && (
@@ -206,7 +207,7 @@ function FightPage({ combat, me, game }: { combat: Combat; me: SessionPlayer; ga
           onClose={() => setRolling(false)}
         />
       )}
-      <h3 className="section-label">Turn order</h3>
+      <h3 className="section-label">{t('Turn order')}</h3>
       <ol className="turn-list">
         {order.map((c) => (
           <TurnRow key={c.id} c={c} active={c.id === combat.activeId} me={isMe(c)} />
@@ -227,14 +228,14 @@ function TurnRow({ c, active, me }: { c: Combatant; active: boolean; me: boolean
         {hidden ? (
           <>
             <span className="turn-mark" aria-hidden>?</span>
-            <span className="muted">Unknown</span>
+            <span className="muted">{t('Unknown')}</span>
           </>
         ) : (
           c.name
         )}
-        {me && <span className="muted small"> (you)</span>}
+        {me && <span className="muted small"> {t('(you)')}</span>}
       </span>
-      {active && <span className="badge">Turn</span>}
+      {active && <span className="badge">{t('Turn')}</span>}
     </li>
   );
 }

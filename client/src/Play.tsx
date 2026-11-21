@@ -6,6 +6,7 @@ import { CampaignConfig } from './prep/CampaignConfig.tsx';
 import { CharacterLine } from './Characters.tsx';
 import { CrownIcon, GearIcon, KeyIcon } from './icons.tsx';
 import type { Game } from './useGame.ts';
+import { getLanguage, plural, t, tj } from './i18n.tsx';
 
 export type PlayPage = 'join' | 'host';
 
@@ -45,8 +46,8 @@ export function Play({
   const scene = { 'data-from': from ?? undefined, 'data-to': to ?? undefined };
   if (page === null) {
     return (
-      <section className={`play-screen ${to ? 'leaving' : ''}`} aria-label="Play" {...scene}>
-        <h2 className="scene-title"><span>Play</span></h2>
+      <section className={`play-screen ${to ? 'leaving' : ''}`} aria-label={t('Play')} {...scene}>
+        <h2 className="scene-title"><span>{t('Play')}</span></h2>
         <div className="play-choices">
           {/* `mode` is the likelier of the two (see above), and after that the one picked last: it gets the gold edge. */}
           <button
@@ -58,8 +59,8 @@ export function Play({
             }}
           >
             <span className="home-icon" aria-hidden><KeyIcon /></span>
-            <strong>Join</strong>
-            <span className="play-choice-sub hint">With the code from your DM</span>
+            <strong>{t('Join')}</strong>
+            <span className="play-choice-sub hint">{t('With the code from your DM')}</span>
           </button>
           <button
             type="button"
@@ -70,8 +71,8 @@ export function Play({
             }}
           >
             <span className="home-icon" aria-hidden><CrownIcon /></span>
-            <strong>Host</strong>
-            <span className="play-choice-sub hint">Open a lobby as the DM</span>
+            <strong>{t('Host')}</strong>
+            <span className="play-choice-sub hint">{t('Open a lobby as the DM')}</span>
           </button>
         </div>
         <div className="scene-bar">
@@ -81,8 +82,8 @@ export function Play({
     );
   }
   return (
-    <section key={page} className={`play-screen play-page ${to ? 'leaving' : ''}`} aria-label={page === 'join' ? 'Join' : 'Host'} {...scene}>
-      <h2 className="scene-title"><span>{page === 'join' ? 'Join' : 'Host'}</span></h2>
+    <section key={page} className={`play-screen play-page ${to ? 'leaving' : ''}`} aria-label={page === 'join' ? t('Join') : t('Host')} {...scene}>
+      <h2 className="scene-title"><span>{page === 'join' ? t('Join') : t('Host')}</span></h2>
       <div className="play-frame">
         {page === 'join' ? <Join game={game} onCharacters={onCharacters} /> : <Host game={game} onConfigure={setConfiguring} />}
       </div>
@@ -97,7 +98,7 @@ export function Play({
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
     <button type="button" className="back-button" onClick={onClick}>
-      <span aria-hidden>‹</span> Back
+      <span aria-hidden>‹</span> {t('Back')}
     </button>
   );
 }
@@ -121,11 +122,11 @@ function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) 
   if (choice) {
     return (
       <>
-        <h3 className="panel-heading">Who are you playing tonight?</h3>
-        <p className="muted small">Joining <strong>{choice.campaign}</strong>.</p>
+        <h3 className="panel-heading">{t('Who are you playing tonight?')}</h3>
+        <p className="muted small">{tj('Joining {campaign}.', { campaign: <strong>{choice.campaign}</strong> })}</p>
         {choice.characters.length === 0 ? (
           <p className="notice">
-            You have no free characters. Create one first (characters already in another session can't join).
+            {t("You have no free characters. Create one first (characters already in another session can't join).")}
           </p>
         ) : (
           <ul className="rows">
@@ -144,8 +145,8 @@ function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) 
           </ul>
         )}
         <div className="row-gap">
-          <button className="ghost" onClick={() => setChoice(null)}>Other code</button>
-          <button className="ghost" onClick={onCharacters}>Characters</button>
+          <button className="ghost" onClick={() => setChoice(null)}>{t('Other code')}</button>
+          <button className="ghost" onClick={onCharacters}>{t('Characters')}</button>
         </div>
       </>
     );
@@ -153,9 +154,9 @@ function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) 
 
   return (
     <form onSubmit={submit}>
-      <h3 className="panel-heading">Join a session</h3>
+      <h3 className="panel-heading">{t('Join a session')}</h3>
       <label>
-        Code from the DM's phone
+        {t("Code from the DM's phone")}
         <input
           className="code-input"
           value={code}
@@ -169,7 +170,7 @@ function Join({ game, onCharacters }: { game: Game; onCharacters: () => void }) 
         />
       </label>
       <button className="primary" type="submit" disabled={busy || game.status !== 'online'}>
-        Next
+        {t('Next')}
       </button>
     </form>
   );
@@ -186,12 +187,12 @@ function Host({ game, onConfigure }: { game: Game; onConfigure: (c: CampaignSumm
   };
   return (
     <>
-      <h3 className="panel-heading">Host as the DM</h3>
-      <p className="muted small hint">Tap a campaign to open its lobby. The gear is for preparing it: handouts, NPCs, log and backup.</p>
+      <h3 className="panel-heading">{t('Host as the DM')}</h3>
+      <p className="muted small hint">{t('Tap a campaign to open its lobby. The gear is for preparing it: handouts, NPCs, log and backup.')}</p>
       {game.campaigns === null ? (
-        <p className="muted">Loading campaigns…</p>
+        <p className="muted">{t('Loading campaigns…')}</p>
       ) : game.campaigns.length === 0 ? (
-        <p className="muted">No campaigns yet. Create your first one below.</p>
+        <p className="muted">{t('No campaigns yet. Create your first one below.')}</p>
       ) : (
         <ul className="rows">
           {game.campaigns.map((c) => (
@@ -200,12 +201,12 @@ function Host({ game, onConfigure }: { game: Game; onConfigure: (c: CampaignSumm
                 <span className="grow">
                   <strong>{c.name}</strong>
                   <span className="muted small block">
-                    {c.lastPlayedAt ? `Last played ${formatDate(c.lastPlayedAt)}` : 'Not played yet'}
+                    {c.lastPlayedAt ? t('Last played {date}', { date: formatDate(c.lastPlayedAt) }) : t('Not played yet')}
                   </span>
-                  {c.liveCode && <span className="badge">Live · {c.liveCode}</span>}
+                  {c.liveCode && <span className="badge">{t('Live · {code}', { code: c.liveCode })}</span>}
                 </span>
               </button>
-              <button className="round-button" aria-label={`Configure ${c.name}`} title="Configure" onClick={() => onConfigure(c)} disabled={game.status !== 'online'}>
+              <button className="round-button" aria-label={t('Configure {name}', { name: c.name })} title={t('Configure')} onClick={() => onConfigure(c)} disabled={game.status !== 'online'}>
                 <GearIcon />
               </button>
             </li>
@@ -214,11 +215,11 @@ function Host({ game, onConfigure }: { game: Game; onConfigure: (c: CampaignSumm
       )}
       <form onSubmit={create} className="new-campaign">
         <label>
-          New campaign
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lost Mine" required />
+          {t('New campaign')}
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('e.g. Lost Mine')} required />
         </label>
         <button className="secondary" type="submit" disabled={busy || game.status !== 'online'}>
-          Create
+          {t('Create')}
         </button>
       </form>
       <LoadBackup game={game} />
@@ -238,7 +239,7 @@ function LoadBackup({ game }: { game: Game }) {
     let res = await uploadBackup(file);
     if (!res.ok && res.missingPlayers?.length) {
       const names = res.missingPlayers.join(', ');
-      if (window.confirm(`These players have no account here: ${names}.\n\nLoad the backup without their characters? To keep them, cancel, add the accounts first (npm run users -- add ${res.missingPlayers.join(' ')}) and load the file again.`)) {
+      if (window.confirm(t('These players have no account here: {names}.\n\nLoad the backup without their characters? To keep them, cancel, add the accounts first (npm run users -- add {list}) and load the file again.', { names, list: res.missingPlayers.join(' ') }))) {
         res = await uploadBackup(file, true);
       } else {
         setBusy(false);
@@ -252,7 +253,6 @@ function LoadBackup({ game }: { game: Game }) {
     void game.refreshCharacters();
   };
 
-  const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
   return (
     <div className="load-backup">
       <input
@@ -267,15 +267,20 @@ function LoadBackup({ game }: { game: Game }) {
         }}
       />
       <button className="ghost" disabled={busy || game.status !== 'online'} onClick={() => input.current?.click()}>
-        {busy ? 'Loading the backup…' : 'Load a backup file'}
+        {busy ? t('Loading the backup…') : t('Load a backup file')}
       </button>
       {done && (
         <div className="notice good" role="status">
-          <strong>{done.campaign.name}</strong> is back: {count(done.handouts, 'handout')}, {count(done.npcs, 'NPC')}, the log of {count(done.sessions, 'session')} and {count(done.characters.length, 'character')}
-          {done.characters.length > 0 && ` (${done.characters.join(', ')})`}.
-          {done.existing.length > 0 && <span className="block">Still here and left as they are: {done.existing.join(', ')}.</span>}
-          {done.withoutAccount.length > 0 && <span className="block">Left out, no account: {done.withoutAccount.join(', ')}.</span>}
-          {done.skipped > 0 && <span className="block">{count(done.skipped, 'entry', 'entries')} could not be read and were left out.</span>}
+          {tj('{campaign} is back: {handouts}, {npcs}, the log of {sessions} and {characters}.', {
+            campaign: <strong>{done.campaign.name}</strong>,
+            handouts: plural(done.handouts, '{n} handout', '{n} handouts'),
+            npcs: plural(done.npcs, '{n} NPC', '{n} NPCs'),
+            sessions: plural(done.sessions, '{n} session', '{n} sessions'),
+            characters: `${plural(done.characters.length, '{n} character', '{n} characters')}${done.characters.length > 0 ? ` (${done.characters.join(', ')})` : ''}`,
+          })}
+          {done.existing.length > 0 && <span className="block">{t('Still here and left as they are: {names}.', { names: done.existing.join(', ') })}</span>}
+          {done.withoutAccount.length > 0 && <span className="block">{t('Left out, no account: {names}.', { names: done.withoutAccount.join(', ') })}</span>}
+          {done.skipped > 0 && <span className="block">{plural(done.skipped, '{n} entry could not be read and was left out.', '{n} entries could not be read and were left out.')}</span>}
         </div>
       )}
     </div>
@@ -284,5 +289,5 @@ function LoadBackup({ game }: { game: Game }) {
 
 function formatDate(sqliteUtc: string): string {
   const d = new Date(sqliteUtc.replace(' ', 'T') + 'Z');
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString(getLanguage(), { day: 'numeric', month: 'short', year: 'numeric' });
 }

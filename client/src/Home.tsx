@@ -4,6 +4,7 @@ import { GearIcon, PersonIcon } from './icons.tsx';
 import { Portrait } from './Portrait.tsx';
 import { Drawer } from './session/SessionDrawer.tsx';
 import type { Game } from './useGame.ts';
+import { plural, t, tx } from './i18n.tsx';
 
 export type HomeTarget = 'play' | 'characters' | 'settings';
 
@@ -54,22 +55,22 @@ export function Home({
   return (
     <section className={`home ${leaving ? 'leaving' : ''}`}>
       <Drawer game={game} open={menu} onClose={() => setMenu(false)}>
-        <p className="muted small drawer-label">Logged in as</p>
+        <p className="muted small drawer-label">{t('Logged in as')}</p>
         <p className="drawer-campaign">{username}</p>
-        <p className="muted small drawer-label">Characters</p>
+        <p className="muted small drawer-label">{t('Characters')}</p>
         <p className="drawer-campaign">{game.characters === null ? '…' : count}</p>
         <div className="drawer-spacer" />
         <button
           className="ghost"
           onClick={() => {
-            if (window.confirm(`Log out ${username}?`)) onSignOut();
+            if (window.confirm(t('Log out {username}?', { username }))) onSignOut();
           }}
         >
-          Log out
+          {t('Log out')}
         </button>
       </Drawer>
 
-      <button type="button" className="home-user" aria-label={`${username}: open the menu`} aria-expanded={menu} onClick={() => setMenu(true)}>
+      <button type="button" className="home-user" aria-label={t('{username}: open the menu', { username })} aria-expanded={menu} onClick={() => setMenu(true)}>
         <span className="home-avatar">
           {(username.trim()[0] ?? '?').toUpperCase()}
           <i className={`home-status status-${game.status}`} aria-label={game.status} />
@@ -77,14 +78,14 @@ export function Home({
         <span className="home-username">{username}</span>
       </button>
 
-      <nav className="home-nav" aria-label="Menu">
+      <nav className="home-nav" aria-label={t('Menu')}>
         <button type="button" className="home-item" onClick={() => onPick('characters')}>
           <span className="home-icon" aria-hidden>
             <PersonIcon />
           </span>
           <span className="home-label">
-            Characters
-            <span className="home-sub">{game.characters === null ? ' ' : count === 0 ? 'Create your first one' : `${count} ${count === 1 ? 'character' : 'characters'}`}</span>
+            {t('Characters')}
+            <span className="home-sub">{game.characters === null ? ' ' : count === 0 ? t('Create your first one') : plural(count, '{n} character', '{n} characters')}</span>
           </span>
         </button>
         <button type="button" className="home-item" onClick={() => onPick('settings')}>
@@ -92,8 +93,8 @@ export function Home({
             <GearIcon />
           </span>
           <span className="home-label">
-            Settings
-            <span className="home-sub hint">Themes, helper texts, dice roller</span>
+            {t('Settings')}
+            <span className="home-sub hint">{t('Themes, language, dice roller')}</span>
           </span>
         </button>
       </nav>
@@ -101,15 +102,15 @@ export function Home({
       <div className="home-bottom">
         {hero ? (
           <button type="button" className="home-hero-tag" onClick={() => onPick('characters')}>
-            <strong>{hero.data.name || 'Unnamed'}</strong>
-            <span className="muted small">{[hero.data.species, hero.data.className].filter(Boolean).join(' ') || 'Adventurer'} · Level {hero.data.level}</span>
+            <strong>{hero.data.name || t('Unnamed')}</strong>
+            <span className="muted small">{[tx(hero.data.species), tx(hero.data.className)].filter(Boolean).join(' ') || t('Adventurer')} · {t('Level {n}', { n: hero.data.level })}</span>
           </button>
         ) : (
           <span />
         )}
         <button type="button" className="home-play" onClick={() => onPick('play')}>
-          Play
-          <span className="home-play-sub hint">Join or host</span>
+          {t('Play')}
+          <span className="home-play-sub hint">{t('Join or host')}</span>
         </button>
       </div>
     </section>

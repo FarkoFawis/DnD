@@ -6,6 +6,7 @@
  * highest goes first. On a tie the DM decides; we put the higher modifier
  * first and keep the DM's manual values as the way to settle the rest.
  */
+import { t } from './i18n.ts';
 
 export interface Combatant {
   id: string;
@@ -79,7 +80,7 @@ const isInt = (v: unknown, min: number, max: number): v is number =>
 export function applyCombatAction(combat: Combat, action: CombatAction, d20: D20 = rollD20): Combat {
   const find = (id: unknown) => {
     const c = combat.combatants.find((x) => x.id === id);
-    if (!c) throw new Error('They are no longer in the fight.');
+    if (!c) throw new Error(t('They are no longer in the fight.'));
     return c;
   };
   const replace = (next: Combatant) =>
@@ -101,7 +102,7 @@ export function applyCombatAction(combat: Combat, action: CombatAction, d20: D20
     }
     case 'set': {
       const c = find(action.id);
-      if (action.value !== null && !isInt(action.value, -50, 99)) throw new Error('Enter a whole number.');
+      if (action.value !== null && !isInt(action.value, -50, 99)) throw new Error(t('Enter a whole number.'));
       return replace({ ...c, initiative: action.value, d20: null });
     }
     case 'next':
@@ -124,14 +125,14 @@ export function applyCombatAction(combat: Combat, action: CombatAction, d20: D20
     }
     case 'hp': {
       const c = find(action.id);
-      if (!c.hp) throw new Error("Change a player's HP on their sheet.");
-      if (!isInt(action.delta, -9999, 9999)) throw new Error('Invalid amount.');
+      if (!c.hp) throw new Error(t("Change a player's HP on their sheet."));
+      if (!isInt(action.delta, -9999, 9999)) throw new Error(t('Invalid amount.'));
       const current = Math.max(0, Math.min(c.hp.max, c.hp.current + action.delta));
       return replace({ ...c, hp: { ...c.hp, current } });
     }
     case 'reveal': {
-      if (typeof action.hidden !== 'boolean') throw new Error('Unknown action.');
-      if (action.id !== undefined && find(action.id).kind !== 'npc') throw new Error('Only opponents can be hidden.');
+      if (typeof action.hidden !== 'boolean') throw new Error(t('Unknown action.'));
+      if (action.id !== undefined && find(action.id).kind !== 'npc') throw new Error(t('Only opponents can be hidden.'));
       return {
         ...combat,
         combatants: combat.combatants.map((c) => {
@@ -159,12 +160,14 @@ export function applyCombatAction(combat: Combat, action: CombatAction, d20: D20
       return { round, activeId, combatants: rest };
     }
     default:
-      throw new Error('Unknown action.');
+      throw new Error(t('Unknown action.'));
   }
 }
 
 /** What the players read in place of a hidden opponent's name. */
 export const UNKNOWN_NAME = 'Unknown';
+/** A combatant's name for the screen: a hidden one in the phone's language, any other as the DM wrote it. */
+export const shownName = (name: string): string => (name === UNKNOWN_NAME ? t('Unknown') : name);
 
 /**
  * What players get to see: no opponent HP or AC, and nothing that tells who a

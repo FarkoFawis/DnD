@@ -11,6 +11,7 @@ import { normalizeCharacter } from './character.ts';
 import { LOG_KINDS, type LogEvent, type LogKind } from './log.ts';
 import { PREP_LIMITS, sanitizeHandout, sanitizeNpc, type Handout, type Npc } from './prep.ts';
 import { LIMITS, PORTRAIT_MAX_BYTES, PORTRAIT_TYPES, type CharacterData } from './protocol.ts';
+import { t } from './i18n.ts';
 
 export const BACKUP_FORMAT = 'dnd-campaign-backup';
 export const BACKUP_VERSION = 1;
@@ -100,11 +101,11 @@ const list = (v: unknown, max: number): unknown[] => (Array.isArray(v) ? v.slice
  * Throws an Error with a message for the DM when the file isn't a backup at all.
  */
 export function parseBackup(raw: unknown): { backup: CampaignBackup; skipped: number } {
-  if (!isObj(raw) || raw.format !== BACKUP_FORMAT) throw new Error('That file is not a campaign backup.');
-  if (raw.version !== BACKUP_VERSION) throw new Error('That backup was made by a newer version of the app. Update the app first.');
+  if (!isObj(raw) || raw.format !== BACKUP_FORMAT) throw new Error(t('That file is not a campaign backup.'));
+  if (raw.version !== BACKUP_VERSION) throw new Error(t('That backup was made by a newer version of the app. Update the app first.'));
   const c = isObj(raw.campaign) ? raw.campaign : {};
   const name = typeof c.name === 'string' ? c.name.trim().replace(/\s+/g, ' ').slice(0, LIMITS.campaignNameMaxLength) : '';
-  if (!name) throw new Error('That backup has no campaign name.');
+  if (!name) throw new Error(t('That backup has no campaign name.'));
   let skipped = 0;
   const each = <T,>(items: unknown[], read: (v: unknown) => T | undefined): T[] =>
     items.flatMap((v) => {

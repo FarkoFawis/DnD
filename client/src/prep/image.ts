@@ -1,4 +1,5 @@
 import { PREP_LIMITS } from '@dnd/shared';
+import { t, tx } from '../i18n.tsx';
 
 const MAX_SIDE = 1600;
 
@@ -29,13 +30,13 @@ async function shrink(file: File): Promise<Blob> {
 /** Uploads a picture for a handout and returns its URL. Throws an Error with a message for the user. */
 export async function uploadImage(campaignId: string, token: string, file: File): Promise<string> {
   const blob = await shrink(file);
-  if (blob.size > PREP_LIMITS.imageMaxBytes) throw new Error('That picture is too big.');
+  if (blob.size > PREP_LIMITS.imageMaxBytes) throw new Error(t('That picture is too big.'));
   const res = await fetch(`/api/campaigns/${campaignId}/images`, {
     method: 'POST',
     headers: { 'content-type': blob.type, authorization: `Bearer ${token}` },
     body: blob,
   });
   const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-  if (!res.ok || !data.url) throw new Error(data.error ?? 'Could not upload the picture.');
+  if (!res.ok || !data.url) throw new Error(data.error ? tx(data.error) : t('Could not upload the picture.'));
   return data.url;
 }

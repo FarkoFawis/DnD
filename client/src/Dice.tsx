@@ -16,20 +16,22 @@ import {
   type RollMode,
   type RollPlan,
   type RollRequest,
+  naturalText,
 } from '@dnd/shared';
 import { BottomSheet } from './BottomSheet.tsx';
 import { burst, move } from './fx/fx.ts';
 import { motionOn } from './settings.ts';
+import { t, tx } from './i18n.tsx';
 
 type Roll = (req: RollRequest, mode: RollMode) => Promise<DiceRoll | null>;
 
 const isAttack = (r: { kind: RollRequest['kind'] }) => r.kind === 'attack' || r.kind === 'spellAttack';
 
 /** What a natural 20 or 1 means for this roll, if anything. */
-function naturalText(r: DiceRoll): string | null {
+function naturalLine(r: DiceRoll): string | null {
   if (r.natural === null) return null;
-  if (isAttack(r)) return r.natural === 20 ? 'Natural 20: a critical hit!' : 'Natural 1: a miss.';
-  return `Natural ${r.natural}.`;
+  if (isAttack(r)) return r.natural === 20 ? t('Natural 20: a critical hit!') : t('Natural 1: a miss.');
+  return t('Natural {n}.', { n: r.natural });
 }
 
 function tryPlan(c: CharacterData, req: RollRequest, content: Content | null): RollPlan | null {
@@ -82,7 +84,7 @@ export function RollSheet({
       if (!p) return null;
       return (
         <button key={String(twoHanded)} type="button" className="secondary" disabled={busy} onClick={() => void run(req, 'normal')}>
-          {twoHanded ? 'Two-handed' : crit ? 'Roll critical damage' : 'Roll damage'} <span className="small">{planFormula(p)}</span>
+          {twoHanded ? t('Two-handed') : crit ? t('Roll critical damage') : t('Roll damage')} <span className="small">{planFormula(p)}</span>
         </button>
       );
     };
@@ -90,10 +92,10 @@ export function RollSheet({
   };
 
   return (
-    <BottomSheet label={plan?.label ?? 'Roll'} className="roll-sheet" onClose={onClose}>
+    <BottomSheet label={plan?.label ?? t('Roll')} className="roll-sheet" onClose={onClose}>
       {(close) => (
         <>
-        <h3 className="info-title">{latest?.label ?? plan?.label ?? 'Roll'}</h3>
+        <h3 className="info-title">{latest ? tx(latest.label) : (plan?.label ?? t('Roll'))}</h3>
         {!latest && plan && (
           <>
             <p className="roll-formula">{planFormula(plan)}</p>
@@ -102,31 +104,31 @@ export function RollSheet({
                 {plan.parts.map((p) => `${p.label} ${p.value > 0 ? '+' : '-'}${Math.abs(p.value)}`).join(' · ')}
               </p>
             )}
-            <div className="roll-modes" role="group" aria-label="How to roll">
-              <button type="button" className="secondary" disabled={busy} onClick={() => void run(request, 'disadvantage')}>Disadvantage</button>
-              <button type="button" className="primary" disabled={busy} onClick={() => void run(request, 'normal')}>Roll</button>
-              <button type="button" className="secondary" disabled={busy} onClick={() => void run(request, 'advantage')}>Advantage</button>
+            <div className="roll-modes" role="group" aria-label={t('How to roll')}>
+              <button type="button" className="secondary" disabled={busy} onClick={() => void run(request, 'disadvantage')}>{t('Disadvantage')}</button>
+              <button type="button" className="primary" disabled={busy} onClick={() => void run(request, 'normal')}>{t('Roll')}</button>
+              <button type="button" className="secondary" disabled={busy} onClick={() => void run(request, 'advantage')}>{t('Advantage')}</button>
             </div>
-            <p className="muted small hint roll-note">Advantage and Disadvantage roll two d20 and keep the higher or the lower one.</p>
+            <p className="muted small hint roll-note">{t('Advantage and Disadvantage roll two d20 and keep the higher or the lower one.')}</p>
           </>
         )}
-        {!latest && !plan && <p className="muted">Loading…</p>}
+        {!latest && !plan && <p className="muted">{t('Loading…')}</p>}
         {latest && (
           <div className="roll-result" role="status" aria-live="polite">
             {latest.kind === 'damage' && attack && (
-              <p className="muted small roll-earlier">{attack.label}: {attack.total}{attack.natural === 20 ? ', critical hit' : ''}</p>
+              <p className="muted small roll-earlier">{tx(attack.label)}: {attack.total}{attack.natural === 20 ? `, ${t('critical hit')}` : ''}</p>
             )}
             <RollTotal key={latest.id} roll={latest} />
             <p className="roll-breakdown">
               {rollBreakdown(latest)}
-              {latest.mode !== 'normal' && <span className="muted"> · {latest.mode}</span>}
+              {latest.mode !== 'normal' && <span className="muted"> · {t(latest.mode)}</span>}
             </p>
-            {naturalText(latest) && <p className={`roll-natural ${latest.natural === 20 ? 'high' : 'low'}`}>{naturalText(latest)}</p>}
+            {naturalLine(latest) && <p className={`roll-natural ${latest.natural === 20 ? 'high' : 'low'}`}>{naturalLine(latest)}</p>}
             {damageButtons()}
-            {shared && <p className="muted small roll-note">Your DM sees this roll.</p>}
+            {shared && <p className="muted small roll-note">{t('Your DM sees this roll.')}</p>}
           </div>
         )}
-        <button className="secondary info-close" onClick={close}>Close</button>
+        <button className="secondary info-close" onClick={close}>{t('Close')}</button>
         </>
       )}
     </BottomSheet>
@@ -168,7 +170,7 @@ function RollTotal({ roll }: { roll: DiceRoll }) {
         <path d="M100 10 182 58v104l-82 48-82-48V58zM100 10 60 82h80zM60 82 18 58M140 82l42-24M60 82l40 76 40-76M100 158v52M60 82 18 162M140 82l42 80M100 158l-82 4M100 158l82 4" />
       </svg>
       <span className="roll-number">{tumbling ? fake : roll.total}</span>
-      {roll.note && !tumbling && <span className="roll-unit"> {roll.note.toLowerCase()}</span>}
+      {roll.note && !tumbling && <span className="roll-unit"> {tx(roll.note.toLowerCase())}</span>}
     </p>
   );
 }
@@ -202,7 +204,7 @@ export function RollToasts({ rolls }: { rolls: DiceRoll[] }) {
   }, [rolls, dismiss]);
   if (shown.length === 0) return null;
   return (
-    <div className="roll-toasts" role="log" aria-live="polite" aria-label="Dice rolls">
+    <div className="roll-toasts" role="log" aria-live="polite" aria-label={t('Dice rolls')}>
       {shown.map((r) => (
         <button
           key={r.id}
@@ -212,12 +214,12 @@ export function RollToasts({ rolls }: { rolls: DiceRoll[] }) {
         >
           <span className="roll-toast-total">{r.total}</span>
           <span className="grow">
-            <strong>{r.who}</strong> · {r.label}
+            <strong>{r.who}</strong> · {tx(r.label)}
             <span className="muted small block">
               {rollBreakdown(r)}
-              {r.note && ` ${r.note.toLowerCase()}`}
-              {r.mode !== 'normal' && ` · ${r.mode}`}
-              {r.natural !== null && ` · ${isAttack(r) ? (r.natural === 20 ? 'critical hit' : 'natural 1') : `natural ${r.natural}`}`}
+              {r.note && ` ${tx(r.note.toLowerCase())}`}
+              {r.mode !== 'normal' && ` · ${t(r.mode)}`}
+              {r.natural !== null && ` · ${naturalText(r)}`}
             </span>
           </span>
         </button>

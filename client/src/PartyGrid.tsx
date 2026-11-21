@@ -21,6 +21,7 @@ import { Sheet, sheetActions } from './Sheet.tsx';
 import { StatusChips } from './Status.tsx';
 import { actionText } from './Uses.tsx';
 import type { Game } from './useGame.ts';
+import { t, tx } from './i18n.tsx';
 
 function PartyCard({ player, isMe, selected, content, onClick }: { player: SessionPlayer; isMe: boolean; selected?: boolean; content: Content | null; onClick?: () => void }) {
   const c = player.character;
@@ -36,16 +37,16 @@ function PartyCard({ player, isMe, selected, content, onClick }: { player: Sessi
       {/* Hit or healed: the card flashes and the amount floats up. Cast or used something: a ring of light. */}
       <HpFx value={c.hpCurrent} />
       <ActionRing character={c} content={content} />
-      {isMe && <span className="party-you">You</span>}
-      {!player.online && <span className="party-offline">Offline</span>}
+      {isMe && <span className="party-you">{t('You')}</span>}
+      {!player.online && <span className="party-offline">{t('Offline')}</span>}
       {c.inspiration && (
-        <span key={inspired} className={`party-star ${inspired > 0 ? 'fresh' : ''}`} role="img" aria-label="Has Heroic Inspiration">
+        <span key={inspired} className={`party-star ${inspired > 0 ? 'fresh' : ''}`} role="img" aria-label={t('Has Heroic Inspiration')}>
           <InspirationStar />
         </span>
       )}
       <span className="party-info">
         <span className="party-name">{c.name || player.user.username}</span>
-        <span className="party-sub">{[c.species, c.className, `Lv ${c.level}`].filter(Boolean).join(' · ')}</span>
+        <span className="party-sub">{[tx(c.species), tx(c.className), t('Lv {n}', { n: c.level })].filter(Boolean).join(' · ')}</span>
         <span className="party-rule" aria-hidden><span /></span>
         <span className="party-player">{player.user.username}</span>
         <span className="party-hp">
@@ -53,11 +54,11 @@ function PartyCard({ player, isMe, selected, content, onClick }: { player: Sessi
           <span className="hp-text">
             <Num value={c.hpCurrent} />/{c.hpMax}
             {c.hpTemp > 0 && <span className="small"> +{c.hpTemp}</span>}
-            <span className="party-ac"> · AC {c.armorClass}</span>
+            <span className="party-ac"> · {t('AC {n}', { n: c.armorClass })}</span>
           </span>
         </span>
-        {c.levelUpReady && <span className="action-chip party-action">⬆ Can level up</span>}
-        {c.resting && <span className="action-chip party-action">Short rest · spending Hit Dice</span>}
+        {c.levelUpReady && <span className="action-chip party-action">{t('⬆ Can level up')}</span>}
+        {c.resting && <span className="action-chip party-action">{t('Short rest · spending Hit Dice')}</span>}
         {action && <span key={acted} className={`action-chip party-action ${acted > 0 ? 'fresh' : ''}`}>{action}</span>}
         <StatusChips character={c} />
       </span>
@@ -85,7 +86,7 @@ export function PartyGrid({
   selectedId?: string | null;
   onSelect?: (userId: string) => void;
 }) {
-  if (players.length === 0) return <p className="muted">No players in this session.</p>;
+  if (players.length === 0) return <p className="muted">{t('No players in this session.')}</p>;
   return (
     <ul className="party-grid">
       {players.map((p) => (
@@ -116,10 +117,10 @@ export function DmParty({ game, session, myId }: { game: Game; session: SessionS
   return (
     <section className="party">
       <div className="party-head">
-        <h2 className="party-title grow">Party</h2>
-        {session.players.length > 0 && <button type="button" className="link" onClick={() => setRanking(true)}>Who is best at…</button>}
+        <h2 className="party-title grow">{t('Party')}</h2>
+        {session.players.length > 0 && <button type="button" className="link" onClick={() => setRanking(true)}>{t('Who is best at…')}</button>}
       </div>
-      {session.players.length > 0 && <p className="muted small mb hint">Tap a player to open their sheet: change HP, give or take items, edit anything.</p>}
+      {session.players.length > 0 && <p className="muted small mb hint">{t('Tap a player to open their sheet: change HP, give or take items, edit anything.')}</p>}
       {ranking && <PartyChecks players={session.players} onClose={() => setRanking(false)} />}
       <PartyGrid players={session.players} myId={myId} content={content} selectedId={openId} onSelect={(id) => setOpenId(openId === id ? null : id)} />
       {open && (
@@ -128,8 +129,8 @@ export function DmParty({ game, session, myId }: { game: Game; session: SessionS
             key={open.characterId}
             title={
               <span className="dm-sheet-title">
-                <span className="grow">{open.character.name}'s sheet</span>
-                <button type="button" className="link" onClick={() => setOpenId(null)}>Close</button>
+                <span className="grow">{t("{name}'s sheet", { name: open.character.name })}</span>
+                <button type="button" className="link" onClick={() => setOpenId(null)}>{t('Close')}</button>
               </span>
             }
             character={open.character}

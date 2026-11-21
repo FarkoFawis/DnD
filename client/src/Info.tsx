@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { InfoEntry } from '@dnd/shared';
 import { BottomSheet } from './BottomSheet.tsx';
+import { t } from './i18n.tsx';
 
 const HOLD_MS = 450;
 const HOVER_MS = 300;
@@ -98,7 +99,7 @@ export function Info({
           {(close) => (
             <>
               <InfoBody entry={entry} />
-              <button className="secondary info-close" onClick={close}>Close</button>
+              <button className="secondary info-close" onClick={close}>{t('Close')}</button>
             </>
           )}
         </BottomSheet>

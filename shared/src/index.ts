@@ -12,3 +12,4 @@ export * from './status.ts';
 export * from './levelup.ts';
 export * from './dice.ts';
 export * from './backup.ts';
+export * from './i18n.ts';

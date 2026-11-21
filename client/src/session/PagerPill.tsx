@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { t } from '../i18n.tsx';
 
 export interface PagerTab {
   /** -1 = the page on the left, 0 = the middle one, 1 = the page on the right. */
@@ -31,7 +32,7 @@ export function PagerPill(props: { tabs: PagerTab[]; page: number; position: num
   const box = from && to ? { left: from.left + (to.left - from.left) * mix, width: from.width + (to.width - from.width) * mix } : (from ?? to);
 
   return (
-    <nav className="pager" aria-label="Pages" ref={nav}>
+    <nav className="pager" aria-label={t('Pages')} ref={nav}>
       {box && <span className={`pager-mark ${props.dragging ? '' : 'settle'}`} style={{ transform: `translateX(${box.left}px)`, width: box.width }} aria-hidden />}
       {tabs.map((t) => (
         <button

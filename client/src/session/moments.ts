@@ -10,7 +10,8 @@
  * something they also show with animations off, as a plain fade.
  */
 import { useEffect, useRef } from 'react';
-import { fightMoment, groupNames, type Combat } from '@dnd/shared';
+import { fightMoment, groupNames, shownName, type Combat } from '@dnd/shared';
+import { plural, t } from '../i18n.tsx';
 
 /** Picks the colour and the size: see `.moment-alert.<tone>` in styles.css. */
 export type MomentTone = 'turn' | 'round' | 'reveal' | 'end' | 'title' | 'star';
@@ -56,13 +57,13 @@ export function useFightMoments(combat: Combat | null, opts: { myCharacterId?: s
     if (m.kind === 'turn') {
       // Android only; iOS Safari has no web vibration.
       navigator.vibrate?.([70, 60, 70]);
-      announce({ tone: 'turn', kicker: `Round ${m.round}`, title: 'Your turn' });
+      announce({ tone: 'turn', kicker: t('Round {n}', { n: m.round }), title: t('Your turn') });
     } else if (m.kind === 'round') {
-      if (onFightPage) announce({ tone: 'round', title: `Round ${m.round}`, sub: m.active ? `${m.active} goes first` : undefined });
+      if (onFightPage) announce({ tone: 'round', title: t('Round {n}', { n: m.round }), sub: m.active ? t('{name} goes first', { name: shownName(m.active) }) : undefined });
     } else if (m.kind === 'reveal') {
-      if (myCharacterId) announce({ tone: 'reveal', kicker: 'Revealed', title: groupNames(m.names) });
+      if (myCharacterId) announce({ tone: 'reveal', kicker: t('Revealed'), title: groupNames(m.names) });
     } else {
-      announce({ tone: 'end', title: 'Fight over', sub: `${m.rounds} ${m.rounds === 1 ? 'round' : 'rounds'}` });
+      announce({ tone: 'end', title: t('Fight over'), sub: plural(m.rounds, '{n} round', '{n} rounds') });
     }
     // Only a change of the fight announces anything, not a change of page.
   }, [combat]);

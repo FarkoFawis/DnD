@@ -10,6 +10,7 @@ import { PagerPill } from './PagerPill.tsx';
 import { SessionDrawer } from './SessionDrawer.tsx';
 import { useFightMoments } from './moments.ts';
 import { usePager } from './usePager.ts';
+import { t } from '../i18n.tsx';
 
 /**
  * The DM's screen during a running session. Like the players', three pages
@@ -47,19 +48,19 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
       <SessionDrawer game={game} title={session.campaign.name}>
         {() => (
           <>
-            <p className="muted small drawer-label">Campaign</p>
+            <p className="muted small drawer-label">{t('Campaign')}</p>
             <p className="drawer-campaign">{session.campaign.name}</p>
-            <p className="muted small drawer-label">Session code</p>
-            <p className="drawer-code" aria-label="Session code">{session.code}</p>
-            <p className="muted small hint">Late players can still join with this code.</p>
+            <p className="muted small drawer-label">{t('Session code')}</p>
+            <p className="drawer-code" aria-label={t('Session code')}>{session.code}</p>
+            <p className="muted small hint">{t('Late players can still join with this code.')}</p>
             <div className="drawer-spacer" />
             <button
               className="ghost danger"
               onClick={() => {
-                if (window.confirm('End the session for everyone? All characters stay saved.')) void game.end();
+                if (window.confirm(t('End the session for everyone? All characters stay saved.'))) void game.end();
               }}
             >
-              End session
+              {t('End session')}
             </button>
           </>
         )}
@@ -73,8 +74,8 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
 
       <Page side="left" shown={-fightAt} dragging={dragging} open={page === -1}>
         <div className="party-panel-head narrow">
-          <h2 className="party-title grow">Fight</h2>
-          <button type="button" className="link back-link" onClick={() => setPage(0)}>Party ›</button>
+          <h2 className="party-title grow">{t('Fight')}</h2>
+          <button type="button" className="link back-link" onClick={() => setPage(0)}>{t('Party')} ›</button>
         </div>
         <div className="fight-page">
           <DmFight game={game} session={session} prep={prep} />
@@ -82,8 +83,8 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
       </Page>
       <Page side="right" shown={toolsAt} dragging={dragging} open={page === 1}>
         <div className="party-panel-head narrow">
-          <button type="button" className="link back-link" onClick={() => setPage(0)}>‹ Party</button>
-          <h2 className="party-title grow">Tools</h2>
+          <button type="button" className="link back-link" onClick={() => setPage(0)}>‹ {t('Party')}</button>
+          <h2 className="party-title grow">{t('Tools')}</h2>
           <span className="muted small">{session.campaign.name}</span>
         </div>
         <div className="fight-page">
@@ -97,9 +98,9 @@ export function DmSession({ game, session, myId }: { game: Game; session: Sessio
         dragging={dragging}
         onPage={setPage}
         tabs={[
-          { page: -1, label: `‹ ${combat && page !== -1 && active ? `Fight · ${active.name}` : 'Fight'}`, className: combat && page !== -1 ? 'live' : '' },
-          { page: 0, label: 'Party' },
-          { page: 1, label: `Tools${session.handout && page !== 1 ? ' 📜' : ''} ›` },
+          { page: -1, label: `‹ ${combat && page !== -1 && active ? t('Fight · {name}', { name: active.name }) : t('Fight')}`, className: combat && page !== -1 ? 'live' : '' },
+          { page: 0, label: t('Party') },
+          { page: 1, label: `${t('Tools')}${session.handout && page !== 1 ? ' 📜' : ''} ›` },
         ]}
       />
     </>

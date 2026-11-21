@@ -8,8 +8,7 @@ import {
   npcInitiative,
   type Handout,
   type Npc,
-  type SessionState,
-} from '@dnd/shared';
+  type SessionState, abilityShort, ABILITY_NAMES } from '@dnd/shared';
 import { downloadBackup } from '../api.ts';
 import { Panel } from '../Panel.tsx';
 import type { Game } from '../useGame.ts';
@@ -17,6 +16,7 @@ import { uploadImage } from './image.ts';
 import { NumberField } from './NumberField.tsx';
 import { SessionLog } from './SessionLog.tsx';
 import { usePrep, type Prep } from './usePrep.ts';
+import { msg, t, tj, tx } from '../i18n.tsx';
 
 export type ConfigTab = 'handouts' | 'npcs' | 'log' | 'backup';
 
@@ -27,10 +27,10 @@ export type ConfigTab = 'handouts' | 'npcs' | 'log' | 'backup';
  * Play → Host and from the lobby.
  */
 const CONFIG_TABS = [
-  { id: 'handouts', label: 'Handouts' },
-  { id: 'npcs', label: 'NPCs' },
-  { id: 'log', label: 'Log' },
-  { id: 'backup', label: 'Backup' },
+  { id: 'handouts', label: msg('Handouts') },
+  { id: 'npcs', label: msg('NPCs') },
+  { id: 'log', label: msg('Log') },
+  { id: 'backup', label: msg('Backup') },
 ] as const;
 
 export function CampaignConfig(props: {
@@ -42,7 +42,7 @@ export function CampaignConfig(props: {
   const prep = usePrep(game, campaign.id);
   const [tab, setTab] = useState<ConfigTab>('handouts');
   return (
-    <Panel title="Configure" tabs={CONFIG_TABS} tab={tab} onTab={setTab} onClose={props.onBack}>
+    <Panel title={t('Configure')} tabs={CONFIG_TABS} tab={tab} onTab={setTab} onClose={props.onBack}>
       <h3 className="panel-heading">{campaign.name}</h3>
       <ConfigContent game={game} campaign={campaign} prep={prep} tab={tab} />
     </Panel>
@@ -66,8 +66,8 @@ export function ConfigTabs(props: {
   return (
     <>
       <div className="tabs tabs4" role="tablist">
-        {CONFIG_TABS.map((t) => (
-          <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>{t.label}</button>
+        {CONFIG_TABS.map((item) => (
+          <button key={item.id} role="tab" aria-selected={tab === item.id} onClick={() => setTab(item.id)}>{t(item.label)}</button>
         ))}
       </div>
       <ConfigContent {...props} tab={tab} />
@@ -88,14 +88,14 @@ function ConfigContent(props: {
   return (
     <>
       {prep.error && (
-        <p className="error" role="alert" onClick={() => prep.setError(null)}>{prep.error}</p>
+        <p className="error" role="alert" onClick={() => prep.setError(null)}>{tx(prep.error)}</p>
       )}
       {tab === 'backup' ? (
         <Backup campaign={campaign} />
       ) : tab === 'log' ? (
         <SessionLog game={game} campaign={campaign} active={props.active} />
       ) : prep.prep === null ? (
-        <p className="muted">Loading…</p>
+        <p className="muted">{t('Loading…')}</p>
       ) : tab === 'handouts' ? (
         <Handouts game={game} campaignId={campaign.id} prep={prep} handouts={prep.prep.handouts} session={session} />
       ) : (
@@ -125,15 +125,14 @@ function Backup({ campaign }: { campaign: { id: string; name: string } }) {
   return (
     <div className="backup">
       <p>
-        A backup is one file with everything in <strong>{campaign.name}</strong>: handouts with their pictures, NPCs, the session log and
-        the characters who played in it, with their portraits.
+        {tj('A backup is one file with everything in {campaign}: handouts with their pictures, NPCs, the session log and the characters who played in it, with their portraits.', { campaign: <strong>{campaign.name}</strong> })}
       </p>
       <p className="muted small">
-        Keep it somewhere else than this computer. If the database is ever lost, load the file with <strong>Play → Host → Load a backup</strong>.
+        {tj('Keep it somewhere else than this computer. If the database is ever lost, load the file with {where}.', { where: <strong>{t('Play → Host → Load a backup file')}</strong> })}
       </p>
-      <button className="primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save a backup file'}</button>
-      {saved && <p className="notice good" role="status">Saved as {saved}. Look in your downloads.</p>}
-      {error && <p className="error" role="alert">{error}</p>}
+      <button className="primary" disabled={busy} onClick={() => void save()}>{busy ? t('Saving…') : t('Save a backup file')}</button>
+      {saved && <p className="notice good" role="status">{t('Saved as {file}. Look in your downloads.', { file: saved })}</p>}
+      {error && <p className="error" role="alert">{tx(error)}</p>}
     </div>
   );
 }
@@ -174,32 +173,32 @@ function Handouts(props: {
     <>
       <p className="muted small hint">
         {live
-          ? 'Show a picture or a text on every player’s phone.'
-          : 'Pictures and texts you can put on every player’s phone during the session: maps, letters, portraits, riddles.'}
+          ? t('Show a picture or a text on every player’s phone.')
+          : t('Pictures and texts you can put on every player’s phone during the session: maps, letters, portraits, riddles.')}
       </p>
-      {handouts.length === 0 && <p className="muted mt">No handouts yet.</p>}
+      {handouts.length === 0 && <p className="muted mt">{t('No handouts yet.')}</p>}
       <ul className="list">
         {handouts.map((h) => {
           const showing = live?.handout?.id === h.id;
           return (
             <li key={h.id} className={`prep-row ${showing ? 'showing' : ''}`}>
-              <button className="prep-main" onClick={() => setEditing(h.id)} aria-label={`Edit ${h.title}`}>
+              <button className="prep-main" onClick={() => setEditing(h.id)} aria-label={t('Edit {title}', { title: h.title })}>
                 {h.imageUrl ? <img className="thumb" src={h.imageUrl} alt="" loading="lazy" /> : <span className="thumb text-thumb" aria-hidden>Aa</span>}
                 <span className="grow">
                   <strong>{h.title}</strong>
-                  <span className="muted small block clamp1">{h.text || 'Picture'}</span>
+                  <span className="muted small block clamp1">{h.text || t('Picture')}</span>
                 </span>
               </button>
               {live && (
                 <button className={showing ? 'secondary' : 'primary'} onClick={() => void show(showing ? null : h.id)}>
-                  {showing ? 'Hide' : 'Show'}
+                  {showing ? t('Hide') : t('Show')}
                 </button>
               )}
             </li>
           );
         })}
       </ul>
-      <button className="secondary wide" onClick={() => setEditing('new')}>+ New handout</button>
+      <button className="secondary wide" onClick={() => setEditing('new')}>{t('+ New handout')}</button>
     </>
   );
 }
@@ -237,36 +236,36 @@ function HandoutEditor(props: { game: Game; campaignId: string; prep: Prep; hand
   return (
     <form onSubmit={save}>
       <label>
-        Title (players see it)
-        <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={PREP_LIMITS.titleMaxLength} placeholder="e.g. The mayor's letter" required />
+        {t('Title (players see it)')}
+        <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={PREP_LIMITS.titleMaxLength} placeholder={t("e.g. The mayor's letter")} required />
       </label>
       <div>
-        <span className="field-label">Picture</span>
+        <span className="field-label">{t('Picture')}</span>
         {imageUrl && <img className="handout-preview" src={imageUrl} alt="" />}
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void pick(e.target.files?.[0])} />
         <div className="row-gap">
           <button type="button" className="secondary grow" disabled={busy} onClick={() => fileRef.current?.click()}>
-            {busy ? 'Working…' : imageUrl ? 'Change picture' : 'Choose a picture'}
+            {busy ? t('Working…') : imageUrl ? t('Change picture') : t('Choose a picture')}
           </button>
-          {imageUrl && <button type="button" className="secondary" onClick={() => setImageUrl(null)}>Remove</button>}
+          {imageUrl && <button type="button" className="secondary" onClick={() => setImageUrl(null)}>{t('Remove')}</button>}
         </div>
       </div>
       <label>
-        Text
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} maxLength={PREP_LIMITS.handoutTextMaxLength} placeholder="What the players read. Leave empty for a picture only." />
+        {t('Text')}
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} maxLength={PREP_LIMITS.handoutTextMaxLength} placeholder={t('What the players read. Leave empty for a picture only.')} />
       </label>
-      <button className="primary" type="submit" disabled={busy}>Save handout</button>
+      <button className="primary" type="submit" disabled={busy}>{t('Save handout')}</button>
       <div className="row-gap">
-        <button type="button" className="ghost" onClick={props.onDone}>Cancel</button>
+        <button type="button" className="ghost" onClick={props.onDone}>{t('Cancel')}</button>
         {handout && (
           <button
             type="button"
             className="ghost danger"
             onClick={async () => {
-              if (window.confirm(`Delete "${handout.title}"?`) && (await prep.deleteHandout(handout.id))) props.onDone();
+              if (window.confirm(t('Delete "{title}"?', { title: handout.title })) && (await prep.deleteHandout(handout.id))) props.onDone();
             }}
           >
-            Delete
+            {t('Delete')}
           </button>
         )}
       </div>
@@ -277,7 +276,7 @@ function HandoutEditor(props: { game: Game; campaignId: string; prep: Prep; hand
 // ---------- NPCs & opponents ----------
 
 export function npcSummary(n: Npc): string {
-  return `AC ${n.armorClass} · HP ${n.hpMax} · Initiative ${formatModifier(npcInitiative(n))}`;
+  return `${t('AC {n}', { n: n.armorClass })} · ${n.hpMax} ${t('HP')} · ${t('Initiative')} ${formatModifier(npcInitiative(n))}`;
 }
 
 function Npcs({ prep, npcs }: { prep: Prep; npcs: Npc[] }) {
@@ -288,15 +287,15 @@ function Npcs({ prep, npcs }: { prep: Prep; npcs: Npc[] }) {
   return (
     <>
       <p className="muted small hint">
-        The people and monsters of your adventure, with their stats and personality. Opponents are ready to pick when you start a fight.
+        {t('The people and monsters of your adventure, with their stats and personality. Opponents are ready to pick when you start a fight.')}
       </p>
-      {npcs.length === 0 && <p className="muted mt">Nobody here yet.</p>}
+      {npcs.length === 0 && <p className="muted mt">{t('Nobody here yet.')}</p>}
       <ul className="list">
         {npcs.map((n) => (
           <li key={n.id} className="prep-row">
-            <button className="prep-main" onClick={() => setEditing(n.id)} aria-label={`Edit ${n.name}`}>
+            <button className="prep-main" onClick={() => setEditing(n.id)} aria-label={t('Edit {name}', { name: n.name })}>
               <span className="grow">
-                <strong>{n.name}</strong> <span className={`role-tag ${n.role}`}>{n.role === 'npc' ? 'NPC' : 'Opponent'}</span>
+                <strong>{n.name}</strong> <span className={`role-tag ${n.role}`}>{n.role === 'npc' ? t('NPC') : t('Opponent')}</span>
                 <span className="muted small block">{npcSummary(n)}</span>
                 {n.personality && <span className="muted small block clamp1">{n.personality}</span>}
               </span>
@@ -305,7 +304,7 @@ function Npcs({ prep, npcs }: { prep: Prep; npcs: Npc[] }) {
           </li>
         ))}
       </ul>
-      <button className="secondary wide" onClick={() => setEditing('new')}>+ New NPC or opponent</button>
+      <button className="secondary wide" onClick={() => setEditing('new')}>{t('+ New NPC or opponent')}</button>
     </>
   );
 }
@@ -327,63 +326,63 @@ function NpcEditor({ prep, npc, onDone }: { prep: Prep; npc?: Npc; onDone: () =>
   return (
     <form onSubmit={save}>
       <label>
-        Name
-        <input value={draft.name} onChange={(e) => set('name', e.target.value)} maxLength={PREP_LIMITS.titleMaxLength} placeholder="e.g. Goblin, Mayor Aldric" required />
+        {t('Name')}
+        <input value={draft.name} onChange={(e) => set('name', e.target.value)} maxLength={PREP_LIMITS.titleMaxLength} placeholder={t('e.g. Goblin, Mayor Aldric')} required />
       </label>
       <label>
-        Role
+        {t('Role')}
         <select value={draft.role} onChange={(e) => set('role', e.target.value === 'npc' ? 'npc' : 'opponent')}>
-          <option value="opponent">Opponent (fights the party)</option>
-          <option value="npc">NPC (someone to talk to)</option>
+          <option value="opponent">{t('Opponent (fights the party)')}</option>
+          <option value="npc">{t('NPC (someone to talk to)')}</option>
         </select>
       </label>
       <div className="grid3">
-        <label>Armor Class<NumberField value={draft.armorClass} min={0} max={40} onChange={(v) => set('armorClass', v)} /></label>
-        <label>Hit points<NumberField value={draft.hpMax} min={1} max={9999} onChange={(v) => set('hpMax', v)} /></label>
-        <label>Speed (ft)<NumberField value={draft.speed} min={0} max={500} onChange={(v) => set('speed', v)} /></label>
+        <label>{t('Armor Class##npc')}<NumberField value={draft.armorClass} min={0} max={40} onChange={(v) => set('armorClass', v)} /></label>
+        <label>{t('Hit points##npc')}<NumberField value={draft.hpMax} min={1} max={9999} onChange={(v) => set('hpMax', v)} /></label>
+        <label>{t('Speed (ft)')}<NumberField value={draft.speed} min={0} max={500} onChange={(v) => set('speed', v)} /></label>
       </div>
       <div>
-        <span className="field-label">Ability scores</span>
+        <span className="field-label">{t('Ability scores')}</span>
         <div className="abilities">
           {ABILITIES.map((a) => (
             <label key={a} className="ability">
-              <span className="ability-name">{a.toUpperCase()}</span>
+              <span className="ability-name">{abilityShort(a)}</span>
               <span className="ability-mod">{formatModifier(abilityModifier(draft.abilities[a]))}</span>
-              <NumberField aria-label={`${a} score`} value={draft.abilities[a]} min={1} max={30} onChange={(v) => set('abilities', { ...draft.abilities, [a]: v })} />
+              <NumberField aria-label={t(ABILITY_NAMES[a])} value={draft.abilities[a]} min={1} max={30} onChange={(v) => set('abilities', { ...draft.abilities, [a]: v })} />
             </label>
           ))}
         </div>
       </div>
       <label>
-        Extra initiative bonus (on top of DEX)
+        {t('Extra initiative bonus (on top of DEX)')}
         <NumberField value={draft.initiativeBonus} min={-20} max={20} onChange={(v) => set('initiativeBonus', v)} />
-        <span className="small">Rolls initiative with {formatModifier(npcInitiative(draft))}.</span>
+        <span className="small">{t('Rolls initiative with {bonus}.', { bonus: formatModifier(npcInitiative(draft)) })}</span>
       </label>
       <label>
-        Personality
-        <textarea value={draft.personality} onChange={(e) => set('personality', e.target.value)} rows={3} maxLength={max} placeholder="How they talk and act, what they want, what they fear." />
+        {t('Personality')}
+        <textarea value={draft.personality} onChange={(e) => set('personality', e.target.value)} rows={3} maxLength={max} placeholder={t('How they talk and act, what they want, what they fear.')} />
       </label>
       <label>
-        Attacks and abilities
-        <textarea value={draft.actions} onChange={(e) => set('actions', e.target.value)} rows={3} maxLength={max} placeholder="e.g. Scimitar +4, 1d6+2 slashing. Nimble Escape." />
+        {t('Attacks and abilities')}
+        <textarea value={draft.actions} onChange={(e) => set('actions', e.target.value)} rows={3} maxLength={max} placeholder={t('e.g. Scimitar +4, 1d6+2 slashing. Nimble Escape.')} />
       </label>
       <label>
-        Notes
-        <textarea value={draft.notes} onChange={(e) => set('notes', e.target.value)} rows={2} maxLength={max} placeholder="Loot, secrets, where the party meets them." />
+        {t('Notes')}
+        <textarea value={draft.notes} onChange={(e) => set('notes', e.target.value)} rows={2} maxLength={max} placeholder={t('Loot, secrets, where the party meets them.')} />
       </label>
-      <button className="primary" type="submit" disabled={busy}>Save</button>
+      <button className="primary" type="submit" disabled={busy}>{t('Save')}</button>
       <div className="row-gap">
-        <button type="button" className="ghost" onClick={onDone}>Cancel</button>
-        {npc && <button type="button" className="ghost" disabled={busy} onClick={(e) => void save(e, true)}>Duplicate</button>}
+        <button type="button" className="ghost" onClick={onDone}>{t('Cancel')}</button>
+        {npc && <button type="button" className="ghost" disabled={busy} onClick={(e) => void save(e, true)}>{t('Duplicate')}</button>}
         {npc && (
           <button
             type="button"
             className="ghost danger"
             onClick={async () => {
-              if (window.confirm(`Delete ${npc.name}?`) && (await prep.deleteNpc(npc.id))) onDone();
+              if (window.confirm(t('Delete {name}?', { name: npc.name })) && (await prep.deleteNpc(npc.id))) onDone();
             }}
           >
-            Delete
+            {t('Delete')}
           </button>
         )}
       </div>
