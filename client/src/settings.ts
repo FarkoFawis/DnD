@@ -88,7 +88,20 @@ function apply(s: Settings) {
 /** Call once before the first render. */
 export function initSettings() {
   apply(current);
-  reducedMotion?.addEventListener?.('change', () => apply(current));
+  reducedMotion?.addEventListener?.('change', () => {
+    apply(current);
+    // Settings shows a note while the phone holds the animations back: draw it again.
+    current = { ...current };
+    for (const l of listeners) l(current);
+  });
+}
+
+/**
+ * The phone's own "reduce motion" is on, so nothing moves whatever the switch
+ * in Settings says. Settings tells the player, who would otherwise look for a fault in the app.
+ */
+export function phoneReducesMotion(): boolean {
+  return reducedMotion?.matches === true;
 }
 
 /** Whether animations and effects may play right now (the Settings switch, and the phone's "reduce motion"). */

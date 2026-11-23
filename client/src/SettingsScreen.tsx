@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { LANGUAGES, LANGUAGE_NAMES } from '@dnd/shared';
 import { Panel } from './Panel.tsx';
-import { changeSettings, useSettings, type Theme } from './settings.ts';
+import { changeSettings, phoneReducesMotion, useSettings, type Theme } from './settings.ts';
 import { msg, t } from './i18n.tsx';
 
 const THEME_OPTIONS: Array<{ id: Theme; name: string; about: string }> = [
@@ -62,6 +62,11 @@ export function SettingsScreen({ onBack }: { onBack: () => void }) {
                 checked={settings.effects}
                 onChange={(e) => changeSettings({ effects: e.target.checked })}
               />
+              {settings.effects && phoneReducesMotion() && (
+                <span className="setting-about setting-warning small" role="status">
+                  {t('Animations are off right now, because this phone is set to reduce motion. Change that in the phone’s own settings, under Accessibility (Android: “Remove animations”, iPhone: “Reduce Motion”).')}
+                </span>
+              )}
             </label>
           </div>
         ) : tab === 'language' ? (
