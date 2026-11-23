@@ -170,7 +170,7 @@ the order that is most useful to photograph:
    - Sorcerer: Aberrant, Clockwork, Wild Magic
    - Warlock: Archfey, Celestial, Great Old One
    - Wizard: Abjurer, Diviner, Illusionist
-4. **Spells** (chapter 7): about 50 spells of the book aren't in the SRD, among
+4. **Spells** (chapter 7): 52 spells of the book aren't in the SRD, among
    them the Smite spells other than Divine, Searing and Shining Smite, the
    Summon spells other than Summon Dragon, Hunger of Hadar, Armor of Agathys,
    Witch Bolt, Toll the Dead, Cloud of Daggers and Steel Wind Strike. Spells are
