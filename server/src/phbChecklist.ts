@@ -50,7 +50,7 @@ export const PHB_FEATS: Record<string, string[]> = {
   ],
 };
 
-/** Spells of the book that the SRD leaves out. */
+/** Spells of the book that the SRD leaves out (52, checked against the book's class spell lists). */
 export const PHB_EXTRA_SPELLS = [
   'Arcane Gate', 'Arcane Vigor', 'Armor of Agathys', 'Arms of Hadar', 'Aura of Purity', 'Aura of Vitality', 'Banishing Smite',
   'Beast Sense', 'Blade Ward', 'Blinding Smite', 'Circle of Power', 'Cloud of Daggers', 'Compelled Duel', 'Conjure Barrage',
@@ -58,7 +58,7 @@ export const PHB_EXTRA_SPELLS = [
   'Feign Death', 'Fount of Moonlight', 'Friends', 'Grasping Vine', 'Hail of Thorns', 'Hunger of Hadar',
   "Jallarzi's Storm of Radiance", 'Lightning Arrow', 'Mind Sliver', 'Power Word Fortify', 'Staggering Smite',
   'Steel Wind Strike', 'Summon Aberration', 'Summon Beast', 'Summon Celestial', 'Summon Construct', 'Summon Elemental',
-  'Summon Fey', 'Summon Fiend', 'Summon Undead', 'Swift Quiver', 'Sword Burst', 'Synaptic Static', "Tasha's Bubbling Cauldron",
+  'Summon Fey', 'Summon Fiend', 'Summon Undead', 'Swift Quiver', 'Synaptic Static', "Tasha's Bubbling Cauldron",
   'Telepathy', 'Thorn Whip', 'Thunderclap', 'Thunderous Smite', 'Toll the Dead', 'Witch Bolt', 'Word of Radiance',
   'Wrathful Smite', "Yolande's Regal Presence",
 ];
